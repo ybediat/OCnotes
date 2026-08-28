@@ -1,0 +1,32 @@
+# Go
+/bin/
+*.exe
+*.test
+*.out
+
+# gomobile
+*.aar
+*.jar
+/mobile/mobile.aar
+
+# Android / Gradle
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/local.properties
+/android/.idea/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Spike : contient des noms de fichiers et identifiants du serveur reel
+/scripts/out/
+
+# Outils
+.DS_Store
+Thumbs.db
+/.vscode/
+
+# Claude Code (parametres locaux a la machine)
+/.claude/settings.local.json
