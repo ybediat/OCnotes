@@ -12,10 +12,25 @@ désérialiser et déléguer.
 ## Génération du binding
 
 ```bash
-gomobile bind -target=android -androidapi 26 -o android/app/libs/opennote.aar ./mobile
+gomobile bind -target=android/arm64 -androidapi 26 -ldflags="-s -w" -o android/app/libs/opennote.aar ./mobile
 ```
 
-Le paquet Java généré est `mobile`, la classe principale `mobile.App`.
+`-ldflags="-s -w"` retire les tables de symboles du binaire Go : `libgojni.so`
+passe de 14 Mo à 7,2 Mo, mesuré. Le build Android signale de toute façon qu'il
+ne sait pas stripper cette bibliothèque lui-même.
+
+`golang.org/x/mobile` doit figurer dans le `go.mod` : le code généré importe
+son paquet `bind`.
+
+Le paquet Java généré est `mobile`, avec deux classes — vérifié par `javap` sur
+l'AAR produit :
+
+| Classe | Contenu |
+|---|---|
+| `mobile.Mobile` | les fonctions de paquet, statiques : `newApp`, `defaultRoot`, `errorCode`, `isAuthError`, `isConflictError`, `isNotFoundError` |
+| `mobile.App` | les méthodes d'instance, en camelCase : `stateJSON()`, `listFolderJSON(String)`, `restore(String)`… |
+
+`pendingCount()` est bien typé `long` côté Java.
 
 Les types JSON du paquet Go sont **non exportés** exprès : `gomobile bind` lie
 tout type exporté, et refuserait leurs champs de type slice. Le test
@@ -130,7 +145,20 @@ doublée.
 ```
 
 `connected` signifie qu'un serveur et un compte sont enregistrés, **pas** que le
-token est en mémoire. Après un redémarrage il faut toujours rappeler `Connect`.
+token est en mémoire. Après un redémarrage il faut toujours rappeler `Restore`.
+
+> ⚠️ **`root` et `lastPath` ne sont pas dans le même référentiel.**
+>
+> `root` est le dossier de notes **relatif à l'espace** (`"Notes"`). Il sert à
+> l'affichage — un libellé dans les réglages, un titre — et **ne doit jamais
+> être passé à `ListFolderJSON`, `ReadNote` ou quoi que ce soit d'autre**.
+>
+> `lastPath`, comme tous les chemins de cette API, est **relatif au dossier de
+> notes**. Vide, il désigne ce dossier lui-même.
+>
+> Passer `root` comme chemin fait demander `Notes` à une façade qui préfixe
+> déjà par `Notes` : le serveur cherche `Notes/Notes` et répond que le dossier
+> n'existe pas. Ce bug a été rencontré en vrai au premier lancement.
 
 ### `ListDrivesJSON`
 

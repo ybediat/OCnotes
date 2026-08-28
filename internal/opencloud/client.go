@@ -112,7 +112,11 @@ func (c *Client) do(ctx context.Context, method string, u *url.URL, body []byte,
 
 	resp, err := c.hc.Do(req)
 	if err != nil {
-		return nil, nil, fmt.Errorf("opencloud: %s %s: %w", method, u.Redacted(), err)
+		// Le transport a échoué : la requête n'a jamais atteint le serveur.
+		// L'erreur porte ErrOffline pour que les couches hautes puissent
+		// basculer sur le cache au lieu de remonter un échec.
+		return nil, nil, fmt.Errorf("opencloud: [%s] %s %s: %v: %w",
+			CodeOffline, method, u.Redacted(), err, ErrOffline)
 	}
 	defer resp.Body.Close()
 

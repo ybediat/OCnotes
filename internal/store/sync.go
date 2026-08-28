@@ -36,7 +36,9 @@ type Operation struct {
 // besoin. *notes.Library l'implémente.
 type Remote interface {
 	Read(ctx context.Context, notePath string) ([]byte, string, error)
+	Exists(ctx context.Context, itemPath string) (bool, error)
 	Save(ctx context.Context, notePath string, content []byte, ifMatch string) (string, error)
+	SaveNew(ctx context.Context, notePath string, content []byte) (string, error)
 	Delete(ctx context.Context, itemPath string) error
 	MoveTo(ctx context.Context, from, to string) error
 	EnsureFolder(ctx context.Context, dir string) error
@@ -208,7 +210,31 @@ func (s *Store) pushWrite(ctx context.Context, remote Remote, notePath string, r
 		return nil, nil
 	}
 
-	etag, err := remote.Save(ctx, notePath, content, entry.ETag)
+	// Un ETag vide signale une note que le serveur n'a jamais vue : elle a été
+	// créée hors connexion. Rien ne dit qu'un fichier du même nom n'est pas
+	// apparu là-bas entre-temps, et l'écraser détruirait le travail de
+	// quelqu'un.
+	//
+	// La vérification est explicite plutôt que déléguée à « If-None-Match: * » :
+	// cet en-tête n'est pas honoré de façon fiable par tous les serveurs, et
+	// s'y fier a effectivement laissé passer un écrasement en conditions
+	// réelles. SaveNew le pose quand même, comme seconde barrière.
+	var etag string
+	var err error
+
+	if entry.ETag == "" {
+		exists, existsErr := remote.Exists(ctx, notePath)
+		if existsErr != nil {
+			return nil, existsErr
+		}
+		if exists {
+			return s.resolveConflict(ctx, remote, notePath, content)
+		}
+		etag, err = remote.SaveNew(ctx, notePath, content)
+	} else {
+		etag, err = remote.Save(ctx, notePath, content, entry.ETag)
+	}
+
 	if err == nil {
 		s.mu.Lock()
 		if current, ok := s.entries[notePath]; ok {
@@ -322,6 +348,7 @@ func (s *Store) Clear() error {
 	}
 
 	s.entries = map[string]*Entry{}
+	s.folders = map[string]bool{}
 	s.queue = nil
 	return s.save()
 }

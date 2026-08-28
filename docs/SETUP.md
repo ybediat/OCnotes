@@ -61,6 +61,36 @@ PATH            += %ANDROID_HOME%\platform-tools
 gomobile init
 ```
 
+### Procédure de build vérifiée
+
+Enchaînement réellement exécuté le 2026-08-28, avec Go 1.27, Gradle 8.9,
+AGP 8.7.3, SDK API 35 et NDK 30.
+
+```bash
+gomobile init
+```
+
+```bash
+gomobile bind -target=android/arm64 -androidapi 26 -ldflags="-s -w" -o android/app/libs/opennote.aar ./mobile
+```
+
+```bash
+cd android && ./gradlew assembleRelease
+```
+
+Pièges rencontrés, pour ne pas les revivre :
+
+- **`gradle wrapper` seul génère un wrapper à la version système.** Ici Gradle
+  9.7.1, incompatible avec AGP 8.7.3. Utiliser
+  `gradle wrapper --gradle-version 8.9`.
+- **`golang.org/x/mobile` doit être dans le `go.mod`**, sinon `gomobile bind`
+  échoue : le code qu'il génère importe son paquet `bind`.
+- **Android Studio n'installe le SDK qu'au premier lancement**, et pas le NDK.
+  Il faut cocher *NDK (Side by side)* et la plateforme correspondant au
+  `compileSdk` du projet dans le SDK Manager.
+- **`local.properties`** doit pointer sur le SDK. Écrire le chemin avec des
+  slashs avant évite l'échappement des antislashs du format `.properties`.
+
 ### 5. Vérification finale
 
 ```bash

@@ -6,8 +6,11 @@ pluginManagement {
     repositories {
         google {
             content {
-                includeGroupByRegex("com\.android.*")
-                includeGroupByRegex("com\.google.*")
+                // Doubler l'antislash : dans une chaîne Kotlin, « \. » n'est
+                // pas une séquence d'échappement valide. Le point doit arriver
+                // échappé jusqu'au moteur d'expressions régulières.
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
                 includeGroupByRegex("androidx.*")
             }
         }

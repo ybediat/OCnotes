@@ -31,6 +31,28 @@ type fakeServer struct {
 	etags   map[string]string
 	folders map[string]bool
 	seq     int
+	offline bool
+
+	// honorsIfNoneMatch reste faux par défaut : le vrai OpenCloud ne
+	// respecte pas cet en-tête, et la protection des notes créées hors
+	// connexion ne doit donc pas en dépendre.
+	honorsIfNoneMatch bool
+}
+
+// setOffline simule la perte du réseau, de façon réversible.
+//
+// Fermer le serveur serait définitif : on ne pourrait pas éprouver le retour
+// de connexion, qui est justement ce qui compte dans un modèle local-first.
+func (f *fakeServer) setOffline(v bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.offline = v
+}
+
+func (f *fakeServer) isOffline() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.offline
 }
 
 const fakeSpaceID = "11111111-1111-4111-8111-111111111111$22222222-2222-4222-8222-222222222222"
@@ -69,6 +91,19 @@ func rel(rawPath string) (string, bool) {
 }
 
 func (f *fakeServer) handle(w http.ResponseWriter, r *http.Request) {
+	if f.isOffline() {
+		// La connexion est coupée sans réponse : le client voit une erreur de
+		// transport, comme avec un réseau absent. Répondre un code d'erreur
+		// ne conviendrait pas — ce serait un serveur qui répond, donc une
+		// tout autre situation.
+		if hijacker, ok := w.(http.Hijacker); ok {
+			if conn, _, err := hijacker.Hijack(); err == nil {
+				_ = conn.Close()
+			}
+		}
+		return
+	}
+
 	user, pass, ok := r.BasicAuth()
 	if !ok || user != fakeUser || pass != fakeToken {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -220,6 +255,17 @@ func (f *fakeServer) put(w http.ResponseWriter, r *http.Request, p string) {
 	if ifMatch := r.Header.Get("If-Match"); ifMatch != "" && f.etags[p] != ifMatch {
 		w.WriteHeader(http.StatusPreconditionFailed)
 		return
+	}
+	// « If-None-Match: * » devrait exiger que la ressource n'existe pas
+	// encore. Par défaut ce serveur l'ignore — comme le vrai OpenCloud, où un
+	// écrasement a effectivement été constaté sur un téléphone. Honorer un
+	// en-tête que le serveur réel ignore ferait passer les tests pour la
+	// mauvaise raison.
+	if f.honorsIfNoneMatch && r.Header.Get("If-None-Match") == "*" {
+		if _, exists := f.files[p]; exists {
+			w.WriteHeader(http.StatusPreconditionFailed)
+			return
+		}
 	}
 
 	body := make([]byte, r.ContentLength)

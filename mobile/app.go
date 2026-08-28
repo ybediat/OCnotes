@@ -44,6 +44,16 @@ import (
 // un context.Context : la façade fabrique le sien.
 const requestTimeout = 30 * time.Second
 
+// refreshTimeout borne le rafraîchissement opportuniste d'une note à
+// l'ouverture. Plus court que requestTimeout : l'utilisateur attend devant un
+// écran vide, et le cache est là pour prendre le relais.
+const refreshTimeout = 8 * time.Second
+
+// offlineBackoff est la durée pendant laquelle on considère le serveur
+// injoignable après un échec réseau, pour ne pas refaire l'aller-retour à
+// chaque ouverture de note.
+const offlineBackoff = 20 * time.Second
+
 // App est le point d'entrée unique pour Android.
 type App struct {
 	mu      sync.Mutex
@@ -52,6 +62,10 @@ type App struct {
 	client  *opencloud.Client
 	lib     *notes.Library
 	cache   *store.Store
+
+	// offlineUntil retient qu'un appel réseau vient d'échouer, pour éviter de
+	// réessayer à chaque geste.
+	offlineUntil time.Time
 }
 
 // NewApp ouvre l'application dans un dossier de données.
@@ -388,11 +402,13 @@ func (a *App) ListFolderJSON(dir string) (string, error) {
 
 	listing, err := lib.List(ctx, dir)
 	if err != nil {
+		a.noteNetworkResult(err)
 		if cached, ok := a.listFromCache(dir); ok {
 			return toJSON(cached)
 		}
 		return "", err
 	}
+	a.noteNetworkResult(nil)
 
 	a.mu.Lock()
 	a.cfg.LastPath = listing.Path
@@ -404,6 +420,10 @@ func (a *App) ListFolderJSON(dir string) (string, error) {
 	// pas à gérer deux formes pour un dossier vide.
 	out := folderListing{Path: listing.Path, Entries: []folderEntry{}}
 	for _, f := range listing.Folders {
+		// Mémoriser les dossiers vus permet de les afficher hors connexion,
+		// même vides : le cache ne stocke que des notes, il ne pourrait pas
+		// les déduire autrement.
+		_ = a.cache.RememberFolder(f.Path)
 		out.Entries = append(out.Entries, folderEntry{
 			Path: f.Path, Name: f.Name, Display: f.Name, IsDir: true,
 		})
@@ -432,6 +452,22 @@ func (a *App) listFromCache(dir string) (folderListing, bool) {
 
 	out := folderListing{Path: dir, FromCache: true, Entries: []folderEntry{}}
 	seenDirs := map[string]bool{}
+
+	// Les dossiers connus d'abord : un dossier vide n'apparaîtrait dans aucun
+	// chemin de note, et resterait donc invisible hors connexion.
+	for _, folder := range a.cache.Folders() {
+		if prefix != "" && !strings.HasPrefix(folder, prefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(folder, prefix)
+		if rest == "" || strings.Contains(rest, "/") {
+			continue
+		}
+		seenDirs[rest] = true
+		out.Entries = append(out.Entries, folderEntry{
+			Path: folder, Name: rest, Display: rest, IsDir: true,
+		})
+	}
 
 	for _, entry := range a.cache.Entries() {
 		if prefix != "" && len(entry.Path) <= len(prefix) {
@@ -463,10 +499,10 @@ func (a *App) listFromCache(dir string) (folderListing, bool) {
 		})
 	}
 
-	// Le repli vaut dès que le cache contient quelque chose : un dossier
+	// Le repli vaut dès que le cache connaît quelque chose : un dossier
 	// réellement vide doit s'afficher vide, pas remonter l'erreur réseau.
-	// Un cache entièrement vide, lui, n'apprendrait rien à l'utilisateur.
-	return out, len(a.cache.Entries()) > 0
+	// Un cache entièrement vierge, lui, n'apprendrait rien à l'utilisateur.
+	return out, len(a.cache.Entries()) > 0 || len(a.cache.Folders()) > 0
 }
 
 func indexByte(s string, b byte) int {
@@ -482,8 +518,15 @@ func indexByte(s string, b byte) int {
 
 // ReadNote renvoie le contenu d'une note.
 //
-// Le cache répond en premier : l'ouverture est instantanée et fonctionne hors
-// connexion. Une note absente du cache est téléchargée puis mise en cache.
+// Une note propre est d'abord rafraîchie depuis le serveur. Sans ce
+// rafraîchissement, l'ETag connu localement vieillit dès que la note est
+// modifiée ailleurs — depuis l'interface web, par exemple. La prochaine
+// écriture depuis le téléphone part alors avec un ETag périmé, le serveur la
+// refuse, et le mécanisme de conflit crée un doublon là où il n'y avait
+// pourtant rien à arbitrer.
+//
+// Une note portant des modifications locales n'est jamais rafraîchie : sa
+// version en cache fait foi jusqu'à la synchronisation, qui tranchera.
 func (a *App) ReadNote(notePath string) (string, error) {
 	a.mu.Lock()
 	lib := a.lib
@@ -493,21 +536,56 @@ func (a *App) ReadNote(notePath string) (string, error) {
 		return "", errNoWorkspace()
 	}
 
-	if content, _, ok := a.cache.Get(notePath); ok {
+	content, entry, cached := a.cache.Get(notePath)
+	if cached && (entry.Dirty || a.recentlyOffline()) {
 		return string(content), nil
 	}
 
-	ctx, cancel := a.ctx()
+	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
 	defer cancel()
 
-	content, etag, err := lib.Read(ctx, notePath)
-	if err != nil {
+	if err := a.cache.Pull(ctx, lib, notePath); err != nil {
+		a.noteNetworkResult(err)
+		if cached {
+			// Le réseau manque, mais la note est connue : on l'ouvre telle
+			// qu'on la connaît plutôt que d'échouer.
+			return string(content), nil
+		}
 		return "", err
 	}
-	if err := a.cache.Accept(notePath, content, etag); err != nil {
-		return "", err
+	a.noteNetworkResult(nil)
+
+	fresh, _, ok := a.cache.Get(notePath)
+	if !ok {
+		// Pull a constaté que la note n'existe plus côté serveur.
+		return "", fmt.Errorf("mobile: %s: %w", notePath, opencloud.ErrNotFound)
 	}
-	return string(content), nil
+	return string(fresh), nil
+}
+
+// noteNetworkResult retient qu'un appel réseau vient d'échouer faute de
+// connexion.
+//
+// Sans cette mémoire, chaque ouverture de note hors connexion attendrait
+// l'expiration d'un délai réseau avant de servir le cache. L'application
+// paraîtrait figée là où elle devrait être instantanée.
+func (a *App) noteNetworkResult(err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if err != nil && errors.Is(err, opencloud.ErrOffline) {
+		a.offlineUntil = time.Now().Add(offlineBackoff)
+		return
+	}
+	if err == nil {
+		a.offlineUntil = time.Time{}
+	}
+}
+
+func (a *App) recentlyOffline() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return time.Now().Before(a.offlineUntil)
 }
 
 // WriteNote enregistre une note.
@@ -561,13 +639,68 @@ func (a *App) CreateNoteJSON(dir, name, content string) (string, error) {
 	defer cancel()
 
 	note, err := lib.Create(ctx, dir, name, []byte(content))
-	if err != nil {
+	if err == nil {
+		if err := a.cache.Accept(note.Path, []byte(content), note.ETag); err != nil {
+			return "", err
+		}
+		return toJSON(noteRef{Path: note.Path, Name: note.Name, Display: note.DisplayName})
+	}
+	if !errors.Is(err, opencloud.ErrOffline) {
 		return "", err
 	}
-	if err := a.cache.Accept(note.Path, []byte(content), note.ETag); err != nil {
+
+	// Hors connexion : la note est créée dans le cache seul et poussée plus
+	// tard. Pouvoir écrire une note existante sans réseau mais pas en créer
+	// une n'aurait aucun sens pour l'utilisateur.
+	return a.createNoteOffline(dir, name, content)
+}
+
+// createNoteOffline crée une note dans le cache et l'inscrit en file.
+//
+// Le nom est choisi d'après le cache seul : on ne peut pas savoir ce que le
+// serveur contient. Une collision avec une note distante reste donc possible,
+// et c'est le If-None-Match de la synchronisation qui la rattrape — la note
+// distante est préservée et la version locale conservée à côté.
+func (a *App) createNoteOffline(dir, name, content string) (string, error) {
+	name = notes.WithExtension(strings.TrimSpace(name))
+	if err := notes.ValidateName(name); err != nil {
 		return "", err
 	}
-	return toJSON(noteRef{Path: note.Path, Name: note.Name, Display: note.DisplayName})
+
+	dir = notes.CleanPath(dir)
+	available := a.availableNameFromCache(dir, name)
+	notePath := path.Join(dir, available)
+
+	if err := a.cache.Put(notePath, []byte(content)); err != nil {
+		return "", err
+	}
+	return toJSON(noteRef{
+		Path:    notePath,
+		Name:    available,
+		Display: notes.DisplayName(available),
+	})
+}
+
+// availableNameFromCache ajoute un suffixe numérique tant que le nom est pris
+// dans le cache.
+func (a *App) availableNameFromCache(dir, name string) string {
+	taken := map[string]bool{}
+	for _, entry := range a.cache.Entries() {
+		taken[entry.Path] = true
+	}
+
+	ext := path.Ext(name)
+	base := strings.TrimSuffix(name, ext)
+
+	for attempt := 0; ; attempt++ {
+		candidate := name
+		if attempt > 0 {
+			candidate = fmt.Sprintf("%s (%d)%s", base, attempt+1, ext)
+		}
+		if !taken[path.Join(dir, candidate)] {
+			return candidate
+		}
+	}
 }
 
 // CreateFolderJSON crée un sous-dossier.
@@ -584,10 +717,27 @@ func (a *App) CreateFolderJSON(dir, name string) (string, error) {
 	defer cancel()
 
 	folder, err := lib.CreateFolder(ctx, dir, name)
-	if err != nil {
+	if err == nil {
+		if err := a.cache.RememberFolder(folder.Path); err != nil {
+			return "", err
+		}
+		return toJSON(noteRef{Path: folder.Path, Name: folder.Name, Display: folder.Name})
+	}
+	if !errors.Is(err, opencloud.ErrOffline) {
 		return "", err
 	}
-	return toJSON(noteRef{Path: folder.Path, Name: folder.Name, Display: folder.Name})
+
+	// Hors connexion : le dossier est retenu par le cache et créé au prochain
+	// passage. Le navigateur l'affiche entre-temps.
+	name = strings.TrimSpace(name)
+	if err := notes.ValidateName(name); err != nil {
+		return "", err
+	}
+	folderPath := path.Join(notes.CleanPath(dir), name)
+	if err := a.cache.EnsureFolder(folderPath); err != nil {
+		return "", err
+	}
+	return toJSON(noteRef{Path: folderPath, Name: name, Display: name})
 }
 
 // Rename renomme une note ou un dossier et renvoie son nouveau chemin.
@@ -604,15 +754,26 @@ func (a *App) Rename(itemPath, newName string) (string, error) {
 	defer cancel()
 
 	newPath, err := lib.Rename(ctx, itemPath, newName)
+	if err == nil {
+		// Le cache suit, sans rien remettre en file : le serveur est déjà à
+		// jour.
+		if err := a.cache.RenameLocal(itemPath, newPath); err != nil {
+			return "", err
+		}
+		return newPath, nil
+	}
+	if !errors.Is(err, opencloud.ErrOffline) {
+		return "", err
+	}
+
+	target, err := notes.ResolveRename(itemPath, newName)
 	if err != nil {
 		return "", err
 	}
-	if _, _, ok := a.cache.Get(itemPath); ok {
-		if err := a.cache.Rename(itemPath, newPath); err != nil {
-			return "", err
-		}
+	if err := a.cache.Rename(itemPath, target); err != nil {
+		return "", err
 	}
-	return newPath, nil
+	return target, nil
 }
 
 // Delete supprime une note ou un dossier.
@@ -628,10 +789,21 @@ func (a *App) Delete(itemPath string) error {
 	ctx, cancel := a.ctx()
 	defer cancel()
 
-	if err := lib.Delete(ctx, itemPath); err != nil {
+	err := lib.Delete(ctx, itemPath)
+	if err == nil {
+		return a.cache.Forget(itemPath)
+	}
+	if errors.Is(err, opencloud.ErrNotFound) {
+		// Déjà absent du serveur : le résultat voulu est atteint.
+		return a.cache.Forget(itemPath)
+	}
+	if !errors.Is(err, opencloud.ErrOffline) {
 		return err
 	}
-	return a.cache.Forget(itemPath)
+
+	// Hors connexion : la suppression est appliquée au cache et rejouée plus
+	// tard.
+	return a.cache.Delete(itemPath)
 }
 
 // SuggestName propose un nom de fichier valide à partir d'un titre saisi.
@@ -773,6 +945,7 @@ func ErrorCode(message string) string {
 		opencloud.CodeUnauthorized,
 		opencloud.CodeConflict,
 		opencloud.CodeNotFound,
+		opencloud.CodeOffline,
 		opencloud.CodeHTTP,
 	} {
 		if strings.Contains(message, "["+code+"]") {
@@ -797,6 +970,14 @@ func IsConflictError(message string) bool {
 // IsNotFoundError indique une note ou un dossier absent du serveur.
 func IsNotFoundError(message string) bool {
 	return ErrorCode(message) == opencloud.CodeNotFound
+}
+
+// IsOfflineError indique que le serveur n'a pas pu être joint.
+//
+// À distinguer d'une erreur applicative : réessayer plus tard a du sens, et
+// l'interface ne doit pas présenter cela comme un échec de l'opération.
+func IsOfflineError(message string) bool {
+	return ErrorCode(message) == opencloud.CodeOffline
 }
 
 func errNotConnected() error {

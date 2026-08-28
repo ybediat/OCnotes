@@ -157,6 +157,13 @@ func (f *fakeBackend) Write(_ context.Context, p string, content []byte, ifMatch
 	return etag, nil
 }
 
+func (f *fakeBackend) WriteNew(ctx context.Context, p string, content []byte) (string, error) {
+	if _, exists := f.files[CleanPath(p)]; exists {
+		return "", fmt.Errorf("fake: %s: %w", p, opencloud.ErrConflict)
+	}
+	return f.Write(ctx, p, content, "")
+}
+
 func (f *fakeBackend) MkdirAll(_ context.Context, p string) error {
 	f.mkdirAll(p)
 	return nil

@@ -16,6 +16,14 @@ var (
 	ErrConflict     = errors.New("opencloud: la version distante a changé")
 	ErrExists       = errors.New("opencloud: la ressource existe déjà")
 	ErrUnauthorized = errors.New("opencloud: authentification refusée")
+
+	// ErrOffline signale que le serveur n'a pas pu être joint : la requête
+	// n'a jamais abouti, par opposition à un serveur qui répond une erreur.
+	//
+	// La distinction est ce qui permet aux couches hautes de basculer sur le
+	// cache plutôt que de remonter un échec. Un 404 veut dire « ça n'existe
+	// pas » ; une coupure réseau ne veut rien dire du tout sur le contenu.
+	ErrOffline = errors.New("opencloud: serveur injoignable")
 )
 
 // Étiquettes de catégorie d'erreur.
@@ -29,6 +37,7 @@ const (
 	CodeConflict     = "CONFLICT"
 	CodeNotFound     = "NOTFOUND"
 	CodeHTTP         = "HTTP"
+	CodeOffline      = "OFFLINE"
 )
 
 // HTTPError porte le détail d'une réponse HTTP en échec.

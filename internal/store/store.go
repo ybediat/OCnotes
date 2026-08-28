@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -54,6 +55,13 @@ type Store struct {
 	mu      sync.Mutex
 	entries map[string]*Entry
 	queue   []Operation
+
+	// folders retient les dossiers connus. Le cache ne matérialise pas les
+	// dossiers sur le disque — seules les notes y sont stockées — mais un
+	// dossier vide créé hors connexion doit rester visible dans le
+	// navigateur, ce qu'une simple déduction à partir des chemins de notes ne
+	// permettrait pas.
+	folders map[string]bool
 }
 
 // persisted est la forme sérialisée de l'état du cache.
@@ -61,6 +69,7 @@ type persisted struct {
 	Version int               `json:"version"`
 	Entries map[string]*Entry `json:"entries"`
 	Queue   []Operation       `json:"queue"`
+	Folders map[string]bool   `json:"folders,omitempty"`
 }
 
 // Open ouvre — ou crée — un cache dans le dossier indiqué.
@@ -76,6 +85,7 @@ func Open(dir string) (*Store, error) {
 	s := &Store{
 		dir:     dir,
 		entries: map[string]*Entry{},
+		folders: map[string]bool{},
 	}
 
 	data, err := os.ReadFile(s.indexPath())
@@ -92,6 +102,9 @@ func Open(dir string) (*Store, error) {
 	}
 	if state.Entries != nil {
 		s.entries = state.Entries
+	}
+	if state.Folders != nil {
+		s.folders = state.Folders
 	}
 	s.queue = state.Queue
 	return s, nil
@@ -120,7 +133,7 @@ func cacheName(notePath string) string {
 // L'écriture passe par un fichier temporaire renommé : une coupure de courant
 // au mauvais moment laisserait sinon un index tronqué, donc un cache perdu.
 func (s *Store) save() error {
-	state := persisted{Version: indexVersion, Entries: s.entries, Queue: s.queue}
+	state := persisted{Version: indexVersion, Entries: s.entries, Queue: s.queue, Folders: s.folders}
 	data, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("store: sérialisation de l'index: %w", err)
@@ -231,23 +244,49 @@ func (s *Store) writeBlob(notePath string, content []byte) error {
 	return nil
 }
 
-// Delete supprime une note du cache et inscrit la suppression en file.
-func (s *Store) Delete(notePath string) error {
+// Delete retire une note ou un dossier du cache et inscrit la suppression en
+// file. Sur un dossier, la descendance part avec lui, comme côté serveur.
+func (s *Store) Delete(itemPath string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if entry, ok := s.entries[notePath]; ok {
-		_ = os.Remove(s.blobPath(entry.Cache))
-		delete(s.entries, notePath)
-	}
-	s.enqueueLocked(Operation{Kind: OpDelete, Path: notePath})
+	s.dropLocked(itemPath)
+	s.enqueueLocked(Operation{Kind: OpDelete, Path: itemPath})
 	return s.save()
 }
 
+// dropLocked retire du cache un chemin et tout ce qu'il contient.
+func (s *Store) dropLocked(itemPath string) {
+	for p, entry := range s.entries {
+		if p == itemPath || strings.HasPrefix(p, itemPath+"/") {
+			_ = os.Remove(s.blobPath(entry.Cache))
+			delete(s.entries, p)
+		}
+	}
+	s.forgetFolderLocked(itemPath)
+}
+
 // Rename déplace une note dans le cache et inscrit le déplacement en file.
+// À utiliser quand le renommage n'a pas encore atteint le serveur.
 func (s *Store) Rename(from, to string) error {
+	return s.rename(from, to, true)
+}
+
+// RenameLocal déplace une note dans le cache sans rien inscrire en file.
+// À utiliser quand le serveur a déjà appliqué le renommage : le rejouer
+// échouerait, la source n'existant plus là-bas.
+func (s *Store) RenameLocal(from, to string) error {
+	return s.rename(from, to, false)
+}
+
+func (s *Store) rename(from, to string, enqueue bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if s.folders[from] {
+		s.forgetFolderLocked(from)
+		s.rememberFolderLocked(to)
+	}
 
 	entry, ok := s.entries[from]
 	if ok {
@@ -264,29 +303,77 @@ func (s *Store) Rename(from, to string) error {
 		s.entries[to] = entry
 	}
 
-	s.enqueueLocked(Operation{Kind: OpMove, Path: from, Target: to})
+	if enqueue {
+		s.enqueueLocked(Operation{Kind: OpMove, Path: from, Target: to})
+	}
 	return s.save()
 }
 
-// EnsureFolder inscrit la création d'un dossier en file d'attente.
-// Le cache ne matérialise pas les dossiers : seules les notes y sont stockées.
+// EnsureFolder retient un dossier et inscrit sa création en file d'attente.
 func (s *Store) EnsureFolder(dir string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.rememberFolderLocked(dir)
 	s.enqueueLocked(Operation{Kind: OpMkdir, Path: dir})
 	return s.save()
 }
 
-// Forget retire une note du cache sans rien inscrire en file. Sert quand le
-// serveur signale qu'une note a disparu.
-func (s *Store) Forget(notePath string) error {
+// RememberFolder retient un dossier vu sur le serveur, sans rien mettre en
+// file : il existe déjà là-bas.
+func (s *Store) RememberFolder(dir string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if entry, ok := s.entries[notePath]; ok {
-		_ = os.Remove(s.blobPath(entry.Cache))
-		delete(s.entries, notePath)
+	s.rememberFolderLocked(dir)
+	return s.save()
+}
+
+// rememberFolderLocked retient un dossier et tous ses parents.
+func (s *Store) rememberFolderLocked(dir string) {
+	dir = strings.Trim(dir, "/")
+	current := ""
+	for _, segment := range strings.Split(dir, "/") {
+		if segment == "" {
+			continue
+		}
+		if current == "" {
+			current = segment
+		} else {
+			current += "/" + segment
+		}
+		s.folders[current] = true
 	}
+}
+
+// Folders renvoie les dossiers connus, triés.
+func (s *Store) Folders() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make([]string, 0, len(s.folders))
+	for d := range s.folders {
+		out = append(out, d)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// forgetFolderLocked oublie un dossier et sa descendance.
+func (s *Store) forgetFolderLocked(dir string) {
+	for d := range s.folders {
+		if d == dir || strings.HasPrefix(d, dir+"/") {
+			delete(s.folders, d)
+		}
+	}
+}
+
+// Forget retire un chemin du cache sans rien inscrire en file. Sert quand le
+// serveur signale qu'une note ou un dossier a disparu.
+func (s *Store) Forget(itemPath string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.dropLocked(itemPath)
 	return s.save()
 }

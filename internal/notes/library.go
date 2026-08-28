@@ -23,6 +23,7 @@ type Backend interface {
 	Stat(ctx context.Context, p string) (opencloud.Resource, error)
 	Read(ctx context.Context, p string) ([]byte, string, error)
 	Write(ctx context.Context, p string, content []byte, ifMatch string) (string, error)
+	WriteNew(ctx context.Context, p string, content []byte) (string, error)
 	MkdirAll(ctx context.Context, p string) error
 	Move(ctx context.Context, from, to string) error
 	Remove(ctx context.Context, p string) error
@@ -185,6 +186,32 @@ func (l *Library) Save(ctx context.Context, notePath string, content []byte, ifM
 	return l.backend.Write(ctx, l.resolve(notePath), content, ifMatch)
 }
 
+// Exists indique si un chemin existe sur le serveur.
+//
+// Sert avant de pousser une note créée hors connexion : « If-None-Match: * »
+// n'est pas honoré de façon fiable par tous les serveurs, et s'y fier
+// laisserait écraser le travail fait ailleurs.
+func (l *Library) Exists(ctx context.Context, itemPath string) (bool, error) {
+	_, err := l.backend.Stat(ctx, l.resolve(itemPath))
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, opencloud.ErrNotFound) {
+		return false, nil
+	}
+	return false, err
+}
+
+// SaveNew écrit une note en exigeant qu'elle n'existe pas encore côté serveur.
+//
+// Réservé aux notes créées hors connexion, dont on ignore si le nom est déjà
+// pris. Si c'est le cas, l'erreur satisfait errors.Is(err, opencloud.ErrConflict)
+// et la résolution de conflit habituelle s'applique : les deux versions sont
+// conservées.
+func (l *Library) SaveNew(ctx context.Context, notePath string, content []byte) (string, error) {
+	return l.backend.WriteNew(ctx, l.resolve(notePath), content)
+}
+
 // Create crée une note vide, ou avec un contenu initial.
 //
 // Le nom reçoit l'extension .md s'il ne l'a pas, et un suffixe numérique si
@@ -254,8 +281,12 @@ func (l *Library) CreateFolder(ctx context.Context, dir, name string) (Folder, e
 	return Folder{Path: folderPath, Name: name}, nil
 }
 
-// Rename change le nom d'une note ou d'un dossier, sans le déplacer.
-func (l *Library) Rename(ctx context.Context, itemPath, newName string) (string, error) {
+// ResolveRename calcule le chemin résultant d'un renommage, sans rien
+// contacter. L'extension .md est réajoutée si la cible est une note.
+//
+// Exposé pour que la façade puisse renommer hors connexion, où elle doit
+// aboutir au même chemin que le fera plus tard la synchronisation.
+func ResolveRename(itemPath, newName string) (string, error) {
 	newName = strings.TrimSpace(newName)
 	if IsMarkdown(itemPath) {
 		newName = WithExtension(newName)
@@ -268,8 +299,17 @@ func (l *Library) Rename(ctx context.Context, itemPath, newName string) (string,
 	if itemPath == "" {
 		return "", errors.New("notes: la racine ne peut pas être renommée")
 	}
+	return path.Join(path.Dir(itemPath), newName), nil
+}
 
-	target := path.Join(path.Dir(itemPath), newName)
+// Rename change le nom d'une note ou d'un dossier, sans le déplacer.
+func (l *Library) Rename(ctx context.Context, itemPath, newName string) (string, error) {
+	target, err := ResolveRename(itemPath, newName)
+	if err != nil {
+		return "", err
+	}
+
+	itemPath = CleanPath(itemPath)
 	if target == itemPath {
 		return itemPath, nil
 	}

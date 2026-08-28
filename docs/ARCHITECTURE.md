@@ -141,6 +141,33 @@ un ETag factice (`DECAFC00FEE`). Ce n'est pas une racine de notes valide.
 Le sélecteur d'espace doit retenir `personal` en priorité et **exclure
 `virtual`**. Les autres valeurs possibles sont `project` et `mountpoint`.
 
+### `If-None-Match: *` est ignoré
+
+Mesuré le 2026-08-28 par `TestIntegrationWriteNewEtIfNoneMatch` : un `PUT`
+portant `If-None-Match: *` **écrase quand même** une note existante, sans
+erreur. Le serveur n'implémente pas cette précondition.
+
+La conséquence est directe. Une note créée hors connexion n'a pas d'ETag : au
+moment de la pousser, rien ne dit qu'un fichier du même nom n'est pas apparu
+entre-temps. S'en remettre à `If-None-Match` laisse donc écraser le travail
+fait ailleurs — c'est arrivé en vrai, depuis un téléphone en mode avion.
+
+La synchronisation **vérifie donc explicitement l'existence** avant de pousser
+une création (`store.pushWrite`). L'en-tête reste envoyé comme seconde
+barrière, sans qu'on compte dessus.
+
+### Le rafraîchissement à l'ouverture n'est pas un confort
+
+Une note ouverte sans être relue depuis le serveur garde un ETag qui vieillit.
+Dès que quelqu'un la modifie ailleurs, la prochaine écriture depuis le
+téléphone part avec une version périmée, le serveur la refuse, et le mécanisme
+de conflit crée un doublon — alors qu'il n'y avait rien à arbitrer.
+
+C'est ce qui rendait les conflits envahissants à l'usage. `ReadNote` relit donc
+toute note **propre** avant de la rendre. Une note portant des modifications
+locales n'est jamais rafraîchie : le brouillon prime jusqu'à la
+synchronisation.
+
 ### ETag présent sur le PUT
 
 Le `PUT` renvoie `Etag` **et** `Oc-Etag` (même valeur, entre guillemets). Lire
@@ -334,24 +361,47 @@ Ordre indicatif. Les briques 4 et 8 sont parallélisables dès le début.
 | **4-bis** | Rendu preview | goldmark, à ajouter quand l'aperçu sera au programme |
 | **5** | ~~Config~~ **fait** | `internal/config` — URL, compte, espace, URL WebDAV, racine ; **aucun secret**, vérifié par un test |
 | **6** | ~~Façade `mobile/`~~ **écrite** | 23 méthodes, contrat gelé dans [FACADE.md](FACADE.md), compatibilité gomobile vérifiée par analyse syntaxique |
-| **7** | UI Compose **écrite, non compilée** | 43 fichiers sous `android/` — voir la réserve ci-dessous |
+| **7** | ~~UI Compose~~ **compile** | 43 fichiers sous `android/`, AAR généré, APK produit — jamais exécutée sur un appareil |
+| **9** | Build & distrib | APK release à 8,5 Mo ; signature et distribution restent à faire |
 | **8** | ~~CLI desktop~~ **fait** | `cmd/opennote-cli` — `drives`, `ls`, `tree`, `cat`, `put`, `mkdir`, `mv`, `rm` |
 | **9** | Build & distrib | APK signé ; distribution par APK direct / Obtainium / F-Droid |
 
-### Réserve sur la brique 7
+### Où en est la vérification
 
-Les briques 1 à 6 sont **vérifiées** : tests unitaires, et tests d'intégration
-contre un vrai serveur OpenCloud 7.0.0.
+Trois niveaux, à ne pas confondre.
 
-La brique 7 est **écrite, pas vérifiée**. Ni le SDK Android, ni Gradle, ni le
-NDK ne sont installés sur la machine de développement : le Kotlin n'a jamais vu
-de compilateur, l'AAR n'a jamais été généré, l'application n'a jamais tourné.
-Une passe de correction au premier build est à prévoir. Les points de
-vigilance sont listés dans `android/README.md`.
+**Briques 1 à 6 — vérifiées par des tests.** 191 cas unitaires, plus des tests
+d'intégration contre un vrai serveur OpenCloud 7.0.0.
 
-Cette distinction est volontairement explicite : confondre « écrit » et
-« testé » est la façon la plus sûre de laisser dormir un bug pendant des
-semaines.
+**Brique 7 — compile, mais n'a jamais tourné.** L'AAR se génère, l'APK se
+construit en debug comme en release. Deux corrections ont suffi au premier
+build : `\.` n'est pas un échappement Kotlin valide dans
+`settings.gradle.kts`, et `android:Theme.Material.DayNight` n'existe pas dans
+le framework — le mode sombre passe par `values-night/`. Une troisième a
+débloqué R8 : Tink référence des annotations absentes à l'exécution.
+
+Mais **compiler n'est pas fonctionner**. Aucun écran n'a été affiché, aucune
+note écrite depuis un téléphone, aucun conflit provoqué en conditions réelles.
+La première exécution reste à faire.
+
+Cette distinction est volontairement explicite : confondre « écrit »,
+« compile » et « testé » est la façon la plus sûre de laisser dormir un bug
+pendant des semaines.
+
+### Poids mesuré
+
+Le critère « application légère » était listé comme un risque. Mesures réelles,
+ABI `arm64-v8a` seule :
+
+| | Taille |
+|---|---|
+| `libgojni.so` sans `-ldflags="-s -w"` | 14 Mo |
+| `libgojni.so` avec | 7,2 Mo |
+| APK debug | 32,9 Mo |
+| **APK release (R8 + shrink)** | **8,5 Mo** |
+
+Le risque est écarté : 8,5 Mo pour une application Compose embarquant le
+runtime Go complet.
 
 ### Brique 4 — pourquoi elle est isolée
 

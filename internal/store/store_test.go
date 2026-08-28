@@ -67,6 +67,28 @@ func (r *fakeRemote) Save(_ context.Context, p string, content []byte, ifMatch s
 	return etag, nil
 }
 
+func (r *fakeRemote) Exists(_ context.Context, p string) (bool, error) {
+	if r.offline {
+		return false, errOffline
+	}
+	r.calls = append(r.calls, "exists "+p)
+	_, ok := r.files[p]
+	return ok, nil
+}
+
+// SaveNew refuse d'écraser : c'est la protection des notes créées hors
+// connexion, dont on ignore si le nom est déjà pris côté serveur.
+func (r *fakeRemote) SaveNew(ctx context.Context, p string, content []byte) (string, error) {
+	if r.offline {
+		return "", errOffline
+	}
+	if _, exists := r.files[p]; exists {
+		r.calls = append(r.calls, "saveNew-refuse "+p)
+		return "", fmt.Errorf("fake: %s: %w", p, opencloud.ErrConflict)
+	}
+	return r.Save(ctx, p, content, "")
+}
+
 func (r *fakeRemote) Delete(_ context.Context, p string) error {
 	if r.offline {
 		return errOffline

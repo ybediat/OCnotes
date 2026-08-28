@@ -168,6 +168,48 @@ func TestIntegrationConflitETag(t *testing.T) {
 	}
 }
 
+// OpenCloud ignore « If-None-Match: * » : un PUT portant cet en-tête écrase
+// quand même une ressource existante.
+//
+// Ce test verrouille ce constat. Il n'échoue pas — il documente une limite du
+// serveur, mesurée le 2026-08-28 sur OpenCloud 7.0.0, après qu'un écrasement a
+// été observé sur un vrai téléphone.
+//
+// C'est la raison pour laquelle la synchronisation vérifie explicitement
+// l'existence d'une note avant de pousser une création faite hors connexion
+// (voir store.pushWrite). Si ce test se met un jour à signaler que le serveur
+// honore l'en-tête, cette vérification pourra être allégée — mais pas avant.
+func TestIntegrationWriteNewEtIfNoneMatch(t *testing.T) {
+	space, ctx, sandbox := integrationSpace(t)
+	note := sandbox + "/deja-la.md"
+
+	if _, err := space.Write(ctx, note, []byte("version d'origine"), ""); err != nil {
+		t.Fatalf("création initiale: %v", err)
+	}
+
+	_, err := space.WriteNew(ctx, note, []byte("version qui ne devrait pas passer"))
+
+	got, _, readErr := space.Read(ctx, note)
+	if readErr != nil {
+		t.Fatalf("Read: %v", readErr)
+	}
+
+	switch {
+	case err == nil && string(got) != "version d'origine":
+		t.Logf("CONSTAT : le serveur ignore « If-None-Match: * » et a écrasé la note.\n"+
+			"La protection des créations hors connexion repose donc entièrement sur la\n"+
+			"vérification d'existence faite dans store.pushWrite. Contenu après PUT : %q", got)
+
+	case errors.Is(err, ErrConflict):
+		t.Logf("CONSTAT : le serveur honore « If-None-Match: * » (refus en 412).\n" +
+			"La vérification d'existence de store.pushWrite devient une seconde barrière,\n" +
+			"et pourrait être allégée si ce comportement est garanti.")
+
+	default:
+		t.Errorf("comportement inattendu : erreur = %v, contenu = %q", err, got)
+	}
+}
+
 func TestIntegrationDossiers(t *testing.T) {
 	space, ctx, sandbox := integrationSpace(t)
 

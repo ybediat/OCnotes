@@ -149,6 +149,27 @@ func (s *Space) Write(ctx context.Context, p string, content []byte, ifMatch str
 	return hdr.Get("ETag"), nil
 }
 
+// WriteNew écrit une note en exigeant qu'elle n'existe pas encore.
+//
+// Sert aux notes créées hors connexion : au moment de la création, on ne peut
+// pas savoir si le serveur porte déjà ce nom. Un PUT inconditionnel écraserait
+// alors une note écrite ailleurs entre-temps.
+//
+// L'en-tête « If-None-Match: * » demande au serveur de refuser si la ressource
+// existe. Le refus arrive en 412, donc comme un conflit ordinaire — et la
+// résolution de conflit, qui conserve les deux versions, s'applique telle
+// quelle.
+func (s *Space) WriteNew(ctx context.Context, p string, content []byte) (string, error) {
+	_, hdr, err := s.c.do(ctx, http.MethodPut, s.resourceURL(p, false), content, map[string]string{
+		"Content-Type":  "text/markdown",
+		"If-None-Match": "*",
+	})
+	if err != nil {
+		return "", err
+	}
+	return hdr.Get("ETag"), nil
+}
+
 // Mkdir crée un dossier. Si le dossier existe déjà, l'erreur renvoyée
 // satisfait errors.Is(err, ErrExists).
 func (s *Space) Mkdir(ctx context.Context, p string) error {

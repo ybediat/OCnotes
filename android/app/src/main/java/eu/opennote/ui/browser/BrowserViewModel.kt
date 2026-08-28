@@ -18,7 +18,16 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class BrowserUiState(
-    val racine: String = "",
+    /**
+     * Nom du dossier de notes, uniquement pour l'affichage du titre.
+     *
+     * Ce n'est PAS un chemin utilisable : `state.root` est relatif à l'espace,
+     * alors que tous les chemins de la façade sont relatifs au dossier de
+     * notes. Les confondre fait demander « Notes » là où le serveur attend la
+     * racine, donc chercher « Notes/Notes ».
+     */
+    val nomRacine: String = "Notes",
+    /** Chemin courant, relatif au dossier de notes. Vide = sa racine. */
     val cheminCourant: String = "",
     val entrees: List<FolderEntryDto> = emptyList(),
     val chargement: Boolean = true,
@@ -28,14 +37,14 @@ data class BrowserUiState(
     val enAttente: Int = 0,
 ) {
     /**
-     * Le dossier racine est le plancher de la navigation : on ne remonte
-     * jamais au-dessus du dossier de notes, même si l'espace contient d'autres
-     * dossiers.
+     * Le dossier de notes est le plancher de la navigation : on ne remonte
+     * jamais au-dessus, même si l'espace contient d'autres dossiers. Y être
+     * se reconnaît à un chemin vide.
      */
-    val peutRemonter: Boolean get() = cheminCourant != racine && cheminCourant.isNotEmpty()
+    val peutRemonter: Boolean get() = cheminCourant.isNotEmpty()
 
     val titre: String
-        get() = cheminCourant.substringAfterLast('/').ifBlank { "Notes" }
+        get() = cheminCourant.substringAfterLast('/').ifBlank { nomRacine }
 }
 
 /** Ce que la vue doit faire une fois une opération terminée. */
@@ -68,10 +77,14 @@ class BrowserViewModel(
             val etat = repository.state()
             _uiState.update {
                 it.copy(
-                    racine = etat.root,
+                    // Le dernier segment suffit à titrer : « Mes notes » pour
+                    // une racine « Documents/Mes notes ».
+                    nomRacine = etat.root.substringAfterLast('/').ifBlank { "Notes" },
                     // `lastPath` ramène l'utilisateur là où il était, ce que
-                    // la façade a mémorisé pour nous.
-                    cheminCourant = etat.lastPath.ifBlank { etat.root },
+                    // la façade a mémorisé pour nous. Vide, il désigne la
+                    // racine du dossier de notes — surtout pas `etat.root`,
+                    // qui est exprimé dans un autre référentiel.
+                    cheminCourant = etat.lastPath,
                 )
             }
             recharger()
