@@ -82,7 +82,12 @@ func (s *Space) List(ctx context.Context, dir string) ([]Resource, error) {
 
 	// Un PROPFIND Depth 1 renvoie d'abord le dossier interrogé lui-même :
 	// on l'écarte pour ne garder que son contenu.
-	self := strings.Trim(dir, "/")
+	//
+	// La comparaison se fait sur le chemin normalisé, et non sur dir tel quel :
+	// le serveur répond avec des href déjà résolus, donc « Notes/ », « /Notes »
+	// ou « a/../Notes » ne correspondraient jamais à « Notes » et le dossier
+	// apparaîtrait dans son propre listing.
+	self := cleanRelPath(dir)
 	out := all[:0]
 	for _, r := range all {
 		if r.Path == self {

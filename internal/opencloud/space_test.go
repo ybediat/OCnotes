@@ -232,6 +232,44 @@ func TestListEcarteLeDossierInterroge(t *testing.T) {
 	}
 }
 
+// Le dossier interrogé doit être écarté quelle que soit la forme du chemin
+// fourni : le serveur répond toujours avec des href résolus, alors que
+// l'appelant peut passer un slash de fin, un slash initial ou un « .. ».
+func TestListEcarteLeDossierQuelQueSoitLeChemin(t *testing.T) {
+	base := "/dav/spaces/" + spaceID
+
+	for _, dir := range []string{
+		"Notes",
+		"Notes/",
+		"/Notes",
+		"/Notes/",
+		"Notes/Archives/..",
+		"Autre/../Notes",
+		"Notes//",
+	} {
+		t.Run(dir, func(t *testing.T) {
+			sp, _ := newTestSpace(t, func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusMultiStatus)
+				_, _ = w.Write([]byte(multistatusFixture(
+					dirEntry(base+"/Notes/"),
+					fileEntry(base+"/Notes/a.md", 12),
+				)))
+			})
+
+			resources, err := sp.List(context.Background(), dir)
+			if err != nil {
+				t.Fatalf("List(%q): %v", dir, err)
+			}
+			if len(resources) != 1 {
+				t.Fatalf("List(%q) = %d ressources, 1 attendue ; le dossier interrogé n'a pas été écarté", dir, len(resources))
+			}
+			if resources[0].Path != "Notes/a.md" {
+				t.Errorf("List(%q)[0].Path = %q", dir, resources[0].Path)
+			}
+		})
+	}
+}
+
 func TestListRacine(t *testing.T) {
 	base := "/dav/spaces/" + spaceID
 

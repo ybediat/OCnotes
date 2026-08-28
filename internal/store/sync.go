@@ -1,0 +1,327 @@
+package store
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path"
+	"strings"
+	"time"
+
+	"opennote/internal/opencloud"
+)
+
+// OpKind désigne le type d'une opération en attente.
+type OpKind string
+
+const (
+	OpWrite  OpKind = "write"
+	OpDelete OpKind = "delete"
+	OpMove   OpKind = "move"
+	OpMkdir  OpKind = "mkdir"
+)
+
+// Operation est une modification locale qui reste à propager au serveur.
+//
+// La file est persistée avec l'index : une écriture faite dans le métro
+// survit à la fermeture de l'application.
+type Operation struct {
+	Kind   OpKind `json:"kind"`
+	Path   string `json:"path"`
+	Target string `json:"target,omitempty"`
+}
+
+// Remote est la partie de la bibliothèque de notes dont la synchronisation a
+// besoin. *notes.Library l'implémente.
+type Remote interface {
+	Read(ctx context.Context, notePath string) ([]byte, string, error)
+	Save(ctx context.Context, notePath string, content []byte, ifMatch string) (string, error)
+	Delete(ctx context.Context, itemPath string) error
+	MoveTo(ctx context.Context, from, to string) error
+	EnsureFolder(ctx context.Context, dir string) error
+}
+
+// Conflict décrit une écriture refusée parce que le serveur avait une version
+// plus récente.
+type Conflict struct {
+	// Path est la note concernée : elle porte désormais la version du serveur.
+	Path string
+
+	// CopyPath est la copie de la version locale, conservée à côté.
+	CopyPath string
+}
+
+// Report résume une passe de synchronisation.
+type Report struct {
+	Pushed    int
+	Deleted   int
+	Moved     int
+	Conflicts []Conflict
+
+	// Remaining est le nombre d'opérations toujours en attente : la
+	// synchronisation s'arrête à la première erreur réseau pour préserver
+	// l'ordre des opérations.
+	Remaining int
+}
+
+// HasChanges indique si la passe a modifié quelque chose.
+func (r Report) HasChanges() bool {
+	return r.Pushed+r.Deleted+r.Moved+len(r.Conflicts) > 0
+}
+
+// Pending renvoie les opérations en attente de propagation.
+func (s *Store) Pending() []Operation {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]Operation(nil), s.queue...)
+}
+
+// enqueueLocked ajoute une opération, en absorbant les doublons.
+//
+// Sans cette absorption, une note enregistrée à chaque frappe empilerait des
+// centaines d'écritures identiques : seule la dernière compte, puisque le
+// contenu poussé est toujours lu dans le cache au moment de l'envoi.
+// L'appelant doit détenir le verrou.
+func (s *Store) enqueueLocked(op Operation) {
+	switch op.Kind {
+	case OpWrite:
+		for _, existing := range s.queue {
+			if existing.Kind == OpWrite && existing.Path == op.Path {
+				return
+			}
+		}
+
+	case OpDelete:
+		// Une suppression rend caduque toute écriture en attente sur le même
+		// chemin, mais pas un déplacement, qui a pu créer ce chemin.
+		filtered := s.queue[:0]
+		for _, existing := range s.queue {
+			if existing.Kind == OpWrite && existing.Path == op.Path {
+				continue
+			}
+			filtered = append(filtered, existing)
+		}
+		s.queue = filtered
+
+	case OpMkdir:
+		for _, existing := range s.queue {
+			if existing.Kind == OpMkdir && existing.Path == op.Path {
+				return
+			}
+		}
+	}
+
+	s.queue = append(s.queue, op)
+}
+
+// Push draine la file d'attente vers le serveur.
+//
+// Les opérations sont rejouées dans l'ordre : un déplacement suivi d'une
+// écriture n'a pas le même effet dans l'autre sens. La première erreur réseau
+// interrompt la passe et laisse le reste en file — réessayer plus tard vaut
+// mieux qu'appliquer les opérations dans le désordre.
+//
+// Un conflit, lui, n'interrompt pas la passe : il est résolu sur place et la
+// synchronisation continue.
+func (s *Store) Push(ctx context.Context, remote Remote) (Report, error) {
+	var report Report
+
+	for {
+		s.mu.Lock()
+		if len(s.queue) == 0 {
+			s.mu.Unlock()
+			return report, nil
+		}
+		op := s.queue[0]
+		s.mu.Unlock()
+
+		if err := ctx.Err(); err != nil {
+			report.Remaining = len(s.Pending())
+			return report, err
+		}
+
+		conflict, err := s.apply(ctx, remote, op, &report)
+		if err != nil {
+			report.Remaining = len(s.Pending())
+			return report, err
+		}
+		if conflict != nil {
+			report.Conflicts = append(report.Conflicts, *conflict)
+		}
+
+		s.mu.Lock()
+		// L'opération traitée est retirée. La comparaison protège du cas où
+		// la résolution d'un conflit a elle-même modifié la file.
+		if len(s.queue) > 0 && s.queue[0] == op {
+			s.queue = s.queue[1:]
+		}
+		err = s.save()
+		s.mu.Unlock()
+		if err != nil {
+			return report, err
+		}
+	}
+}
+
+// apply exécute une opération. Un conflit est renvoyé plutôt que remonté comme
+// erreur : il est attendu et se résout.
+func (s *Store) apply(ctx context.Context, remote Remote, op Operation, report *Report) (*Conflict, error) {
+	switch op.Kind {
+	case OpMkdir:
+		if err := remote.EnsureFolder(ctx, op.Path); err != nil {
+			return nil, err
+		}
+		return nil, nil
+
+	case OpDelete:
+		err := remote.Delete(ctx, op.Path)
+		if err != nil && !errors.Is(err, opencloud.ErrNotFound) {
+			return nil, err
+		}
+		// Une note déjà absente du serveur est le résultat voulu.
+		report.Deleted++
+		return nil, nil
+
+	case OpMove:
+		err := remote.MoveTo(ctx, op.Path, op.Target)
+		if err != nil && !errors.Is(err, opencloud.ErrNotFound) {
+			return nil, err
+		}
+		report.Moved++
+		return nil, nil
+
+	case OpWrite:
+		return s.pushWrite(ctx, remote, op.Path, report)
+
+	default:
+		return nil, fmt.Errorf("store: opération inconnue %q", op.Kind)
+	}
+}
+
+// pushWrite envoie le contenu en cache, en protégeant la version du serveur
+// par un If-Match.
+func (s *Store) pushWrite(ctx context.Context, remote Remote, notePath string, report *Report) (*Conflict, error) {
+	content, entry, ok := s.Get(notePath)
+	if !ok {
+		// La note a été supprimée entre-temps : il n'y a plus rien à pousser.
+		return nil, nil
+	}
+
+	etag, err := remote.Save(ctx, notePath, content, entry.ETag)
+	if err == nil {
+		s.mu.Lock()
+		if current, ok := s.entries[notePath]; ok {
+			current.ETag = etag
+			// La note a pu être modifiée pendant l'envoi : elle reste sale et
+			// une nouvelle écriture est déjà en file.
+			if current.Size == entry.Size && current.LocalMod.Equal(entry.LocalMod) {
+				current.Dirty = false
+			}
+		}
+		err = s.save()
+		s.mu.Unlock()
+		if err != nil {
+			return nil, err
+		}
+		report.Pushed++
+		return nil, nil
+	}
+
+	if !errors.Is(err, opencloud.ErrConflict) {
+		return nil, err
+	}
+	return s.resolveConflict(ctx, remote, notePath, content)
+}
+
+// resolveConflict traite une écriture refusée par le serveur.
+//
+// La résolution est volontairement bête et non destructive : la version du
+// serveur devient la note de référence, et la version locale est conservée
+// dans une copie voisine. Aucune fusion automatique, donc aucune façon de
+// perdre du texte que l'utilisateur avait écrit.
+func (s *Store) resolveConflict(ctx context.Context, remote Remote, notePath string, local []byte) (*Conflict, error) {
+	serverContent, serverETag, err := remote.Read(ctx, notePath)
+	if err != nil {
+		return nil, fmt.Errorf("store: lecture de la version serveur de %s: %w", notePath, err)
+	}
+
+	// Si les deux versions sont identiques, il n'y a pas de conflit réel :
+	// l'ETag local était simplement périmé (écriture faite par cette même
+	// application depuis un autre appareil, ou passe précédente interrompue).
+	if string(serverContent) == string(local) {
+		if err := s.Accept(notePath, serverContent, serverETag); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+
+	copyPath := conflictPath(notePath, time.Now())
+	if _, err := remote.Save(ctx, copyPath, local, ""); err != nil {
+		return nil, fmt.Errorf("store: sauvegarde de la version locale de %s: %w", notePath, err)
+	}
+
+	if err := s.Accept(notePath, serverContent, serverETag); err != nil {
+		return nil, err
+	}
+	if err := s.Accept(copyPath, local, ""); err != nil {
+		return nil, err
+	}
+
+	return &Conflict{Path: notePath, CopyPath: copyPath}, nil
+}
+
+// conflictPath construit le nom de la copie de secours.
+//
+// L'horodatage n'utilise pas de deux-points : ils sont interdits dans un nom
+// de fichier sous Windows, et le cache local doit pouvoir écrire cette copie.
+func conflictPath(notePath string, at time.Time) string {
+	dir, file := path.Split(notePath)
+	ext := path.Ext(file)
+	base := strings.TrimSuffix(file, ext)
+	stamp := at.Format("2006-01-02T15-04-05")
+	return dir + fmt.Sprintf("%s (conflit %s)%s", base, stamp, ext)
+}
+
+// Pull rafraîchit une note depuis le serveur.
+//
+// Une modification locale non poussée n'est jamais écrasée : la note reste
+// telle quelle et sera confrontée au serveur lors du prochain Push, où le
+// mécanisme de conflit s'appliquera.
+func (s *Store) Pull(ctx context.Context, remote Remote, notePath string) error {
+	s.mu.Lock()
+	entry, known := s.entries[notePath]
+	dirty := known && entry.Dirty
+	s.mu.Unlock()
+
+	if dirty {
+		return nil
+	}
+
+	content, etag, err := remote.Read(ctx, notePath)
+	if err != nil {
+		if errors.Is(err, opencloud.ErrNotFound) {
+			return s.Forget(notePath)
+		}
+		return err
+	}
+	return s.Accept(notePath, content, etag)
+}
+
+// Clear vide le cache et la file. Sert à la déconnexion : rien de
+// l'utilisateur précédent ne doit rester sur l'appareil.
+func (s *Store) Clear() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := os.RemoveAll(s.notesDir()); err != nil {
+		return fmt.Errorf("store: purge du cache: %w", err)
+	}
+	if err := os.MkdirAll(s.notesDir(), 0o700); err != nil {
+		return fmt.Errorf("store: recréation du cache: %w", err)
+	}
+
+	s.entries = map[string]*Entry{}
+	s.queue = nil
+	return s.save()
+}

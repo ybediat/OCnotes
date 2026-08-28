@@ -152,6 +152,30 @@ supplémentaire après écriture pour rafraîchir l'ETag local.
 > Markdown de quelques kilo-octets, mais utile à savoir si des pièces jointes
 > arrivent un jour.
 
+### Le serveur accepte tous les caractères testés dans les noms
+
+Mesuré par `TestIntegrationNomsDeFichiers` : **14 noms sur 14 acceptés**, écrits,
+relus à l'identique et retrouvés dans un listing. Y compris les caractères qui
+ont un sens dans une URL :
+
+```
+espaces   accents   ( )   &   +   #   ?   %   '   ,   ;   =   @   ~   ^   emoji
+```
+
+Go encode correctement chacun d'eux via `url.URL.Path`, et OpenCloud les
+restitue tels quels.
+
+**Conséquence pour la brique 3, et elle est contre-intuitive : le serveur est
+plus permissif que le cache local.** Une note nommée `point d'interrogation ?.md`
+existe sans problème sur le serveur, mais ne peut pas être écrite sous ce nom
+dans un fichier Windows (`? < > : " | * \ /` sont interdits), ni sous un nom
+contenant `/` sur Android.
+
+Le cache local **ne doit donc pas refléter les noms du serveur**. Il faut une
+indirection : nommer les fichiers du cache par une empreinte (ou par le
+`oc:fileid`, qui est stable et sûr) et conserver le nom réel dans l'index. Un
+cache qui recopierait les noms échouerait sur des notes parfaitement valides.
+
 ---
 
 ## 3. Arborescence
@@ -244,7 +268,36 @@ sérialise, désérialise, et délègue à `internal/`.
    aucune perte de données.
 
 La détection de conflit par ETag est le point technique le plus délicat du
-projet. Elle se teste intégralement côté Go avec un `httptest.Server`.
+projet. Elle est vérifiée côté Go avec un `httptest.Server`, et de bout en bout
+contre un vrai serveur par `TestIntegrationConflitETag`.
+
+### Ce que l'implémentation a figé
+
+**Le cache ne recopie pas les noms du serveur.** Chaque note est stockée sous
+une empreinte SHA-256 de son chemin, et le vrai nom vit dans l'index. C'est la
+conséquence directe de la découverte du §2 bis : une note nommée
+`point d'interrogation ?.md` est valide côté OpenCloud mais impossible à écrire
+sous ce nom dans un fichier Windows. L'empreinte porte sur le chemin et non sur
+l'`oc:fileid`, car une note créée hors connexion n'a pas encore d'identifiant
+serveur.
+
+**Les écritures répétées sont absorbées.** Un éditeur qui enregistre à chaque
+frappe empilerait des centaines d'opérations identiques ; la file n'en garde
+qu'une par chemin, puisque le contenu poussé est relu dans le cache au moment
+de l'envoi. Une suppression annule l'écriture en attente sur le même chemin.
+
+**Une erreur réseau interrompt la passe, un conflit non.** Les opérations sont
+rejouées dans l'ordre — un déplacement suivi d'une écriture n'a pas le même
+effet dans l'autre sens — donc la première panne réseau arrête tout et laisse
+le reste en file. Un conflit, lui, se résout sur place et la passe continue.
+
+**Un ETag périmé sans divergence de contenu n'est pas un conflit.** Comparer
+les contenus avant de créer une copie évite de polluer le dossier de l'utilisateur
+quand la cause est une passe précédente interrompue.
+
+**L'index est écrit par fichier temporaire renommé**, et un index illisible
+fait repartir le cache à vide plutôt qu'échouer : perdre le cache est bénin,
+refuser de démarrer ne l'est pas.
 
 ---
 
@@ -275,14 +328,30 @@ Ordre indicatif. Les briques 4 et 8 sont parallélisables dès le début.
 | **1a-bis** | ~~Spike WebDAV~~ **fait** | `scripts/spike-webdav.ps1` — 9/9 le 2026-08-28, `412` sur `If-Match` périmé confirmé |
 | **1b** | ~~Client OpenCloud~~ **fait** | `internal/opencloud` — `List`, `Stat`, `Read`, `Write`, `Mkdir`, `MkdirAll`, `Move`, `Remove` ; 25 tests au vert |
 | **1c** | ~~Découverte espaces~~ **fait** | `ListDrives` + `PersonalDrive`, qui écarte l'espace virtuel |
-| **2** | Modèle notes | arbre `*.md`, sous-dossiers, chemins normalisés, bootstrap du dossier `Notes` |
-| **3** | Store & sync | cache, file offline persistante, conflit ETag → fichier `(conflit …)` |
-| **4** | Markdown | helpers de formatage purs + rendu preview (goldmark) |
-| **5** | Config | URL / driveID / racine persistés ; secrets délégués à Android |
-| **6** | Façade `mobile/` | `gomobile bind` produit un `.aar` consommable |
-| **7** | UI Compose | connexion → espace → navigateur → éditeur → réglages |
-| **8** | CLI desktop | `opennote-cli ls / cat / put` fonctionne contre un vrai serveur |
+| **2** | ~~Modèle notes~~ **fait** | `internal/notes` — `Library`, validation de nommage, bootstrap, anti-collision |
+| **3** | ~~Store & sync~~ **fait** | `internal/store` — cache, file offline persistante, conflit ETag → copie `(conflit …)` |
+| **4** | ~~Markdown~~ **fait** | `internal/markdown` — 13 actions de mise en forme + extraction de titre |
+| **4-bis** | Rendu preview | goldmark, à ajouter quand l'aperçu sera au programme |
+| **5** | ~~Config~~ **fait** | `internal/config` — URL, compte, espace, URL WebDAV, racine ; **aucun secret**, vérifié par un test |
+| **6** | ~~Façade `mobile/`~~ **écrite** | 23 méthodes, contrat gelé dans [FACADE.md](FACADE.md), compatibilité gomobile vérifiée par analyse syntaxique |
+| **7** | UI Compose **écrite, non compilée** | 43 fichiers sous `android/` — voir la réserve ci-dessous |
+| **8** | ~~CLI desktop~~ **fait** | `cmd/opennote-cli` — `drives`, `ls`, `tree`, `cat`, `put`, `mkdir`, `mv`, `rm` |
 | **9** | Build & distrib | APK signé ; distribution par APK direct / Obtainium / F-Droid |
+
+### Réserve sur la brique 7
+
+Les briques 1 à 6 sont **vérifiées** : tests unitaires, et tests d'intégration
+contre un vrai serveur OpenCloud 7.0.0.
+
+La brique 7 est **écrite, pas vérifiée**. Ni le SDK Android, ni Gradle, ni le
+NDK ne sont installés sur la machine de développement : le Kotlin n'a jamais vu
+de compilateur, l'AAR n'a jamais été généré, l'application n'a jamais tourné.
+Une passe de correction au premier build est à prévoir. Les points de
+vigilance sont listés dans `android/README.md`.
+
+Cette distinction est volontairement explicite : confondre « écrit » et
+« testé » est la façon la plus sûre de laisser dormir un bug pendant des
+semaines.
 
 ### Brique 4 — pourquoi elle est isolée
 

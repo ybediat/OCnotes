@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icône vectorielle : une page avec un coin replié et trois lignes de texte.
+     Tout en XML, pour ne pas versionner de PNG. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,28 L62,28 L76,42 L76,80 L38,80 Z" />
+    <path
+        android:fillColor="#B9E4D7"
+        android:pathData="M62,28 L76,42 L62,42 Z" />
+    <path
+        android:fillColor="#1F6F5C"
+        android:pathData="M45,52 L69,52 L69,56 L45,56 Z" />
+    <path
+        android:fillColor="#1F6F5C"
+        android:pathData="M45,61 L69,61 L69,65 L45,65 Z" />
+    <path
+        android:fillColor="#1F6F5C"
+        android:pathData="M45,70 L60,70 L60,74 L45,74 Z" />
+</vector>

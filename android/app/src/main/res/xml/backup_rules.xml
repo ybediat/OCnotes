@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aucune sauvegarde : les EncryptedSharedPreferences sont chiffrées par une
+     clé du Keystore matériel, qui ne quitte pas l'appareil. Les restaurer
+     ailleurs ne produirait que des données illisibles. Le cache, lui, se
+     reconstruit depuis le serveur. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="file" path="." />
+</full-backup-content>

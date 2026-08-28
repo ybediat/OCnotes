@@ -18,6 +18,19 @@ var (
 	ErrUnauthorized = errors.New("opencloud: authentification refusée")
 )
 
+// Étiquettes de catégorie d'erreur.
+//
+// Elles apparaissent entre crochets dans le message et permettent de
+// reconnaître la nature d'une erreur sans analyser du texte en français.
+// C'est indispensable à la façade Android : gomobile ne transmet qu'une
+// chaîne de caractères, l'erreur typée ne franchit pas la frontière.
+const (
+	CodeUnauthorized = "AUTH"
+	CodeConflict     = "CONFLICT"
+	CodeNotFound     = "NOTFOUND"
+	CodeHTTP         = "HTTP"
+)
+
 // HTTPError porte le détail d'une réponse HTTP en échec.
 type HTTPError struct {
 	Method string
@@ -26,11 +39,25 @@ type HTTPError struct {
 	Body   string
 }
 
-func (e *HTTPError) Error() string {
-	if e.Body != "" {
-		return fmt.Sprintf("opencloud: %s %s: HTTP %d: %s", e.Method, e.URL, e.Status, e.Body)
+// Code renvoie l'étiquette de catégorie correspondant au statut.
+func (e *HTTPError) Code() string {
+	switch e.Status {
+	case http.StatusNotFound:
+		return CodeNotFound
+	case http.StatusPreconditionFailed:
+		return CodeConflict
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return CodeUnauthorized
 	}
-	return fmt.Sprintf("opencloud: %s %s: HTTP %d", e.Method, e.URL, e.Status)
+	return CodeHTTP
+}
+
+func (e *HTTPError) Error() string {
+	base := fmt.Sprintf("opencloud: [%s] %s %s: HTTP %d", e.Code(), e.Method, e.URL, e.Status)
+	if e.Body != "" {
+		return base + ": " + e.Body
+	}
+	return base
 }
 
 // Unwrap rattache les codes HTTP sans ambiguïté à une erreur sentinelle.

@@ -8,28 +8,41 @@ serveur **OpenCloud**.
 - **Local-first** : on écrit hors connexion, la synchronisation suit.
 - Connexion par **App Token** OpenCloud (OIDC prévu ensuite).
 
-> Statut : conception validée, implémentation non commencée.
+> **Statut**
+>
+> Le **cœur métier est terminé et vérifié** : client OpenCloud, modèle de notes,
+> cache et synchronisation, mise en forme Markdown, configuration, façade
+> Android. 191 cas de test unitaires, plus des tests d'intégration contre un
+> vrai serveur OpenCloud 7.0.0.
+>
+> L'**interface Compose est écrite mais jamais compilée** — le SDK Android n'est
+> pas installé sur la machine de développement. Voir `android/README.md` et la
+> réserve dans [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Documentation
 
 | Document | Contenu |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | décisions, endpoints OpenCloud vérifiés, frontière Go/Kotlin, modèle de sync, briques de travail, risques |
-| [docs/SETUP.md](docs/SETUP.md) | installation de la toolchain et procédure du spike d'authentification |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | décisions, endpoints OpenCloud vérifiés, pièges confirmés en conditions réelles, modèle de sync, briques, risques |
+| [docs/FACADE.md](docs/FACADE.md) | **le contrat gelé** de l'API Go exposée à Kotlin : méthodes, formats JSON, codes d'erreur |
+| [docs/SETUP.md](docs/SETUP.md) | installation de la toolchain et procédure des spikes |
 
 ## Structure
 
 ```
-internal/opencloud/   client HTTP, auth, graph/drives, WebDAV     [Go pur]
-internal/notes/       arbre de notes, sous-dossiers, chemins      [Go pur]
-internal/store/       cache local, file offline, ETags, conflits  [Go pur]
-internal/markdown/    helpers de mise en forme + rendu preview    [Go pur]
-internal/config/      URL serveur, driveID, racine, préférences   [Go pur]
-mobile/               façade gomobile bind
+internal/opencloud/   client HTTP, auth App Token, drives, WebDAV  [Go pur]
+internal/notes/       arbre de notes, nommage, sous-dossiers       [Go pur]
+internal/store/       cache local, file offline, ETags, conflits   [Go pur]
+internal/markdown/    mise en forme + extraction de titre          [Go pur]
+internal/config/      URL serveur, driveID, racine (sans secret)   [Go pur]
+mobile/               façade gomobile bind — frontière Kotlin
 cmd/opennote-cli/     harnais de test desktop
 android/              projet Gradle, UI Compose
-scripts/              outillage de développement
+scripts/              spikes et outillage de développement
 ```
+
+Rien sous `internal/` ne connaît Android, gomobile ou Compose : tout s'y compile
+et s'y teste sur Windows.
 
 ## Par où commencer
 
@@ -69,6 +82,34 @@ fichiers et des identifiants de compte.
 
 Pour installer la toolchain Go + Android, voir [docs/SETUP.md](docs/SETUP.md).
 
+## Le CLI de test
+
+`opennote-cli` exécute le vrai client Go contre un vrai serveur. C'est le moyen
+le plus rapide de vérifier le cœur métier sans téléphone ni émulateur.
+
+```bash
+go build -o bin/opennote-cli.exe ./cmd/opennote-cli
+```
+
+L'App Token se lit dans l'environnement — jamais en argument, où il
+atterrirait dans l'historique du shell et la liste des processus :
+
+```powershell
+$env:OPENNOTE_SERVER   = "https://cloud.exemple.fr"
+$env:OPENNOTE_USER     = "monlogin"
+$env:OPENNOTE_APP_TOKEN = "..."
+
+.\bin\opennote-cli.exe drives
+.\bin\opennote-cli.exe mkdir Notes
+.\bin\opennote-cli.exe ls Notes
+.\bin\opennote-cli.exe tree
+Get-Content note.md -Raw | .\bin\opennote-cli.exe put "Notes/ma note.md"
+.\bin\opennote-cli.exe cat "Notes/ma note.md"
+```
+
+Commandes : `drives`, `ls`, `tree`, `cat`, `put`, `mkdir`, `mv`, `rm`.
+Les options (`-server`, `-user`, `-drive`, `-timeout`) précèdent la commande.
+
 ## Tests
 
 Le cœur métier se teste entièrement sur desktop, sans téléphone ni serveur :
@@ -82,6 +123,27 @@ vrai serveur OpenCloud 7.0.0 (`internal/opencloud/testdata/`), avec les
 identifiants d'espace et le nom d'hôte anonymisés. Elles reproduisent
 notamment le double bloc `propstat` `200`/`404` et le `$` des identifiants
 d'espace — deux pièges que la documentation ne mentionne pas.
+
+### Tests d'intégration
+
+Ils s'exécutent contre un vrai serveur, dans un dossier temporaire supprimé en
+fin de test même en cas d'échec. Ils sont ignorés tant que les trois variables
+ne sont pas définies — lancer `go test ./...` n'écrit jamais par accident sur
+le serveur de quelqu'un :
+
+```powershell
+$env:OPENNOTE_IT_SERVER = "https://cloud.exemple.fr"; $env:OPENNOTE_IT_USER = "monlogin"; $env:OPENNOTE_IT_TOKEN = "..."
+```
+
+```bash
+go test ./internal/opencloud -run TestIntegration -v
+```
+
+Ils couvrent le cycle de vie complet d'une note, la détection de conflit par
+ETag, l'imbrication de dossiers, la traduction des erreurs, et surtout
+l'aller-retour de noms de fichiers contenant des caractères significatifs en
+URL. C'est cette dernière catégorie qui a établi les règles de nommage
+documentées dans [ARCHITECTURE.md](docs/ARCHITECTURE.md#2-bis-pièges-confirmés-sur-le-serveur-réel).
 
 ## Note sur le chemin de module
 

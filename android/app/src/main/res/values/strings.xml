@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OpenNote</string>
+    <string name="sync_channel_name">Synchronisation</string>
+    <string name="sync_channel_description">Conflits et incidents de synchronisation des notes</string>
+</resources>
