@@ -39,13 +39,26 @@ class SyncNotifier(private val context: Context) {
     /**
      * Affiche une notification récapitulative des conflits d'une passe.
      *
-     * Sans la permission `POST_NOTIFICATIONS` (Android 13+), on ne tente rien :
-     * `NotificationManagerCompat.notify` lèverait une `SecurityException`. Le
-     * bandeau de l'écran Réglages reste alors le seul canal — c'est acceptable,
-     * la donnée n'est pas perdue.
+     * Sans la permission `POST_NOTIFICATIONS` (Android 13+), on ne tente rien.
+     * Le bandeau de l'écran Réglages reste alors le seul canal — c'est
+     * acceptable, la donnée n'est pas perdue.
      */
     fun notifyConflicts(conflicts: List<ConflictDto>) {
-        if (conflicts.isEmpty() || !canNotify()) return
+        if (conflicts.isEmpty()) return
+
+        // La vérification est écrite ici, en toutes lettres, plutôt que
+        // déléguée à une méthode voisine : `MissingPermission` ne suit pas les
+        // appels, et une garde qu'il ne voit pas fait échouer `lintDebug` tout
+        // entier — donc aussi `MissingTranslation`, qui partage la tâche et
+        // dont c'est le seul contrôle automatique.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
 
         ensureChannel()
 
@@ -78,14 +91,6 @@ class SyncNotifier(private val context: Context) {
             .build()
 
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
-    }
-
-    private fun canNotify(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
-        return ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.POST_NOTIFICATIONS,
-        ) == PackageManager.PERMISSION_GRANTED
     }
 
     /** Dernier segment du chemin, sans l'extension `.md`. */

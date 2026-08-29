@@ -168,6 +168,67 @@ toute note **propre** avant de la rendre. Une note portant des modifications
 locales n'est jamais rafraîchie : le brouillon prime jusqu'à la
 synchronisation.
 
+### Une écriture qui n'écrit rien n'est pas une écriture
+
+Le rafraîchissement ci-dessus ne corrigeait qu'une moitié du problème, et
+l'autre moitié le rouvrait par l'autre bout : l'éditeur enregistre en quittant
+l'écran, sans regarder si le texte a bougé. **Consulter une note suffisait donc
+à la salir.** Or une note sale n'est pas rafraîchie à l'ouverture — c'est la
+règle juste au-dessus. Son ETag vieillissait précisément pendant la fenêtre où
+il ne devait pas, et la première modification faite depuis le navigateur
+devenait un conflit, avec sa copie. Autant de copies que de notes simplement
+lues : quatre copies pour un seul vrai conflit, constaté à l'usage.
+
+Deux gardes, indépendantes, dans le cœur Go plutôt que dans l'interface — c'est
+la seule couche que tous les chemins d'écriture traversent, et la seule qui se
+teste sans appareil :
+
+- **`store.Put` ignore un contenu identique à celui du cache.** Ni `Dirty`, ni
+  file, ni `LocalMod` : rien ne bouge. Sauf si la note est sale sans avoir
+  d'écriture en file — un renommage déplace l'entrée sans déplacer l'opération
+  en attente — auquel cas le chemin normal la remet en file.
+- **`Entry.BaseHash`** retient l'empreinte du dernier contenu sur lequel le
+  cache et le serveur étaient d'accord. `Dirty` dit qu'une écriture reste à
+  propager ; la base dit si elle a *quelque chose* à propager. Ce n'est pas la
+  même question, et les confondre coûtait une copie.
+
+La base sert deux fois. `pushWrite` saute l'envoi quand le serveur détient déjà
+exactement ce contenu — un PUT inutile changerait l'ETag et la date pour tous
+les autres appareils. Et `resolveConflict` peut enfin compter trois versions au
+lieu de deux : un refus du serveur dit que la version distante a bougé, pas que
+la locale a quelque chose à lui opposer. Quand `local == base`, le serveur
+l'emporte en silence.
+
+Un index écrit avant l'apparition du champ porte une base vide. Il n'est pas
+invalidé pour autant — il transporte la file d'attente, et la jeter perdrait
+des écritures faites hors connexion. Une base vide veut dire « on ne sait
+pas », et l'ancien comportement s'applique : la copie est conservée.
+
+Ce n'est **pas** de la gestion de conflit. Rien n'est fusionné, rien n'est
+comparé ligne à ligne. On distingue seulement « je n'ai rien à dire » de « nous
+avons tous les deux quelque chose à dire ».
+
+### On n'écrit que ce qu'on a su lire
+
+Le même enregistrement de sortie portait un défaut plus grave que la copie en
+trop, et qui ne relevait plus de la synchronisation : l'état initial de
+l'éditeur porte un **texte vide**, et un chargement qui échoue le laisse vide en
+repassant `chargement` à faux. Quitter l'écran à ce moment-là enregistrait cette
+chaîne vide par-dessus la note. Une note jamais mise en cache, ouverte sans
+réseau, était ainsi **effacée sur le serveur sans avoir jamais été affichée**.
+
+`EditorUiState.charge` est ce troisième état — ni « en cours », ni « fini »,
+mais « lu ». Seul le chemin de succès le pose, et `EditorUiState.enregistrable`
+en fait la condition de toute écriture. La règle est une propriété de l'état
+plutôt qu'une suite d'appels, et c'est délibéré : la course qu'elle protège
+n'est pas reproductible à la main, alors qu'une fonction de deux booléens se
+vérifie sur la JVM, sans appareil ni Robolectric. C'est
+`EditeurEnregistrableTest`.
+
+Corollaire à l'écran : un chargement échoué n'affiche plus de champ de saisie
+mais un `EtatVide`. Un champ vide laisserait croire à une note vide, et ce qu'on
+y taperait partirait par-dessus un contenu qu'on n'a pas réussi à lire.
+
 ### ETag présent sur le PUT
 
 Le `PUT` renvoie `Etag` **et** `Oc-Etag` (même valeur, entre guillemets). Lire

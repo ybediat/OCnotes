@@ -40,6 +40,19 @@ data class EditorUiState(
     val modifie: Boolean = false,
     val erreur: Texte? = null,
 
+    /**
+     * Vrai quand le contenu de la note a réellement été lu.
+     *
+     * Ce n'est pas l'inverse de [chargement], et c'est tout l'intérêt :
+     * l'état initial porte un texte vide, et un chargement qui échoue le laisse
+     * vide en repassant [chargement] à faux. Sans ce troisième état, quitter
+     * l'écran à ce moment-là enregistrait cette chaîne vide **par-dessus la
+     * note** — le cache la marquait modifiée, la synchronisation la poussait, et
+     * une note qu'on n'avait même pas réussi à ouvrir se retrouvait effacée sur
+     * le serveur, sans un message.
+     */
+    val charge: Boolean = false,
+
     /** Mode lecture : le texte est rendu, la saisie est suspendue. */
     val apercu: Boolean = false,
 
@@ -60,7 +73,22 @@ data class EditorUiState(
      * retour possible vers la saisie.
      */
     val modifiable: Boolean = true,
-)
+) {
+    /**
+     * Vrai quand [valeur] peut être écrit dans la note sans risquer de la
+     * remplacer par autre chose qu'elle-même.
+     *
+     * Deux conditions, deux raisons distinctes : [charge] dit qu'il y a bien un
+     * contenu derrière ce qui s'affiche, [modifiable] qu'il n'a pas été allégé
+     * pour tenir dans un champ de saisie.
+     *
+     * La règle vit sur l'état plutôt que dans le ViewModel pour être vérifiable
+     * sans appareil ni Robolectric : c'est une fonction de quatre booléens, et
+     * la course qu'elle protège — sortir de l'écran pendant le chargement —
+     * n'est pas reproductible à la main.
+     */
+    val enregistrable: Boolean get() = charge && modifiable
+}
 
 /**
  * Éditeur d'une note.
@@ -127,6 +155,7 @@ class EditorViewModel(
                 _uiState.update {
                     it.copy(
                         chargement = false,
+                        charge = true,
                         valeur = TextFieldValue(prepare.text, TextRange(prepare.text.length)),
                         titre = titre,
                         modifiable = prepare.editable,
@@ -248,10 +277,22 @@ class EditorViewModel(
         }
     }
 
-    /** Enregistrement immédiat, sur geste explicite ou sortie de l'écran. */
+    /**
+     * Enregistrement immédiat, sur geste explicite ou sortie de l'écran.
+     *
+     * La décision d'écrire est prise ici, et nulle part ailleurs : les deux
+     * appelants — le retour arrière et [onCleared] — n'ont pas à la reprendre
+     * chacun de leur côté, où ils divergeraient.
+     */
     fun enregistrerMaintenant() {
         enregistrement?.cancel()
-        val contenu = _uiState.value.valeur.text
+
+        // Une note ouverte, lue et refermée ne doit laisser aucune trace : ni
+        // écriture, ni réveil de la synchronisation.
+        val etat = _uiState.value
+        if (!etat.modifie) return
+
+        val contenu = etat.valeur.text
 
         // La portée applicative, pas `viewModelScope` : au retour arrière, le
         // ViewModel est détruit avant que la coroutine ait pu écrire.
@@ -266,10 +307,11 @@ class EditorViewModel(
     }
 
     private suspend fun ecrire(contenu: String) {
-        // Garde-fou : une note ouverte en lecture seule n'a rien à enregistrer.
-        // `modifie` ne devrait jamais y passer à vrai, mais écrire ici
-        // écraserait le fichier par sa version allégée.
-        if (!_uiState.value.modifiable) return
+        // Dernière garde avant le cache, et la seule qui compte : on n'écrit
+        // que ce qu'on a su lire. Une note en lecture seule serait écrasée par
+        // sa version allégée ; une note pas encore — ou jamais — chargée le
+        // serait par une chaîne vide.
+        if (!_uiState.value.enregistrable) return
 
         try {
             // La restitution n'est pas une commodité : sans elle, c'est le
@@ -290,7 +332,7 @@ class EditorViewModel(
         super.onCleared()
         // Filet de sécurité : l'écran peut disparaître autrement que par le
         // bouton retour (processus recyclé, navigation profonde).
-        if (_uiState.value.modifie) enregistrerMaintenant()
+        enregistrerMaintenant()
     }
 
     companion object {

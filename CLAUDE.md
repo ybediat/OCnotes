@@ -124,9 +124,22 @@ l'itération sur un écran.
 racine du dépôt. `ChainesEnDurTest` remonte l'arborescence plutôt que de le
 supposer.
 
-**`./gradlew lintDebug` échoue déjà**, sur un `MissingPermission` dans
-`SyncNotifier.kt` : la notification est postée sans vérifier
-`POST_NOTIFICATIONS`. Défaut réel et antérieur — ne pas croire l'avoir causé.
+**`./gradlew lintDebug` passe** : zéro erreur, 39 avertissements. Il échouait
+sur un `MissingPermission` dans `SyncNotifier.kt`, que ce document décrivait
+comme « la notification postée sans vérifier `POST_NOTIFICATIONS`, défaut réel
+et antérieur ». C'était faux, et faux dès l'écriture : la permission était
+vérifiée, demandée à l'exécution et déclarée au manifeste depuis `2665103`,
+soit la veille. Seulement, la garde vivait dans une méthode privée voisine, et
+`MissingPermission` ne suit pas les appels — il ne voyait pas ce qu'il
+cherchait. La vérification est désormais écrite en toutes lettres dans
+`notifyConflicts`, et lint se tait.
+
+La leçon vaut plus que le correctif : **un échec de lint n'est pas un défaut
+tant qu'on n'a pas lu le code visé.** Celui-ci a été énoncé une fois, puis
+repris sur parole, et il coûtait cher — `MissingTranslation` et
+`ExtraTranslation` sont réglés en erreurs pour le chantier de traduction, et
+une tâche qui ne peut pas être verte ne sert plus de signal.
+
 Lint signale aussi deux `Typos` sur le mot « exemple », qu'il lit comme un
 anglais mal orthographié : la règle ne connaît que l'anglais, et le dépôt
 écrit ses ressources en français.

@@ -210,6 +210,18 @@ func (s *Store) pushWrite(ctx context.Context, remote Remote, notePath string, r
 		return nil, nil
 	}
 
+	// Le serveur détient déjà exactement ce contenu : l'écriture en file n'a
+	// rien à propager. Le cas arrive dès qu'une modification est défaite avant
+	// la synchronisation — saisir un caractère puis l'effacer suffit.
+	//
+	// Renvoyer ce contenu ne serait pas neutre : le PUT changerait l'ETag et la
+	// date de la note pour tous les autres appareils, et un If-Match périmé
+	// ferait naître une copie de conflit sur une version qui n'a rien à
+	// arbitrer. On se contente donc de constater l'alignement.
+	if entry.ETag != "" && entry.BaseHash != "" && entry.BaseHash == contentHash(content) {
+		return nil, s.settle(notePath, entry, entry.ETag, entry.BaseHash)
+	}
+
 	// Un ETag vide signale une note que le serveur n'a jamais vue : elle a été
 	// créée hors connexion. Rien ne dit qu'un fichier du même nom n'est pas
 	// apparu là-bas entre-temps, et l'écraser détruirait le travail de
@@ -228,7 +240,7 @@ func (s *Store) pushWrite(ctx context.Context, remote Remote, notePath string, r
 			return nil, existsErr
 		}
 		if exists {
-			return s.resolveConflict(ctx, remote, notePath, content)
+			return s.resolveConflict(ctx, remote, notePath, content, entry.BaseHash)
 		}
 		etag, err = remote.SaveNew(ctx, notePath, content)
 	} else {
@@ -236,18 +248,7 @@ func (s *Store) pushWrite(ctx context.Context, remote Remote, notePath string, r
 	}
 
 	if err == nil {
-		s.mu.Lock()
-		if current, ok := s.entries[notePath]; ok {
-			current.ETag = etag
-			// La note a pu être modifiée pendant l'envoi : elle reste sale et
-			// une nouvelle écriture est déjà en file.
-			if current.Size == entry.Size && current.LocalMod.Equal(entry.LocalMod) {
-				current.Dirty = false
-			}
-		}
-		err = s.save()
-		s.mu.Unlock()
-		if err != nil {
+		if err := s.settle(notePath, entry, etag, contentHash(content)); err != nil {
 			return nil, err
 		}
 		report.Pushed++
@@ -257,7 +258,28 @@ func (s *Store) pushWrite(ctx context.Context, remote Remote, notePath string, r
 	if !errors.Is(err, opencloud.ErrConflict) {
 		return nil, err
 	}
-	return s.resolveConflict(ctx, remote, notePath, content)
+	return s.resolveConflict(ctx, remote, notePath, content, entry.BaseHash)
+}
+
+// settle enregistre qu'une note est alignée sur le serveur : ETag et base
+// décrivent désormais la version distante.
+//
+// sent est l'entrée telle qu'elle était au moment de l'envoi. La note a pu
+// être modifiée depuis : elle reste alors sale, et une nouvelle écriture est
+// déjà en file. L'ETag et la base, eux, décrivent le serveur et se posent dans
+// tous les cas.
+func (s *Store) settle(notePath string, sent Entry, etag, hash string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if current, ok := s.entries[notePath]; ok {
+		current.ETag = etag
+		current.BaseHash = hash
+		if current.Size == sent.Size && current.LocalMod.Equal(sent.LocalMod) {
+			current.Dirty = false
+		}
+	}
+	return s.save()
 }
 
 // resolveConflict traite une écriture refusée par le serveur.
@@ -266,7 +288,13 @@ func (s *Store) pushWrite(ctx context.Context, remote Remote, notePath string, r
 // serveur devient la note de référence, et la version locale est conservée
 // dans une copie voisine. Aucune fusion automatique, donc aucune façon de
 // perdre du texte que l'utilisateur avait écrit.
-func (s *Store) resolveConflict(ctx context.Context, remote Remote, notePath string, local []byte) (*Conflict, error) {
+//
+// Encore faut-il qu'il y ait un conflit. Un refus du serveur dit seulement que
+// la version distante a bougé, pas que la locale a quelque chose à opposer :
+// il faut confronter trois versions, et baseHash porte la troisième — celle
+// sur laquelle les deux côtés étaient d'accord. Sans elle, une note simplement
+// périmée produisait une copie.
+func (s *Store) resolveConflict(ctx context.Context, remote Remote, notePath string, local []byte, baseHash string) (*Conflict, error) {
 	serverContent, serverETag, err := remote.Read(ctx, notePath)
 	if err != nil {
 		return nil, fmt.Errorf("store: lecture de la version serveur de %s: %w", notePath, err)
@@ -280,6 +308,19 @@ func (s *Store) resolveConflict(ctx context.Context, remote Remote, notePath str
 			return nil, err
 		}
 		return nil, nil
+	}
+
+	// La version locale est encore celle sur laquelle les deux côtés étaient
+	// d'accord : elle n'a rien à opposer à celle du serveur, qui l'emporte
+	// donc en silence. En conserver une copie ne sauverait aucun texte — elle
+	// ne contient rien que le serveur n'ait déjà eu — et donnerait à
+	// l'utilisateur un doublon à trier pour une modification qu'il n'a pas
+	// faite.
+	//
+	// Une base vide vient d'un index écrit avant que le champ n'existe : on ne
+	// sait alors rien, et l'ancien comportement — conserver — s'applique.
+	if baseHash != "" && contentHash(local) == baseHash {
+		return nil, s.Accept(notePath, serverContent, serverETag)
 	}
 
 	copyPath := conflictPath(notePath, time.Now())

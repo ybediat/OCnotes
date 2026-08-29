@@ -40,6 +40,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.opennote.R
 import eu.opennote.appContainer
 import eu.opennote.ui.common.ChargementPleinEcran
+import eu.opennote.ui.common.EtatVide
 import eu.opennote.ui.common.resoudre
 import eu.opennote.ui.theme.StyleEditeur
 
@@ -141,6 +142,19 @@ fun EditorScreen(
     ) { paddings ->
         if (etat.chargement) {
             ChargementPleinEcran(Modifier.padding(paddings))
+            return@Scaffold
+        }
+
+        // Le chargement a échoué : surtout pas de champ de saisie. Vide, il
+        // laisserait croire à une note vide, et ce qu'on y taperait partirait
+        // par-dessus un contenu qu'on n'a pas réussi à lire. L'erreur elle-même
+        // est déjà passée par le snackbar.
+        if (!etat.charge) {
+            EtatVide(
+                titre = stringResource(R.string.editeur_illisible_titre),
+                detail = stringResource(R.string.editeur_illisible_detail),
+                modifier = Modifier.padding(paddings),
+            )
             return@Scaffold
         }
 

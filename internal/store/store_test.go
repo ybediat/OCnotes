@@ -277,6 +277,63 @@ func TestEcrituresRepeteesAbsorbees(t *testing.T) {
 	}
 }
 
+// Ouvrir une note, la lire et la refermer ne doit rien salir.
+//
+// L'éditeur enregistre à la sortie de l'écran, sans savoir si le texte a
+// bougé. Si le cache le croyait sur parole, toute note consultée serait
+// renvoyée au serveur — et, le temps qu'elle soit sale, ReadNote refuserait de
+// la rafraîchir. Son ETag vieillirait, et la première modification faite
+// ailleurs deviendrait un conflit avec sa copie.
+func TestReenregistrerLeMemeTexteNeSalitPasLaNote(t *testing.T) {
+	s, remote := newStore(t), newFakeRemote()
+
+	if err := s.Accept("a.md", []byte("texte inchangé"), `"e1"`); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+
+	if err := s.Put("a.md", []byte("texte inchangé")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	if pending := s.Pending(); len(pending) != 0 {
+		t.Errorf("file = %+v, aucune opération attendue", pending)
+	}
+	if _, entry, _ := s.Get("a.md"); entry.Dirty {
+		t.Error("la note est marquée sale alors que son contenu n'a pas changé")
+	}
+
+	report, err := s.Push(context.Background(), remote)
+	if err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	if report.Pushed != 0 {
+		t.Errorf("Pushed = %d, attendu 0", report.Pushed)
+	}
+	if len(remote.calls) != 0 {
+		t.Errorf("le serveur a été appelé pour rien: %v", remote.calls)
+	}
+}
+
+// Le filtre ne doit pas avaler une écriture qui, elle, avait quelque chose à
+// dire : réenregistrer un brouillon à l'identique le laisse en attente.
+func TestReenregistrerUnBrouillonLeLaisseEnAttente(t *testing.T) {
+	s := newStore(t)
+
+	if err := s.Put("a.md", []byte("brouillon")); err != nil {
+		t.Fatalf("Put initial: %v", err)
+	}
+	if err := s.Put("a.md", []byte("brouillon")); err != nil {
+		t.Fatalf("Put identique: %v", err)
+	}
+
+	if pending := s.Pending(); len(pending) != 1 {
+		t.Fatalf("file = %+v, une écriture attendue", pending)
+	}
+	if _, entry, _ := s.Get("a.md"); !entry.Dirty {
+		t.Error("le brouillon n'est plus signalé comme modifié")
+	}
+}
+
 func TestSuppressionAnnuleLEcritureEnAttente(t *testing.T) {
 	s, remote := newStore(t), newFakeRemote()
 	ctx := context.Background()
@@ -373,9 +430,12 @@ func TestConflitSansDivergenceNeCreePasDeCopie(t *testing.T) {
 	remote.files["a.md"] = "même texte"
 	remote.etags["a.md"] = `"serveur"`
 
-	if err := s.Accept("a.md", []byte("même texte"), `"perime"`); err != nil {
+	// Le cache part d'une version antérieure : sans cela, l'écriture serait
+	// filtrée comme sans effet et n'atteindrait jamais la résolution.
+	if err := s.Accept("a.md", []byte("version antérieure"), `"perime"`); err != nil {
 		t.Fatalf("Accept: %v", err)
 	}
+	// Les deux côtés ont fait la même modification, chacun de leur côté.
 	if err := s.Put("a.md", []byte("même texte")); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
@@ -392,6 +452,145 @@ func TestConflitSansDivergenceNeCreePasDeCopie(t *testing.T) {
 		if strings.Contains(p, "conflit") {
 			t.Errorf("une copie de conflit inutile a été créée: %s", p)
 		}
+	}
+}
+
+// oublierLaBase simule une entrée écrite par une version de l'index antérieure
+// au champ BaseHash. Cet index-là n'est pas invalidé au chargement — il porte
+// la file d'attente — donc le code doit savoir travailler sans la base.
+func oublierLaBase(t *testing.T, s *Store, notePath string) {
+	t.Helper()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entry, ok := s.entries[notePath]
+	if !ok {
+		t.Fatalf("entrée absente du cache: %s", notePath)
+	}
+	entry.BaseHash = ""
+	if err := s.save(); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+}
+
+// Une modification défaite avant la synchronisation ne doit rien envoyer.
+//
+// C'est le cas qui rendait les copies de conflit envahissantes : l'écriture en
+// file ne porte plus rien de nouveau, mais elle part quand même avec un ETag
+// périmé, le serveur la refuse, et une copie naît d'une note que personne
+// n'avait modifiée de ce côté-ci.
+func TestEcritureRevenueALaBaseNEnvoieRien(t *testing.T) {
+	s, remote := newStore(t), newFakeRemote()
+
+	if err := s.Accept("a.md", []byte("version initiale"), `"e1"`); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+	if err := s.Put("a.md", []byte("brouillon intermédiaire")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if err := s.Put("a.md", []byte("version initiale")); err != nil {
+		t.Fatalf("Put de retour: %v", err)
+	}
+	if pending := s.Pending(); len(pending) != 1 {
+		t.Fatalf("file = %+v, une écriture attendue avant l'envoi", pending)
+	}
+
+	// Pendant ce temps, quelqu'un a modifié la note depuis le navigateur.
+	remote.files["a.md"] = "version du web"
+	remote.etags["a.md"] = `"e2"`
+
+	report, err := s.Push(context.Background(), remote)
+	if err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	if len(report.Conflicts) != 0 {
+		t.Errorf("%d conflits signalés, aucun attendu : le local n'avait rien à opposer", len(report.Conflicts))
+	}
+	if report.Pushed != 0 {
+		t.Errorf("Pushed = %d, attendu 0", report.Pushed)
+	}
+	for _, call := range remote.calls {
+		if strings.HasPrefix(call, "save ") {
+			t.Errorf("le serveur a été écrit pour rien: %v", remote.calls)
+			break
+		}
+	}
+	if remote.files["a.md"] != "version du web" {
+		t.Errorf("la version du web a été écrasée: %q", remote.files["a.md"])
+	}
+	if len(s.Pending()) != 0 {
+		t.Errorf("file restante = %+v", s.Pending())
+	}
+	if _, entry, _ := s.Get("a.md"); entry.Dirty {
+		t.Error("la note reste sale alors qu'il n'y avait rien à envoyer")
+	}
+}
+
+// Même situation, mais par le chemin des notes sans ETag — celui d'une copie de
+// conflit, qu'un Accept enregistre sans version distante. Le refus vient alors
+// du contrôle d'existence, pas d'un If-Match, et la base doit trancher pareil.
+func TestConflitSansModificationLocaleNeCreePasDeCopie(t *testing.T) {
+	s, remote := newStore(t), newFakeRemote()
+
+	if err := s.Accept("copie.md", []byte("version initiale"), ""); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+	remote.files["copie.md"] = "version du web"
+	remote.etags["copie.md"] = `"e2"`
+
+	if err := s.Put("copie.md", []byte("brouillon intermédiaire")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if err := s.Put("copie.md", []byte("version initiale")); err != nil {
+		t.Fatalf("Put de retour: %v", err)
+	}
+
+	report, err := s.Push(context.Background(), remote)
+	if err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	if len(report.Conflicts) != 0 {
+		t.Errorf("%d conflits signalés, aucun attendu", len(report.Conflicts))
+	}
+	for p := range remote.files {
+		if strings.Contains(p, "conflit") {
+			t.Errorf("une copie de conflit inutile a été créée: %s", p)
+		}
+	}
+	if content, _, _ := s.Get("copie.md"); string(content) != "version du web" {
+		t.Errorf("le cache = %q, attendu la version du serveur", content)
+	}
+}
+
+// Sans base connue, on ne sait pas si le local avait quelque chose à dire : le
+// doute profite à l'utilisateur, la copie est conservée.
+func TestConflitAvecBaseInconnueConserveLaCopie(t *testing.T) {
+	s, remote := newStore(t), newFakeRemote()
+
+	if err := s.Accept("a.md", []byte("version initiale"), `"e1"`); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+	if err := s.Put("a.md", []byte("brouillon intermédiaire")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if err := s.Put("a.md", []byte("version initiale")); err != nil {
+		t.Fatalf("Put de retour: %v", err)
+	}
+	oublierLaBase(t, s, "a.md")
+
+	remote.files["a.md"] = "version du web"
+	remote.etags["a.md"] = `"e2"`
+
+	report, err := s.Push(context.Background(), remote)
+	if err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	if len(report.Conflicts) != 1 {
+		t.Fatalf("%d conflits signalés, 1 attendu sans base connue", len(report.Conflicts))
+	}
+	if remote.files[report.Conflicts[0].CopyPath] != "version initiale" {
+		t.Errorf("copie distante = %q", remote.files[report.Conflicts[0].CopyPath])
 	}
 }
 

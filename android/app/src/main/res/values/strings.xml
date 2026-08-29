@@ -254,6 +254,8 @@
          à une perte. -->
     <string name="editeur_brouillon">Brouillon local, envoi programmé</string>
     <string name="editeur_saisie_vide">Écrivez ici…</string>
+    <string name="editeur_illisible_titre">Note non chargée</string>
+    <string name="editeur_illisible_detail">Son contenu n\'a pas pu être lu. Rien n\'a été modifié : rouvrez-la une fois la connexion revenue.</string>
 
     <!-- ================================================================
          Barre de mise en forme

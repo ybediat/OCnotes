@@ -95,6 +95,73 @@ func TestModificationDepuisLeNavigateurNeCreePasDeConflit(t *testing.T) {
 	}
 }
 
+// Reproduction du troisième défaut constaté à l'usage : quatre copies de
+// conflit pour un seul vrai conflit.
+//
+// L'éditeur enregistre en quittant l'écran, sans regarder si le texte a bougé.
+// Consulter une note suffisait donc à la marquer sale, et une note sale n'est
+// pas rafraîchie à l'ouverture — son ETag vieillissait précisément pendant la
+// fenêtre où il ne devait pas. La première modification faite depuis le
+// navigateur devenait un conflit, avec sa copie, alors que le téléphone
+// n'avait rien à dire. Autant de copies que de notes simplement consultées.
+func TestConsulterUneNoteNeLaRendPasConflictuelle(t *testing.T) {
+	app, server, _ := prepare(t)
+
+	if _, err := app.CreateNoteJSON("", "partagee", "version initiale"); err != nil {
+		t.Fatalf("CreateNoteJSON: %v", err)
+	}
+	if _, err := app.SyncJSON(); err != nil {
+		t.Fatalf("SyncJSON: %v", err)
+	}
+
+	// L'utilisateur ouvre la note, la lit, et referme l'écran. Le retour
+	// arrière enregistre : c'est ce couple d'appels que fait l'éditeur.
+	contenu, err := app.ReadNote("partagee.md")
+	if err != nil {
+		t.Fatalf("ReadNote: %v", err)
+	}
+	if err := app.WriteNote("partagee.md", contenu); err != nil {
+		t.Fatalf("WriteNote: %v", err)
+	}
+	// Errorf et non Fatalf : si la garde saute, la suite du test montre ce que
+	// cette écriture fantôme provoque, ce qui est tout l'intérêt.
+	if n := app.PendingCount(); n != 0 {
+		t.Errorf("%d opération(s) en attente après une simple consultation", n)
+	}
+
+	// Quelqu'un modifie la note depuis l'interface web.
+	server.modifierDepuisLeNavigateur("Notes/partagee.md", "modifiée dans le navigateur")
+
+	var sync syncResult
+	raw, err := app.SyncJSON()
+	if err != nil {
+		t.Fatalf("SyncJSON: %v", err)
+	}
+	decodeJSON(t, raw, &sync)
+
+	if len(sync.Conflicts) != 0 {
+		t.Errorf("%d conflit(s) signalé(s), aucun attendu : la note n'a été que lue ; %+v",
+			len(sync.Conflicts), sync.Conflicts)
+	}
+
+	server.mu.Lock()
+	final := string(server.files["Notes/partagee.md"])
+	nb := 0
+	for p := range server.files {
+		if strings.Contains(p, "conflit") {
+			nb++
+		}
+	}
+	server.mu.Unlock()
+
+	if nb != 0 {
+		t.Errorf("%d doublon(s) « conflit » créé(s) pour une note seulement consultée", nb)
+	}
+	if final != "modifiée dans le navigateur" {
+		t.Errorf("contenu distant = %q, la version du navigateur aurait dû rester", final)
+	}
+}
+
 // Le vrai conflit doit rester détecté : si le téléphone a des modifications
 // non synchronisées et que la note change ailleurs, les deux versions comptent.
 func TestVraiConflitToujoursDetecte(t *testing.T) {

@@ -8,6 +8,7 @@
 package store
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -47,6 +48,17 @@ type Entry struct {
 
 	// Dirty indique une modification locale pas encore acceptée par le serveur.
 	Dirty bool `json:"dirty,omitempty"`
+
+	// BaseHash est l'empreinte du dernier contenu sur lequel le cache et le
+	// serveur étaient d'accord — la « base » au sens des trois versions d'un
+	// conflit. Dirty dit qu'une écriture reste à propager ; BaseHash dit si
+	// elle a quelque chose à propager, ce qui n'est pas la même question.
+	//
+	// Vide pour une entrée écrite par une version antérieure du format :
+	// l'index n'est pas invalidé pour autant — il porte la file d'attente, et
+	// la jeter perdrait des écritures hors connexion. Chaque lecture retombe
+	// donc sur l'ancien comportement quand l'empreinte manque.
+	BaseHash string `json:"baseHash,omitempty"`
 
 	Size     int64     `json:"size"`
 	LocalMod time.Time `json:"localMod"`
@@ -136,6 +148,15 @@ func cacheName(notePath string) string {
 	return hex.EncodeToString(sum[:16]) + ".md"
 }
 
+// contentHash est l'empreinte d'un contenu, telle qu'elle est retenue dans
+// Entry.BaseHash. Empreinte entière, contrairement à cacheName : ici une
+// collision ferait taire un vrai conflit, là elle ne ferait que confondre deux
+// fichiers de cache.
+func contentHash(content []byte) string {
+	sum := sha256.Sum256(content)
+	return hex.EncodeToString(sum[:])
+}
+
 // save écrit l'index sur disque. L'appelant doit détenir le verrou.
 //
 // L'écriture passe par un fichier temporaire renommé : une coupure de courant
@@ -194,10 +215,60 @@ func (s *Store) Entries() []Entry {
 //
 // L'écriture est immédiate côté cache : l'utilisateur voit son texte tout de
 // suite, indépendamment de l'état du réseau.
+//
+// Une écriture qui n'écrit rien est ignorée, et ce n'est pas une optimisation.
+// L'éditeur enregistre à la sortie de l'écran, y compris quand la note n'a été
+// qu'ouverte et refermée : sans ce filtre, lire une note suffit à la marquer
+// sale. Elle est alors renvoyée au serveur pour rien, et — bien pire — ReadNote
+// refuse de rafraîchir une note sale, donc son ETag vieillit précisément
+// pendant la fenêtre où il ne devrait pas. La moindre modification faite
+// ailleurs devient un conflit, avec sa copie, alors que le téléphone n'avait
+// rien à dire. C'est ce qui rendait les copies de conflit envahissantes.
+//
+// La garde vit ici plutôt que dans l'interface parce que c'est la seule couche
+// que tous les chemins d'écriture traversent, et la seule qui se teste.
 func (s *Store) Put(notePath string, content []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if s.unchangedLocked(notePath, content) {
+		return nil
+	}
 	return s.putLocked(notePath, content, true)
+}
+
+// unchangedLocked dit si réenregistrer ce contenu serait sans effet : le cache
+// le porte déjà, et l'état de la file correspond à celui de l'entrée.
+//
+// La seconde condition n'est pas de la superstition. Un renommage déplace
+// l'entrée sans déplacer l'écriture en attente, qui reste inscrite sous
+// l'ancien chemin : la note se retrouve sale sans rien en file. Repasser par
+// le chemin normal la remet en file, là où un raccourci l'y laisserait
+// indéfiniment.
+func (s *Store) unchangedLocked(notePath string, content []byte) bool {
+	entry, ok := s.entries[notePath]
+	if !ok || entry.Size != int64(len(content)) {
+		return false
+	}
+	if entry.Dirty && !s.hasQueuedWriteLocked(notePath) {
+		return false
+	}
+
+	cached, err := os.ReadFile(s.blobPath(entry.Cache))
+	if err != nil {
+		// Blob illisible : on réécrit plutôt que de conclure à l'identité.
+		return false
+	}
+	return bytes.Equal(cached, content)
+}
+
+func (s *Store) hasQueuedWriteLocked(notePath string) bool {
+	for _, op := range s.queue {
+		if op.Kind == OpWrite && op.Path == notePath {
+			return true
+		}
+	}
+	return false
 }
 
 // Store enregistre une version reçue du serveur : le cache est alors aligné,
@@ -214,6 +285,7 @@ func (s *Store) Accept(notePath string, content []byte, etag string) error {
 		Cache:    cacheName(notePath),
 		ETag:     etag,
 		Dirty:    false,
+		BaseHash: contentHash(content),
 		Size:     int64(len(content)),
 		LocalMod: time.Now().UTC(),
 	}
