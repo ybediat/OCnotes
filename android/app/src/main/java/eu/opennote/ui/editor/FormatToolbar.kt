@@ -13,12 +13,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import eu.opennote.R
 import eu.opennote.data.FormatAction
 
 /**
@@ -85,23 +87,89 @@ private data class Apparence(
     val decoration: TextDecoration? = null,
 )
 
+/**
+ * Décoration d'une action donnée.
+ *
+ * Composable pour lire des ressources, pas pour dessiner : le libellé d'un
+ * bouton est un texte comme un autre — « G » pour gras devient « B » pour
+ * bold. [Apparence] porte donc des chaînes déjà rédigées et non des
+ * identifiants de ressource : le repli affiche l'identifiant reçu du cœur Go,
+ * qui par définition n'en a pas.
+ */
+@Composable
 private fun apparenceDe(action: FormatAction): Apparence = when (action.id) {
-    "bold" -> Apparence("G", "Gras", graisse = FontWeight.Bold)
-    "italic" -> Apparence("I", "Italique", graisse = FontWeight.Light)
-    "strikethrough" -> Apparence("S", "Barré", decoration = TextDecoration.LineThrough)
-    "code" -> Apparence("< >", "Code en ligne", police = FontFamily.Monospace)
-    "link" -> Apparence("Lien", "Lien")
+    "bold" -> Apparence(
+        libelle = stringResource(R.string.format_gras_libelle),
+        description = stringResource(R.string.format_gras),
+        graisse = FontWeight.Bold,
+    )
 
-    "h1" -> Apparence("H1", "Titre de niveau 1", graisse = FontWeight.Bold)
-    "h2" -> Apparence("H2", "Titre de niveau 2", graisse = FontWeight.SemiBold)
-    "h3" -> Apparence("H3", "Titre de niveau 3", graisse = FontWeight.Medium)
+    "italic" -> Apparence(
+        libelle = stringResource(R.string.format_italique_libelle),
+        description = stringResource(R.string.format_italique),
+        graisse = FontWeight.Light,
+    )
 
-    "bullet" -> Apparence("•", "Liste à puces")
-    "numbered" -> Apparence("1.", "Liste numérotée")
-    "task" -> Apparence("[ ]", "Case à cocher", police = FontFamily.Monospace)
+    "strikethrough" -> Apparence(
+        libelle = stringResource(R.string.format_barre_libelle),
+        description = stringResource(R.string.format_barre),
+        decoration = TextDecoration.LineThrough,
+    )
 
-    "quote" -> Apparence(">", "Citation", police = FontFamily.Monospace)
-    "codeblock" -> Apparence("```", "Bloc de code", police = FontFamily.Monospace)
+    "code" -> Apparence(
+        libelle = stringResource(R.string.format_code_libelle),
+        description = stringResource(R.string.format_code),
+        police = FontFamily.Monospace,
+    )
+
+    // Seul bouton dont le libellé est le mot lui-même.
+    "link" -> stringResource(R.string.format_lien).let { Apparence(it, it) }
+
+    "h1" -> Apparence(
+        libelle = stringResource(R.string.format_titre1_libelle),
+        description = stringResource(R.string.format_titre1),
+        graisse = FontWeight.Bold,
+    )
+
+    "h2" -> Apparence(
+        libelle = stringResource(R.string.format_titre2_libelle),
+        description = stringResource(R.string.format_titre2),
+        graisse = FontWeight.SemiBold,
+    )
+
+    "h3" -> Apparence(
+        libelle = stringResource(R.string.format_titre3_libelle),
+        description = stringResource(R.string.format_titre3),
+        graisse = FontWeight.Medium,
+    )
+
+    "bullet" -> Apparence(
+        libelle = stringResource(R.string.format_puces_libelle),
+        description = stringResource(R.string.format_puces),
+    )
+
+    "numbered" -> Apparence(
+        libelle = stringResource(R.string.format_numerotee_libelle),
+        description = stringResource(R.string.format_numerotee),
+    )
+
+    "task" -> Apparence(
+        libelle = stringResource(R.string.format_case_libelle),
+        description = stringResource(R.string.format_case),
+        police = FontFamily.Monospace,
+    )
+
+    "quote" -> Apparence(
+        libelle = stringResource(R.string.format_citation_libelle),
+        description = stringResource(R.string.format_citation),
+        police = FontFamily.Monospace,
+    )
+
+    "codeblock" -> Apparence(
+        libelle = stringResource(R.string.format_bloc_code_libelle),
+        description = stringResource(R.string.format_bloc_code),
+        police = FontFamily.Monospace,
+    )
 
     // Action inconnue de cette version de l'interface : on l'affiche quand
     // même, avec son identifiant. Mieux vaut un bouton laid qu'une action

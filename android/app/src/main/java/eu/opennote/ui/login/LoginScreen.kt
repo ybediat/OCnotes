@@ -28,6 +28,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -35,6 +36,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.opennote.R
 import eu.opennote.appContainer
 import eu.opennote.ui.common.Texte
 import eu.opennote.ui.common.resoudre
@@ -80,9 +82,12 @@ fun LoginScreen(
     ) {
         Spacer(Modifier.height(24.dp))
 
-        Text("OpenNote", style = MaterialTheme.typography.headlineMedium)
         Text(
-            text = "Vos notes Markdown, sur votre serveur OpenCloud.",
+            text = stringResource(R.string.app_name),
+            style = MaterialTheme.typography.headlineMedium,
+        )
+        Text(
+            text = stringResource(R.string.login_accroche),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -92,8 +97,8 @@ fun LoginScreen(
         OutlinedTextField(
             value = etat.serverUrl,
             onValueChange = viewModel::onServerUrlChange,
-            label = { Text("Adresse du serveur") },
-            placeholder = { Text("https://cloud.exemple.fr") },
+            label = { Text(stringResource(R.string.login_serveur_label)) },
+            placeholder = { Text(stringResource(R.string.login_serveur_exemple)) },
             singleLine = true,
             enabled = !etat.enCours,
             keyboardOptions = KeyboardOptions(
@@ -106,7 +111,7 @@ fun LoginScreen(
         OutlinedTextField(
             value = etat.username,
             onValueChange = viewModel::onUsernameChange,
-            label = { Text("Nom d'utilisateur") },
+            label = { Text(stringResource(R.string.login_utilisateur_label)) },
             singleLine = true,
             enabled = !etat.enCours,
             // Une erreur d'authentification vise les identifiants : on marque
@@ -122,7 +127,7 @@ fun LoginScreen(
         OutlinedTextField(
             value = etat.appToken,
             onValueChange = viewModel::onAppTokenChange,
-            label = { Text("App Token") },
+            label = { Text(stringResource(R.string.login_token_label)) },
             singleLine = true,
             enabled = !etat.enCours,
             isError = etat.erreurEstAuth,
@@ -143,11 +148,13 @@ fun LoginScreen(
                         } else {
                             Icons.Default.Visibility
                         },
-                        contentDescription = if (tokenVisible) {
-                            "Masquer le token"
-                        } else {
-                            "Afficher le token"
-                        },
+                        contentDescription = stringResource(
+                            if (tokenVisible) {
+                                R.string.login_token_masquer
+                            } else {
+                                R.string.login_token_afficher
+                            },
+                        ),
                     )
                 }
             },
@@ -185,7 +192,15 @@ fun LoginScreen(
             } else {
                 // Un échec réseau ne demande aucune correction : le libellé
                 // invite à réessayer, pas à recommencer la saisie.
-                Text(if (etat.erreur != null && !etat.erreurEstAuth) "Réessayer" else "Se connecter")
+                Text(
+                    stringResource(
+                        if (etat.erreur != null && !etat.erreurEstAuth) {
+                            R.string.login_reessayer
+                        } else {
+                            R.string.login_connecter
+                        },
+                    ),
+                )
             }
         }
 
@@ -211,19 +226,16 @@ private fun AideAppToken(modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = "Pas encore d'App Token ?",
+                text = stringResource(R.string.login_aide_titre),
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(
-                text = "Dans OpenCloud : Réglages du compte → App Tokens → + New. " +
-                    "Donnez-lui un nom et une date d'expiration. " +
-                    "Le jeton n'est affiché qu'une seule fois, copiez-le tout de suite.",
+                text = stringResource(R.string.login_aide_chemin),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = "Ce n'est pas votre mot de passe : un App Token se révoque " +
-                    "sans changer vos identifiants.",
+                text = stringResource(R.string.login_aide_revocation),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

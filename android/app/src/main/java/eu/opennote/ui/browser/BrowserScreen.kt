@@ -1,5 +1,6 @@
 package eu.opennote.ui.browser
 
+import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -40,11 +41,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.opennote.R
 import eu.opennote.appContainer
 import eu.opennote.data.FolderEntryDto
 import eu.opennote.ui.common.Bandeau
@@ -53,6 +57,11 @@ import eu.opennote.ui.common.ChargementPleinEcran
 import eu.opennote.ui.common.EtatVide
 import eu.opennote.ui.common.PastilleEnAttente
 import eu.opennote.ui.common.resoudre
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
+import java.time.format.FormatStyle
 
 /** Boîte de dialogue ouverte, s'il y en a une. */
 private sealed interface Dialogue {
@@ -113,16 +122,27 @@ fun BrowserScreen(
                 navigationIcon = {
                     if (etat.peutRemonter) {
                         IconButton(onClick = viewModel::remonter) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Dossier parent")
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(
+                                    R.string.browser_dossier_parent,
+                                ),
+                            )
                         }
                     }
                 },
                 actions = {
                     IconButton(onClick = viewModel::rafraichir) {
-                        Icon(Icons.Default.Refresh, "Rafraîchir et synchroniser")
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = stringResource(R.string.browser_rafraichir),
+                        )
                     }
                     IconButton(onClick = onReglages) {
-                        Icon(Icons.Default.Settings, "Réglages")
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = stringResource(R.string.menu_reglages),
+                        )
                     }
                 },
             )
@@ -136,12 +156,17 @@ fun BrowserScreen(
                     onClick = { dialogue = Dialogue.NouveauDossier },
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
                 ) {
-                    Icon(Icons.Default.CreateNewFolder, "Nouveau dossier")
+                    Icon(
+                        imageVector = Icons.Default.CreateNewFolder,
+                        contentDescription = stringResource(
+                            R.string.browser_nouveau_dossier,
+                        ),
+                    )
                 }
                 ExtendedFloatingActionButton(
                     onClick = { dialogue = Dialogue.NouvelleNote },
                     icon = { Icon(Icons.Default.Add, null) },
-                    text = { Text("Nouvelle note") },
+                    text = { Text(stringResource(R.string.browser_nouvelle_note)) },
                 )
             }
         },
@@ -164,13 +189,14 @@ fun BrowserScreen(
                 // renvoie désormais comme tel même hors connexion : listing
                 // vide plutôt qu'erreur réseau.
                 etat.entrees.isEmpty() -> EtatVide(
-                    titre = "Ce dossier est vide",
-                    detail = if (etat.depuisCache) {
-                        "Rien en cache pour ce dossier. Vous pouvez quand même " +
-                            "créer une note : elle partira à la prochaine connexion."
-                    } else {
-                        "Créez une note avec le bouton en bas de l'écran."
-                    },
+                    titre = stringResource(R.string.browser_vide_titre),
+                    detail = stringResource(
+                        if (etat.depuisCache) {
+                            R.string.browser_vide_cache
+                        } else {
+                            R.string.browser_vide_detail
+                        },
+                    ),
                 )
 
                 else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -191,33 +217,32 @@ fun BrowserScreen(
         null -> Unit
 
         Dialogue.NouvelleNote -> SaisieDialog(
-            titre = "Nouvelle note",
-            label = "Titre",
+            titre = stringResource(R.string.browser_nouvelle_note),
+            label = stringResource(R.string.browser_note_label),
             valeurInitiale = "",
-            libelleValidation = "Créer",
-            aide = "Le nom de fichier est dérivé du titre ; un suffixe est ajouté " +
-                "si le nom est déjà pris.",
+            libelleValidation = stringResource(R.string.action_creer),
+            aide = stringResource(R.string.browser_note_aide),
             onValider = viewModel::creerNote,
             onFermer = { dialogue = null },
         )
 
         Dialogue.NouveauDossier -> SaisieDialog(
-            titre = "Nouveau dossier",
-            label = "Nom du dossier",
+            titre = stringResource(R.string.browser_nouveau_dossier),
+            label = stringResource(R.string.browser_dossier_label),
             valeurInitiale = "",
-            libelleValidation = "Créer",
+            libelleValidation = stringResource(R.string.action_creer),
             onValider = viewModel::creerDossier,
             onFermer = { dialogue = null },
         )
 
         is Dialogue.Renommer -> SaisieDialog(
-            titre = "Renommer",
-            label = "Nouveau nom",
+            titre = stringResource(R.string.action_renommer),
+            label = stringResource(R.string.browser_renommer_label),
             // `display`, pas `name` : la façade réajoute `.md` quand la cible
             // est une note, et « ma note » se relit mieux que « ma note.md »
             // dans un champ de saisie.
             valeurInitiale = d.entree.display,
-            libelleValidation = "Renommer",
+            libelleValidation = stringResource(R.string.action_renommer),
             onValider = { nom -> viewModel.renommer(d.entree, nom) },
             onFermer = { dialogue = null },
         )
@@ -261,7 +286,13 @@ private fun LigneEntree(
                 } else {
                     Icons.Default.Description
                 },
-                contentDescription = if (entree.isDir) "Dossier" else "Note",
+                contentDescription = stringResource(
+                    if (entree.isDir) {
+                        R.string.browser_type_dossier
+                    } else {
+                        R.string.browser_type_note
+                    },
+                ),
                 tint = MaterialTheme.colorScheme.primary,
             )
         },
@@ -274,19 +305,25 @@ private fun LigneEntree(
                 if (entree.pending) PastilleEnAttente()
 
                 IconButton(onClick = { menuOuvert = true }) {
-                    Icon(Icons.Default.MoreVert, "Actions sur « ${entree.display} »")
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = stringResource(
+                            R.string.browser_actions,
+                            entree.display,
+                        ),
+                    )
                 }
 
                 DropdownMenu(expanded = menuOuvert, onDismissRequest = { menuOuvert = false }) {
                     DropdownMenuItem(
-                        text = { Text("Renommer") },
+                        text = { Text(stringResource(R.string.action_renommer)) },
                         onClick = {
                             menuOuvert = false
                             onRenommer()
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Supprimer") },
+                        text = { Text(stringResource(R.string.action_supprimer)) },
                         onClick = {
                             menuOuvert = false
                             onSupprimer()
@@ -300,20 +337,46 @@ private fun LigneEntree(
 }
 
 /**
- * Sous-titre d'une ligne.
+ * Sous-titre d'une ligne : date, taille, état d'envoi.
  *
  * Un dossier n'en a pas : `size` et `modTime` sont vides pour lui côté façade,
  * afficher « 0 o » serait une invention.
+ *
+ * La date et la taille sont mises en forme par la plateforme et non à la
+ * main : elle seule connaît l'ordre des composantes d'une date et les unités
+ * de chaque langue.
  */
+@Composable
 private fun sousTitre(entree: FolderEntryDto): String? {
     if (entree.isDir) return null
 
-    val taille = when {
-        entree.size < 1024 -> "${entree.size} o"
-        else -> "${entree.size / 1024} Kio"
-    }
-    val date = entree.modTime.take(10).takeIf { it.length == 10 }
-    val etat = if (entree.pending) "en attente d'envoi" else null
+    val taille = Formatter.formatShortFileSize(LocalContext.current, entree.size)
+    val etat = if (entree.pending) stringResource(R.string.browser_en_attente) else null
 
-    return listOfNotNull(date, taille, etat).joinToString(" · ")
+    return listOfNotNull(dateLocale(entree.modTime), taille, etat)
+        .joinToString(stringResource(R.string.browser_soustitre_separateur))
+}
+
+/**
+ * Date de modification, dans le fuseau et la langue de l'appareil.
+ *
+ * `modTime` est en RFC 3339 UTC. La première version le tronquait à dix
+ * caractères, ce qui affichait la date **UTC** : celle du lendemain pour une
+ * note enregistrée en soirée à Paris.
+ *
+ * La locale vient de la composition et non de `Locale.getDefault()`, pour la
+ * même raison que `Texte` existe : un changement de langue doit redessiner la
+ * liste. Une date vide ou illisible disparaît sans un mot — dans une liste,
+ * le reste du sous-titre vaut mieux qu'un message d'erreur.
+ */
+@Composable
+private fun dateLocale(modTime: String): String? {
+    val locale = LocalConfiguration.current.locales[0]
+    val format = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)
+
+    return try {
+        Instant.parse(modTime).atZone(ZoneId.systemDefault()).format(format)
+    } catch (_: DateTimeParseException) {
+        null
+    }
 }

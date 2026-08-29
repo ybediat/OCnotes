@@ -13,8 +13,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
+import eu.opennote.R
 
 /**
  * Boîte de saisie d'une ligne : création de note, de dossier, renommage.
@@ -71,7 +73,7 @@ fun SaisieDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onFermer) { Text("Annuler") }
+            TextButton(onClick = onFermer) { Text(stringResource(R.string.action_annuler)) }
         },
     )
 }
@@ -91,15 +93,16 @@ fun SuppressionDialog(
 ) {
     AlertDialog(
         onDismissRequest = onFermer,
-        title = { Text("Supprimer « $nomAffiche » ?") },
+        title = { Text(stringResource(R.string.dialogue_supprimer_titre, nomAffiche)) },
         text = {
             Text(
-                if (estDossier) {
-                    "Le dossier et toutes les notes qu'il contient seront supprimés " +
-                        "du serveur. Cette action est définitive."
-                } else {
-                    "La note sera supprimée du serveur. Cette action est définitive."
-                },
+                stringResource(
+                    if (estDossier) {
+                        R.string.dialogue_supprimer_dossier
+                    } else {
+                        R.string.dialogue_supprimer_note
+                    },
+                ),
             )
         },
         confirmButton = {
@@ -109,11 +112,14 @@ fun SuppressionDialog(
                     onFermer()
                 },
             ) {
-                Text("Supprimer", color = MaterialTheme.colorScheme.error)
+                Text(
+                    text = stringResource(R.string.action_supprimer),
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
         },
         dismissButton = {
-            TextButton(onClick = onFermer) { Text("Annuler") }
+            TextButton(onClick = onFermer) { Text(stringResource(R.string.action_annuler)) }
         },
     )
 }

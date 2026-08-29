@@ -194,20 +194,14 @@ class ChainesEnDurTest {
          * Écrans dont les textes n'ont pas encore été sortis vers
          * `strings.xml`.
          *
-         * Cette liste doit se vider. Ce n'est pas un endroit où ranger un
-         * écran neuf : y ajouter une ligne, c'est éteindre le garde-fou là où
-         * il servirait le plus.
+         * **Elle est vide, et doit le rester.** Ce n'est pas un endroit où
+         * ranger un écran neuf : y ajouter une ligne, c'est éteindre le
+         * garde-fou là où il servirait le plus. Elle survit à la migration
+         * parce que le jour où un écran arrivera avec ses phrases en dur, la
+         * tentation sera de l'y inscrire — et le second test ci-dessus,
+         * `listeDeMigrationAJour`, refusera qu'elle serve de tiroir.
          */
-        val ECRANS_A_MIGRER = setOf(
-            "ui/browser/BrowserScreen.kt",
-            "ui/browser/Dialogs.kt",
-            "ui/common/Components.kt",
-            "ui/editor/EditorScreen.kt",
-            "ui/editor/FormatToolbar.kt",
-            "ui/login/LoginScreen.kt",
-            "ui/settings/SettingsScreen.kt",
-            "ui/workspace/WorkspaceScreen.kt",
-        )
+        val ECRANS_A_MIGRER = emptySet<String>()
 
         /**
          * Fichiers dont les chaînes ne s'affichent jamais : journalisation.

@@ -24,8 +24,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import eu.opennote.R
 
 /** Indicateur d'attente centré, pour un écran encore vide. */
 @Composable
@@ -74,8 +76,7 @@ fun Bandeau(
 @Composable
 fun BandeauCache(modifier: Modifier = Modifier) {
     Bandeau(
-        texte = "Serveur injoignable — vue reconstituée depuis le cache. " +
-            "Elle peut être incomplète.",
+        texte = stringResource(R.string.commun_bandeau_cache),
         icone = Icons.Default.CloudOff,
         couleurFond = MaterialTheme.colorScheme.tertiaryContainer,
         couleurTexte = MaterialTheme.colorScheme.onTertiaryContainer,

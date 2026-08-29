@@ -100,7 +100,7 @@ fun EditorScreen(
                         // qui se passe sans laisser croire à une perte.
                         if (etat.modifie) {
                             Text(
-                                text = "Brouillon local, envoi programmé",
+                                text = stringResource(R.string.editeur_brouillon),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -109,7 +109,10 @@ fun EditorScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = quitter) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_retour),
+                        )
                     }
                 },
                 actions = {
@@ -166,7 +169,9 @@ fun EditorScreen(
                 value = etat.valeur,
                 onValueChange = viewModel::onValeurChangee,
                 textStyle = StyleEditeur,
-                placeholder = { Text("Écrivez ici…", style = StyleEditeur) },
+                placeholder = {
+                    Text(stringResource(R.string.editeur_saisie_vide), style = StyleEditeur)
+                },
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,

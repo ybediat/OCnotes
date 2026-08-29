@@ -15,6 +15,7 @@
 /android/app/build/
 /android/local.properties
 /android/.idea/
+/android/.kotlin/
 *.apk
 *.aab
 *.keystore

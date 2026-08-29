@@ -32,9 +32,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.opennote.R
 import eu.opennote.appContainer
 import eu.opennote.ui.common.Bandeau
 import eu.opennote.ui.common.resoudre
@@ -60,10 +63,13 @@ fun SettingsScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text("Réglages") },
+                title = { Text(stringResource(R.string.menu_reglages)) },
                 navigationIcon = {
                     IconButton(onClick = onRetour) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_retour),
+                        )
                     }
                 },
             )
@@ -77,17 +83,28 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Compte", style = MaterialTheme.typography.titleSmall)
-            Ligne("Serveur", etat.etat.serverUrl.ifBlank { "—" })
-            Ligne("Utilisateur", etat.etat.username.ifBlank { "—" })
+            // Une valeur absente s'affiche en tiret plutôt qu'en vide :
+            // la ligne garde sa place, et l'absence se voit.
+            val absent = stringResource(R.string.commun_valeur_vide)
+
+            Text(
+                text = stringResource(R.string.reglages_compte),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Ligne(
+                libelle = stringResource(R.string.reglages_serveur),
+                valeur = etat.etat.serverUrl.ifBlank { absent },
+            )
+            Ligne(
+                libelle = stringResource(R.string.reglages_utilisateur),
+                valeur = etat.etat.username.ifBlank { absent },
+            )
 
             // La session a pu être remontée hors connexion : l'application est
             // utilisable, mais le serveur n'a encore rien confirmé.
             if (!etat.tokenValide) {
                 Text(
-                    text = "Le serveur n'a pas encore confirmé votre App Token depuis " +
-                        "le lancement. Vos notes restent consultables et modifiables " +
-                        "en attendant.",
+                    text = stringResource(R.string.reglages_token_non_confirme),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -95,21 +112,37 @@ fun SettingsScreen(
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
-            Text("Espace de notes", style = MaterialTheme.typography.titleSmall)
-            Ligne("Espace", etat.etat.driveName.ifBlank { "—" })
-            Ligne("Dossier", etat.etat.root.ifBlank { "racine de l'espace" })
+            Text(
+                text = stringResource(R.string.reglages_espace_titre),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Ligne(
+                libelle = stringResource(R.string.reglages_espace),
+                valeur = etat.etat.driveName.ifBlank { absent },
+            )
+            Ligne(
+                libelle = stringResource(R.string.reglages_dossier),
+                valeur = etat.etat.root.ifBlank {
+                    stringResource(R.string.reglages_racine_espace)
+                },
+            )
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
-            Text("Synchronisation", style = MaterialTheme.typography.titleSmall)
+            Text(
+                text = stringResource(R.string.reglages_sync_titre),
+                style = MaterialTheme.typography.titleSmall,
+            )
             Ligne(
-                libelle = "Opérations en attente",
-                valeur = if (etat.enAttente == 0) "aucune" else etat.enAttente.toString(),
+                libelle = stringResource(R.string.reglages_en_attente),
+                valeur = if (etat.enAttente == 0) {
+                    stringResource(R.string.reglages_aucune)
+                } else {
+                    etat.enAttente.toString()
+                },
             )
             Text(
-                text = "Une passe automatique a lieu au retour dans l'application, " +
-                    "peu après chaque modification, et toutes les heures si le " +
-                    "réseau est disponible.",
+                text = stringResource(R.string.reglages_sync_explication),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -125,10 +158,10 @@ fun SettingsScreen(
                         modifier = Modifier.padding(end = 8.dp),
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
-                    Text("Synchronisation…")
+                    Text(stringResource(R.string.reglages_sync_en_cours))
                 } else {
                     Icon(Icons.Default.Sync, null, Modifier.padding(end = 8.dp))
-                    Text("Synchroniser maintenant")
+                    Text(stringResource(R.string.reglages_sync_maintenant))
                 }
             }
 
@@ -158,12 +191,14 @@ fun SettingsScreen(
                 onClick = { confirmation = true },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Se déconnecter", color = MaterialTheme.colorScheme.error)
+                Text(
+                    text = stringResource(R.string.reglages_deconnexion),
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
 
             Text(
-                text = "La déconnexion efface le token, la configuration et le cache " +
-                    "local de cet appareil. Les notes restent sur le serveur.",
+                text = stringResource(R.string.reglages_deconnexion_explication),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -173,16 +208,17 @@ fun SettingsScreen(
     if (confirmation) {
         AlertDialog(
             onDismissRequest = { confirmation = false },
-            title = { Text("Se déconnecter ?") },
+            title = { Text(stringResource(R.string.reglages_deconnexion_titre)) },
             text = {
                 Text(
                     if (etat.enAttente > 0) {
-                        "Attention : ${etat.enAttente} modification(s) locale(s) n'ont " +
-                            "pas encore été envoyées au serveur. La déconnexion efface " +
-                            "le cache et elles seront perdues. Synchronisez d'abord."
+                        pluralStringResource(
+                            R.plurals.reglages_deconnexion_attente,
+                            etat.enAttente,
+                            etat.enAttente,
+                        )
                     } else {
-                        "Le token, la configuration et le cache local seront effacés. " +
-                            "Vos notes restent sur le serveur."
+                        stringResource(R.string.reglages_deconnexion_confirmation)
                     },
                 )
             },
@@ -193,11 +229,16 @@ fun SettingsScreen(
                         viewModel.deconnecter()
                     },
                 ) {
-                    Text("Se déconnecter", color = MaterialTheme.colorScheme.error)
+                    Text(
+                        text = stringResource(R.string.reglages_deconnexion),
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmation = false }) { Text("Annuler") }
+                TextButton(onClick = { confirmation = false }) {
+                    Text(stringResource(R.string.action_annuler))
+                }
             },
         )
     }
@@ -208,23 +249,25 @@ fun SettingsScreen(
     if (etat.conflits.isNotEmpty()) {
         AlertDialog(
             onDismissRequest = viewModel::conflitsConsommes,
-            title = { Text("Modifiée sur deux appareils") },
+            title = { Text(stringResource(R.string.reglages_conflits_titre)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "La version du serveur était plus récente. Votre version a été " +
-                            "conservée à côté, sous un nouveau nom — rien n'est perdu :",
-                    )
+                    Text(stringResource(R.string.reglages_conflits_explication))
                     etat.conflits.forEach { conflit ->
                         Text(
-                            text = "• ${conflit.copyPath.substringAfterLast('/')}",
+                            text = stringResource(
+                                R.string.reglages_conflits_ligne,
+                                conflit.copyPath.substringAfterLast('/'),
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = viewModel::conflitsConsommes) { Text("Compris") }
+                TextButton(onClick = viewModel::conflitsConsommes) {
+                    Text(stringResource(R.string.reglages_compris))
+                }
             },
         )
     }

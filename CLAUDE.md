@@ -124,6 +124,13 @@ l'itération sur un écran.
 racine du dépôt. `ChainesEnDurTest` remonte l'arborescence plutôt que de le
 supposer.
 
+**`./gradlew lintDebug` échoue déjà**, sur un `MissingPermission` dans
+`SyncNotifier.kt` : la notification est postée sans vérifier
+`POST_NOTIFICATIONS`. Défaut réel et antérieur — ne pas croire l'avoir causé.
+Lint signale aussi deux `Typos` sur le mot « exemple », qu'il lit comme un
+anglais mal orthographié : la règle ne connaît que l'anglais, et le dépôt
+écrit ses ressources en français.
+
 ## Architecture
 
 ```
@@ -146,6 +153,8 @@ mémoire.
 `docs/FACADE.md` est **le contrat gelé** entre Go et Kotlin : signatures,
 formats JSON, codes d'erreur. Le modifier, c'est casser l'UI.
 `docs/ARCHITECTURE.md` porte les décisions et les pièges confirmés.
+`docs/CHANTIER-DOCUMENTS.md` est un ordre de travail autonome : lecture seule
+des `.docx` et `.odt`, à prendre à froid.
 
 ## Pièges du serveur OpenCloud
 
@@ -377,16 +386,44 @@ Un paramètre qui est une **constante du cœur** ne se recopie pas dans
 saisi, l'URL tapée — n'a pas à traverser la frontière du tout. C'est ce qui a
 permis de n'encoder **aucun** argument dans les messages d'erreur.
 
-### Migrer un des écrans restants
+### L'extraction est faite
 
-Sortir les chaînes vers `strings.xml`, les lire avec `stringResource`, puis
-**retirer le fichier de `ECRANS_A_MIGRER`** dans `ChainesEnDurTest`. Le test
-vérifie les deux sens : il refuse un littéral hors liste, et refuse aussi qu'un
-fichier migré y reste — sinon le garde-fou deviendrait aveugle sur ce fichier
-sans le dire.
+`ECRANS_A_MIGRER` est **vide** : les huit écrans sont passés à
+`stringResource`, et `strings.xml` porte environ 150 clés. La liste vide reste
+dans `ChainesEnDurTest` plutôt que d'être supprimée — le jour où un écran
+arrivera avec ses phrases en dur, la tentation sera de l'y inscrire, et
+`listeDeMigrationAJour` refuse déjà qu'elle serve de tiroir.
 
-Dans `strings.xml`, une apostrophe s'écrit `\'` : sans
-l'échappement, la compilation des ressources échoue.
+Trois choix pris pendant l'extraction, qui se défont facilement sans le
+vouloir :
+
+- **Un libellé partagé va dans `action_*`.** « Annuler », « Supprimer »,
+  « Renommer », « Créer », « Retour » désignent le même geste sur plusieurs
+  écrans. Une clé par écran les ferait diverger à la première traduction, et
+  rien ne le signalerait.
+- **Un symbole n'est pas un texte.** Les faces de bouton de la barre de mise
+  en forme sont des ressources — « G » pour gras devient « B » pour bold —
+  mais « • », « [ ] » ou « \`\`\` » portent `translatable="false"`. Le libellé
+  d'une action et sa description TalkBack sont deux clés distinctes : l'une
+  tient sur un bouton, l'autre se lit à voix haute.
+- **La date et la taille viennent de la plateforme**, pas de `strings.xml` :
+  `DateTimeFormatter.ofLocalizedDate` et `Formatter.formatShortFileSize`
+  connaissent l'ordre des composantes et les unités de chaque langue. Seul
+  leur assemblage — le séparateur — est une ressource. La locale se lit dans
+  la composition (`LocalConfiguration.current.locales[0]`), jamais par
+  `Locale.getDefault()` : c'est la raison d'être de `Texte`, elle vaut aussi
+  pour un format.
+
+Une fonction non composable qui rédige du texte doit devenir `@Composable`
+pour lire ses ressources — `sousTitre`, `explication`, `apparenceDe` l'ont
+toutes été. Elles rendent une `String` déjà rédigée et non un identifiant de
+ressource, parce que chacune a un repli qui n'en a pas : le type d'espace
+inconnu, l'identifiant d'action que le cœur Go vient d'ajouter.
+
+Dans `strings.xml`, une apostrophe s'écrit `\'`. Sans l'échappement, aapt
+échoue sur **« Invalid unicode escape sequence »** — un message qui ne désigne
+pas sa cause. Attention aux outils qui mangent les antislashs en chemin (un
+heredoc shell, par exemple) : ils produisent exactement cette panne.
 
 ### Ce qu'il ne faut pas faire
 
@@ -427,11 +464,13 @@ tâche lint. La traduction ne bloquera donc jamais le travail au quotidien.
 
 ### Ce qui reste
 
-**Les ~81 chaînes des huit écrans de `ECRANS_A_MIGRER`.** Mécanique, sans
-risque, faisable un écran à la fois.
+**La traduction elle-même**, et rien d'autre côté code : un
+`values-<langue>/` à remplir, une ligne dans `locales_config.xml`. Les deux
+gestes de la section « Décisions prises » ci-dessous.
 
-**Les dates.** `BrowserScreen` tronque l'ISO à 10 caractères. `java.time` est
-disponible dès l'API 26 : `DateTimeFormatter.ofLocalizedDate`.
+**Les quatre chaînes de `SyncWorker`** restent en dur, volontairement : elles
+partent dans `Log.w`, pas à l'écran. `HORS_INTERFACE` les couvre, et cette
+liste-là n'a pas vocation à se vider.
 
 ### Décisions prises
 
@@ -468,9 +507,9 @@ protège une règle de projet, il ne dit rien de ce que l'application fait.
 
 Distinguer « écrit », « compile » et « testé » dans tout rapport d'avancement.
 
-Restent ouverts, par ordre de priorité décidé : **l'extraction des chaînes
-d'écran** (section ci-dessus, mécanique désormais), OIDC en alternative à
-l'App Token, et la signature de l'APK pour distribution.
+Restent ouverts, par ordre de priorité décidé : la **traduction** proprement
+dite — l'extraction, elle, est faite —, OIDC en alternative à l'App Token, et
+la signature de l'APK pour distribution.
 
 **Le défilement d'une très grande note est poussif dans l'éditeur** — constaté
 sur un fichier de 285 ko. Ce n'est pas le piège du mot sans espace, qui est
@@ -481,9 +520,9 @@ local, seulement des contournements. Peu urgent : une note de cette taille est
 une anomalie, et elle reste lisible.
 
 **La traduction vient après l'extraction, pas avant** — décision prise, motifs
-dans la section Localisation. Elle n'est pas un chantier d'architecture : à ce
-stade il ne restera qu'à remplir un `values-<langue>/` et à déclarer la langue
-dans `locales_config.xml`.
+dans la section Localisation. L'extraction étant faite, il ne reste qu'à
+remplir un `values-<langue>/` et à déclarer la langue dans
+`locales_config.xml`. Ce n'est pas un chantier d'architecture.
 
 Le chemin de module est `opennote` alors que le dépôt existe
 (`github.com/ybediat/OpenNote`) — renommage mécanique jamais fait.

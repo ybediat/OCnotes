@@ -29,9 +29,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.opennote.R
 import eu.opennote.appContainer
 import eu.opennote.data.DriveDto
 import eu.opennote.data.DriveType
@@ -58,7 +60,7 @@ fun WorkspaceScreen(
 
     Scaffold(
         modifier = modifier,
-        topBar = { TopAppBar(title = { Text("Où ranger vos notes ?") }) },
+        topBar = { TopAppBar(title = { Text(stringResource(R.string.espace_titre)) }) },
     ) { paddings ->
         if (etat.chargement) {
             ChargementPleinEcran(Modifier.padding(paddings))
@@ -72,7 +74,7 @@ fun WorkspaceScreen(
         ) {
             item {
                 Text(
-                    text = "Espace de stockage",
+                    text = stringResource(R.string.espace_stockage),
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
                 )
@@ -93,21 +95,22 @@ fun WorkspaceScreen(
                     modifier = Modifier.padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text("Dossier de notes", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        text = stringResource(R.string.espace_dossier_titre),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
 
                     OutlinedTextField(
                         value = etat.racine,
                         onValueChange = viewModel::onRacineChange,
-                        label = { Text("Chemin dans l'espace") },
+                        label = { Text(stringResource(R.string.espace_chemin_label)) },
                         singleLine = true,
                         enabled = !etat.validation,
                         modifier = Modifier.fillMaxWidth(),
                     )
 
                     Text(
-                        text = "Le dossier est créé s'il n'existe pas. Laissez le champ " +
-                            "vide pour utiliser la racine de l'espace, par exemple si vos " +
-                            "notes y sont déjà.",
+                        text = stringResource(R.string.espace_chemin_aide),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -127,7 +130,15 @@ fun WorkspaceScreen(
                             .fillMaxWidth()
                             .padding(vertical = 16.dp),
                     ) {
-                        Text(if (etat.validation) "Préparation…" else "Continuer")
+                        Text(
+                            stringResource(
+                                if (etat.validation) {
+                                    R.string.espace_preparation
+                                } else {
+                                    R.string.espace_continuer
+                                },
+                            ),
+                        )
                     }
                 }
             }
@@ -187,17 +198,22 @@ private fun LigneEspace(
     )
 }
 
-/** Pourquoi cet espace convient — ou non. */
+/**
+ * Pourquoi cet espace convient — ou non.
+ *
+ * Composable pour lire ses ressources. Le repli affiche le type brut reçu
+ * de la façade : un type que cette version ne connaît pas n'a pas de
+ * formulation, et le taire laisserait une ligne sans explication.
+ */
+@Composable
 private fun explication(drive: DriveDto): String = when {
     !drive.usable && drive.type == DriveType.VIRTUAL ->
-        "Agrégat des dossiers partagés avec vous, pas un espace de stockage : " +
-            "on ne peut pas y créer de dossier de notes."
+        stringResource(R.string.espace_virtuel)
 
-    !drive.usable ->
-        "Cet espace ne peut pas héberger de notes."
+    !drive.usable -> stringResource(R.string.espace_inutilisable)
 
-    drive.type == DriveType.PERSONAL -> "Votre espace personnel"
-    drive.type == DriveType.PROJECT -> "Espace de projet partagé"
-    drive.type == DriveType.MOUNTPOINT -> "Dossier monté"
+    drive.type == DriveType.PERSONAL -> stringResource(R.string.espace_personnel)
+    drive.type == DriveType.PROJECT -> stringResource(R.string.espace_projet)
+    drive.type == DriveType.MOUNTPOINT -> stringResource(R.string.espace_monte)
     else -> drive.type
 }
