@@ -52,6 +52,7 @@ import eu.opennote.ui.common.BandeauCache
 import eu.opennote.ui.common.ChargementPleinEcran
 import eu.opennote.ui.common.EtatVide
 import eu.opennote.ui.common.PastilleEnAttente
+import eu.opennote.ui.common.resoudre
 
 /** Boîte de dialogue ouverte, s'il y en a une. */
 private sealed interface Dialogue {
@@ -77,6 +78,10 @@ fun BrowserScreen(
 
     var dialogue by remember { mutableStateOf<Dialogue?>(null) }
 
+    // Rédigé ici, dans la composition : le `LaunchedEffect` ci-dessous est une
+    // coroutine, et une coroutine ne peut pas lire de ressource.
+    val messageEvenement = (evenement as? BrowserEvent.Message)?.texte?.resoudre()
+
     LaunchedEffect(evenement) {
         when (val e = evenement) {
             is BrowserEvent.OuvrirNote -> {
@@ -86,7 +91,7 @@ fun BrowserScreen(
 
             is BrowserEvent.Message -> {
                 viewModel.evenementConsomme()
-                snackbar.showSnackbar(e.texte)
+                messageEvenement?.let { snackbar.showSnackbar(it) }
             }
 
             null -> Unit
@@ -146,7 +151,7 @@ fun BrowserScreen(
 
             etat.erreur?.let { message ->
                 Bandeau(
-                    texte = message,
+                    texte = message.resoudre(),
                     couleurFond = MaterialTheme.colorScheme.errorContainer,
                     couleurTexte = MaterialTheme.colorScheme.onErrorContainer,
                 )

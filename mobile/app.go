@@ -941,6 +941,10 @@ func (a *App) FormatActionsJSON() (string, error) {
 // ce qui permet à Kotlin de réagir sans dépendre de la formulation française
 // du message. Renvoie une chaîne vide si aucune catégorie n'est reconnue.
 func ErrorCode(message string) string {
+	// Les codes de transport passent d'abord, et dans cet ordre : une erreur
+	// locale peut envelopper une erreur réseau (« store: … opencloud:
+	// [NOTFOUND] … »), et c'est la cause profonde qui décide de la réaction
+	// d'Android — réessayer, redemander le token, ou renoncer.
 	for _, code := range []string{
 		opencloud.CodeUnauthorized,
 		opencloud.CodeConflict,
@@ -952,8 +956,44 @@ func ErrorCode(message string) string {
 			return code
 		}
 	}
+	return codeLocal(message)
+}
+
+// codeLocal lit la première étiquette de la forme [NOM_EN_MAJUSCULES].
+//
+// Reconnaître la forme plutôt qu'une liste fermée évite d'avoir à toucher la
+// façade — donc à régénérer le .aar — chaque fois qu'une couche du dessous
+// étiquette une nouvelle règle. La façade transmet, Kotlin décide quoi en
+// dire ; un code qu'il ne connaît pas encore le fait retomber sur le message
+// brut, ce qui dégrade en français plutôt qu'en écran vide.
+func codeLocal(message string) string {
+	for i := 0; i < len(message); i++ {
+		if message[i] != '[' {
+			continue
+		}
+		j := i + 1
+		for j < len(message) && (message[j] >= 'A' && message[j] <= 'Z' ||
+			message[j] >= '0' && message[j] <= '9' || message[j] == '_') {
+			j++
+		}
+		if j > i+1 && j < len(message) && message[j] == ']' {
+			return message[i+1 : j]
+		}
+	}
 	return ""
 }
+
+// MaxNameBytes et ForbiddenNameChars exposent les bornes du nommage.
+//
+// Sans elles, l'interface devrait recopier « 200 » et la liste de caractères
+// dans sa propre formulation de la règle : deux sources de vérité pour une
+// contrainte qui vit dans internal/notes. C'est ce qui permet à Android de
+// rédiger le message d'erreur dans la langue de l'appareil sans rien
+// dupliquer.
+func MaxNameBytes() int { return notes.MaxNameBytes() }
+
+// ForbiddenNameChars renvoie les caractères refusés à la création d'un nom.
+func ForbiddenNameChars() string { return notes.ForbiddenNameChars() }
 
 // IsAuthError indique un token invalide ou expiré : Android doit redemander la
 // saisie plutôt que de réessayer.

@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.opennote.appContainer
 import eu.opennote.ui.common.ChargementPleinEcran
+import eu.opennote.ui.common.resoudre
 import eu.opennote.ui.theme.StyleEditeur
 
 /**
@@ -55,8 +56,12 @@ fun EditorScreen(
     val etat by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
 
-    LaunchedEffect(etat.erreur) {
-        etat.erreur?.let {
+    // Rédigé hors du `LaunchedEffect` : une coroutine n'est pas un contexte
+    // de composition, elle ne peut pas lire de ressource.
+    val messageErreur = etat.erreur?.resoudre()
+
+    LaunchedEffect(messageErreur) {
+        messageErreur?.let {
             snackbar.showSnackbar(it)
             viewModel.erreurConsommee()
         }

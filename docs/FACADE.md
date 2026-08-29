@@ -104,8 +104,10 @@ sur l'instance : `app.stateJSON()`. La première lettre passe en minuscule.
 | `PendingCount() int` | opérations en attente |
 | `ApplyFormatJSON(requestJSON string) (string, error)` | mise en forme Markdown |
 | `FormatActionsJSON() (string, error)` | liste des actions de la barre d'outils |
-| `ErrorCode(message string) string` | catégorie d'une erreur |
+| `ErrorCode(message string) string` | code d'une erreur |
 | `IsAuthError` / `IsConflictError` / `IsNotFoundError` `(message string) bool` | tests de catégorie |
+| `MaxNameBytes() int` | longueur maximale d'un nom, en octets |
+| `ForbiddenNameChars() string` | caractères refusés à la création d'un nom |
 
 Tous les chemins sont **relatifs au dossier de notes**, sans slash initial.
 Une chaîne vide désigne la racine.
@@ -286,9 +288,55 @@ en français** :
 | `AUTH` | `IsAuthError` | token invalide ou expiré — redemander la saisie, ne pas réessayer |
 | `CONFLICT` | `IsConflictError` | version distante plus récente |
 | `NOTFOUND` | `IsNotFoundError` | note ou dossier absent |
+| `OFFLINE` | `IsOfflineError` | serveur injoignable — réessayer plus tard a du sens |
 | `HTTP` | — | autre erreur serveur |
 
-Un message sans crochets est une erreur locale (validation de nom, cache).
+### Codes locaux
+
+Les règles du cœur portent elles aussi une étiquette, pour que l'interface les
+formule **dans la langue de l'appareil** au lieu d'afficher le français du Go.
+La phrase française reste derrière le code : elle sert la CLI desktop, les
+journaux, et le repli d'Android.
+
+| Code | Origine | Ce que l'interface doit dire |
+|---|---|---|
+| `NAME_EMPTY` | `notes` | le nom est vide |
+| `NAME_RESERVED` | `notes` | `.` ou `..` |
+| `NAME_TOO_LONG` | `notes` | dépasse `MaxNameBytes()` octets |
+| `NAME_FORBIDDEN_CHARS` | `notes` | contient un `ForbiddenNameChars()` |
+| `NAME_CONTROL_CHAR` | `notes` | contient un caractère de contrôle |
+| `NAME_SPACE_EDGE` | `notes` | commence ou finit par une espace |
+| `NAME_TRAILING_DOT` | `notes` | finit par un point |
+| `NAME_LEADING_DOT` | `notes` | commence par un point |
+| `NAME_RESERVED_DEVICE` | `notes` | nom réservé par Windows (`CON`, `LPT1`…) |
+| `NAME_NO_SLOT` | `notes` | aucun nom libre trouvé |
+| `ROOT_IMMUTABLE` | `notes` | le dossier de notes ne se renomme pas |
+| `MOVE_INTO_SELF` | `notes` | déplacement d'un dossier dans lui-même |
+| `PATH_EMPTY` | `notes` | chemin vide |
+| `STORAGE_IO` | `store`, `config` | panne du stockage local |
+| `SERVER_URL_MISSING` | `config` | adresse de serveur absente |
+| `SERVER_URL_INVALID` | `config` | adresse de serveur mal formée |
+| `USERNAME_MISSING` | `config` | nom d'utilisateur absent |
+
+**Ne pas recopier `MaxNameBytes()` ni `ForbiddenNameChars()`** dans un texte
+d'interface : ces deux accesseurs existent pour que la borne n'ait qu'une seule
+source de vérité, dans `internal/notes`.
+
+### Deux règles de lecture
+
+**Le transport gagne sur le local.** `ErrorCode` cherche d'abord les codes de
+transport, puis seulement le premier `[NOM_EN_MAJUSCULES]` venu. Une erreur du
+cache enveloppe couramment une erreur réseau — `store: [STORAGE_IO] … :
+opencloud: [NOTFOUND] …` — et c'est la cause profonde qui décide de la réaction.
+
+**Un code inconnu n'est pas une erreur.** Le repli est prévu : `ErrorCode`
+reconnaît la *forme* de l'étiquette, pas une liste fermée, donc une couche du
+dessous peut étiqueter une nouvelle règle sans que la façade soit régénérée.
+Côté Kotlin, un code sans formulation retombe sur le message brut — du français
+sur un téléphone anglophone, ce qui se voit et se répare, là où une chaîne vide
+ne se verrait pas.
+
+Un message sans crochets reste une erreur locale non étiquetée.
 
 ---
 

@@ -20,21 +20,27 @@ enum class ErrorCategory {
     /** Note ou dossier absent. */
     NOT_FOUND,
 
-    /** Autre erreur serveur, y compris une coupure réseau. */
+    /** Le serveur n'a pas pu être joint : la requête n'a jamais abouti. */
+    OFFLINE,
+
+    /** Autre erreur serveur. */
     HTTP,
 
-    /** Message sans étiquette : validation de nom, cache, état local. */
+    /** Erreur du cœur : validation de nom, cache, état local. */
     LOCAL,
 }
 
 /**
  * Erreur normalisée de la couche Go, telle que l'interface la manipule.
  *
- * [rawMessage] garde le message d'origine, utile en journalisation et dans un
- * éventuel écran de détail ; [category] pilote la réaction de l'interface.
+ * [rawMessage] garde le message d'origine, utile en journalisation et comme
+ * repli d'affichage ; [category] pilote la réaction de l'interface ; [code]
+ * porte l'étiquette exacte, plus fine que la catégorie, qui sert à choisir la
+ * formulation.
  */
 class OpenNoteException(
     val category: ErrorCategory,
+    val code: String,
     val rawMessage: String,
     cause: Throwable? = null,
 ) : Exception(rawMessage, cause) {
@@ -42,7 +48,8 @@ class OpenNoteException(
     val isAuth: Boolean get() = category == ErrorCategory.AUTH
 
     /** Vrai quand réessayer plus tard a une chance d'aboutir. */
-    val isRetryable: Boolean get() = category == ErrorCategory.HTTP
+    val isRetryable: Boolean
+        get() = category == ErrorCategory.HTTP || category == ErrorCategory.OFFLINE
 
     companion object {
         /**
@@ -54,56 +61,25 @@ class OpenNoteException(
         fun from(t: Throwable): OpenNoteException {
             if (t is OpenNoteException) return t
             val message = t.message.orEmpty()
-            val category = when {
-                Mobile.isAuthError(message) -> ErrorCategory.AUTH
-                Mobile.isConflictError(message) -> ErrorCategory.CONFLICT
-                Mobile.isNotFoundError(message) -> ErrorCategory.NOT_FOUND
-                Mobile.errorCode(message) == "HTTP" -> ErrorCategory.HTTP
-                else -> ErrorCategory.LOCAL
-            }
-            return OpenNoteException(category, message, t)
+            val code = Mobile.errorCode(message)
+            return OpenNoteException(categorieDuCode(code), code, message, t)
         }
     }
 }
 
 /**
- * Traduit un code de catégorie déjà extrait par la façade.
+ * Traduit un code d'étiquette en catégorie.
  *
  * Sert au champ `errorCode` de `SyncJSON`, où l'incident arrive dans une
- * réponse réussie plutôt que dans une exception : rien à analyser, la façade a
- * déjà fait le travail.
+ * réponse réussie plutôt que dans une exception. Tout ce qui n'est pas un code
+ * de transport est local : la façade renvoie aussi les étiquettes du cœur
+ * (`NAME_TOO_LONG`, `STORAGE_IO`…), qui n'ont pas de catégorie propre.
  */
 fun categorieDuCode(code: String): ErrorCategory = when (code) {
     "AUTH" -> ErrorCategory.AUTH
     "CONFLICT" -> ErrorCategory.CONFLICT
     "NOTFOUND" -> ErrorCategory.NOT_FOUND
+    "OFFLINE" -> ErrorCategory.OFFLINE
     "HTTP" -> ErrorCategory.HTTP
     else -> ErrorCategory.LOCAL
-}
-
-/**
- * Message affichable pour l'utilisateur.
- *
- * Les messages locaux (validation de nom, par exemple) sont déjà rédigés en
- * français par le cœur Go et sont plus précis que ce qu'on saurait écrire
- * ici : on les laisse passer. Les autres catégories sont reformulées, parce
- * qu'un `HTTP 502` sur une URL WebDAV n'apprend rien à personne.
- */
-fun OpenNoteException.userMessage(): String = when (category) {
-    ErrorCategory.AUTH ->
-        "Identifiants refusés. Vérifiez le nom d'utilisateur et l'App Token, " +
-            "qui a pu expirer."
-
-    ErrorCategory.CONFLICT ->
-        "Cette note a été modifiée ailleurs entre-temps."
-
-    ErrorCategory.NOT_FOUND ->
-        "Introuvable sur le serveur. La note ou le dossier a peut-être été " +
-            "supprimé depuis un autre appareil."
-
-    ErrorCategory.HTTP ->
-        "Le serveur est injoignable pour le moment."
-
-    ErrorCategory.LOCAL ->
-        rawMessage.substringAfter("mobile: ").ifBlank { "Opération impossible." }
 }

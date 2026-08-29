@@ -9,7 +9,8 @@ import eu.opennote.AppContainer
 import eu.opennote.data.DriveDto
 import eu.opennote.data.OpenNoteException
 import eu.opennote.data.OpenNoteRepository
-import eu.opennote.data.userMessage
+import eu.opennote.ui.common.Texte
+import eu.opennote.ui.common.texte
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,7 +23,7 @@ data class WorkspaceUiState(
     val driveChoisi: String? = null,
     val racine: String = "",
     val validation: Boolean = false,
-    val erreur: String? = null,
+    val erreur: Texte? = null,
     val termine: Boolean = false,
 ) {
     val peutValider: Boolean
@@ -73,7 +74,7 @@ class WorkspaceViewModel(
                     )
                 }
             } catch (e: OpenNoteException) {
-                _uiState.update { it.copy(chargement = false, erreur = e.userMessage()) }
+                _uiState.update { it.copy(chargement = false, erreur = e.texte()) }
             }
         }
     }
@@ -104,7 +105,7 @@ class WorkspaceViewModel(
                 repository.selectWorkspace(drive, etat.racine.trim())
                 _uiState.update { it.copy(validation = false, termine = true) }
             } catch (e: OpenNoteException) {
-                _uiState.update { it.copy(validation = false, erreur = e.userMessage()) }
+                _uiState.update { it.copy(validation = false, erreur = e.texte()) }
             }
         }
     }

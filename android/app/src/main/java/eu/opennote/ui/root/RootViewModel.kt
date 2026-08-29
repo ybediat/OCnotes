@@ -6,9 +6,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import eu.opennote.AppContainer
+import eu.opennote.R
 import eu.opennote.data.OpenNoteRepository
 import eu.opennote.data.RestoreOutcome
 import eu.opennote.data.ValidationSession
+import eu.opennote.ui.common.Texte
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,7 +25,7 @@ sealed interface DemarrageState {
     data class Pret(
         val depart: Depart,
         /** Message à afficher au premier écran, s'il y a quelque chose à dire. */
-        val message: String? = null,
+        val message: Texte? = null,
     ) : DemarrageState
 }
 
@@ -106,15 +108,12 @@ class RootViewModel(
 
             ValidationSession.TOKEN_REFUSE -> DemarrageState.Pret(
                 depart = Depart.CONNEXION,
-                message = "Votre App Token n'est plus accepté par le serveur. " +
-                    "Il a sans doute expiré : créez-en un nouveau et saisissez-le.",
+                message = Texte.de(R.string.demarrage_token_refuse),
             )
 
             ValidationSession.HORS_LIGNE -> DemarrageState.Pret(
                 depart = Depart.CONNEXION,
-                message = "Il reste un espace de notes à choisir, et cette étape " +
-                    "demande une connexion au serveur. Réessayez une fois le " +
-                    "réseau revenu.",
+                message = Texte.de(R.string.demarrage_espace_hors_ligne),
             )
         }
     }

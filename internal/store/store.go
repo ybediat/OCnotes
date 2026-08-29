@@ -20,6 +20,14 @@ import (
 	"time"
 )
 
+// CodeStorageIO étiquette les pannes du support local : disque plein, cache
+// illisible, remplacement atomique refusé.
+//
+// Même valeur que config.CodeStorageIO, et volontairement redéclarée : les
+// deux paquets sont indépendants et aucun n'importe l'autre. TestCodesLocaux
+// dans mobile/ vérifie que les deux ne divergent pas.
+const CodeStorageIO = "STORAGE_IO"
+
 // indexVersion permet de reconnaître un index écrit par une version
 // antérieure du format. Un index d'une version inconnue est ignoré plutôt que
 // mal interprété : le cache se reconstruit depuis le serveur.
@@ -79,7 +87,7 @@ type persisted struct {
 // est bénin ; refuser de démarrer ne l'est pas.
 func Open(dir string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Join(dir, "notes"), 0o700); err != nil {
-		return nil, fmt.Errorf("store: création du cache dans %s: %w", dir, err)
+		return nil, fmt.Errorf("store: [%s] création du cache dans %s: %w", CodeStorageIO, dir, err)
 	}
 
 	s := &Store{
@@ -93,7 +101,7 @@ func Open(dir string) (*Store, error) {
 		if os.IsNotExist(err) {
 			return s, nil
 		}
-		return nil, fmt.Errorf("store: lecture de l'index: %w", err)
+		return nil, fmt.Errorf("store: [%s] lecture de l'index: %w", CodeStorageIO, err)
 	}
 
 	var state persisted
@@ -136,15 +144,15 @@ func (s *Store) save() error {
 	state := persisted{Version: indexVersion, Entries: s.entries, Queue: s.queue, Folders: s.folders}
 	data, err := json.Marshal(state)
 	if err != nil {
-		return fmt.Errorf("store: sérialisation de l'index: %w", err)
+		return fmt.Errorf("store: [%s] sérialisation de l'index: %w", CodeStorageIO, err)
 	}
 
 	tmp := s.indexPath() + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return fmt.Errorf("store: écriture de l'index: %w", err)
+		return fmt.Errorf("store: [%s] écriture de l'index: %w", CodeStorageIO, err)
 	}
 	if err := os.Rename(tmp, s.indexPath()); err != nil {
-		return fmt.Errorf("store: remplacement de l'index: %w", err)
+		return fmt.Errorf("store: [%s] remplacement de l'index: %w", CodeStorageIO, err)
 	}
 	return nil
 }
@@ -236,10 +244,10 @@ func (s *Store) writeBlob(notePath string, content []byte) error {
 	name := cacheName(notePath)
 	tmp := s.blobPath(name) + ".tmp"
 	if err := os.WriteFile(tmp, content, 0o600); err != nil {
-		return fmt.Errorf("store: écriture du cache de %s: %w", notePath, err)
+		return fmt.Errorf("store: [%s] écriture du cache de %s: %w", CodeStorageIO, notePath, err)
 	}
 	if err := os.Rename(tmp, s.blobPath(name)); err != nil {
-		return fmt.Errorf("store: remplacement du cache de %s: %w", notePath, err)
+		return fmt.Errorf("store: [%s] remplacement du cache de %s: %w", CodeStorageIO, notePath, err)
 	}
 	return nil
 }

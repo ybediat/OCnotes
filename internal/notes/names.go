@@ -42,10 +42,41 @@ var reservedDeviceNames = map[string]bool{
 	"LPT6": true, "LPT7": true, "LPT8": true, "LPT9": true,
 }
 
+// Codes d'erreur de nommage.
+//
+// Ils voyagent entre crochets dans le message, exactement comme les codes de
+// transport d'opencloud, parce que gomobile ne fait traverser qu'une chaîne.
+// C'est ce qui permet à Android de reformuler la règle dans la langue de
+// l'appareil au lieu d'afficher le français du cœur.
+//
+// La phrase française reste dans le message derrière le code : elle sert la
+// CLI desktop, les journaux, les tests, et le repli d'Android quand un code
+// n'a pas encore de traduction.
+const (
+	CodeNameEmpty          = "NAME_EMPTY"
+	CodeNameReserved       = "NAME_RESERVED"
+	CodeNameTooLong        = "NAME_TOO_LONG"
+	CodeNameForbiddenChars = "NAME_FORBIDDEN_CHARS"
+	CodeNameControlChar    = "NAME_CONTROL_CHAR"
+	CodeNameSpaceEdge      = "NAME_SPACE_EDGE"
+	CodeNameTrailingDot    = "NAME_TRAILING_DOT"
+	CodeNameLeadingDot     = "NAME_LEADING_DOT"
+	CodeNameReservedDevice = "NAME_RESERVED_DEVICE"
+)
+
 // maxNameBytes borne la longueur d'un nom. La plupart des systèmes de fichiers
 // s'arrêtent à 255 octets ; on garde une marge pour les suffixes ajoutés lors
 // d'un conflit de synchronisation.
 const maxNameBytes = 200
+
+// MaxNameBytes est la borne exposée à l'interface.
+//
+// Sans elle, Android devrait recopier « 200 » dans sa propre formulation de la
+// règle, et les deux valeurs divergeraient au premier ajustement.
+func MaxNameBytes() int { return maxNameBytes }
+
+// ForbiddenNameChars est la liste exposée à l'interface, pour la même raison.
+func ForbiddenNameChars() string { return forbiddenInName }
 
 // ValidateName vérifie qu'un nom peut être créé sans risque, sur le serveur
 // comme dans le cache local.
@@ -53,30 +84,30 @@ const maxNameBytes = 200
 // Le nom attendu est un segment unique : ni chemin, ni séparateur.
 func ValidateName(name string) error {
 	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("notes: le nom est vide")
+		return fmt.Errorf("notes: [%s] le nom est vide", CodeNameEmpty)
 	}
 	if name == "." || name == ".." {
-		return fmt.Errorf("notes: %q est un nom réservé", name)
+		return fmt.Errorf("notes: [%s] %q est un nom réservé", CodeNameReserved, name)
 	}
 	if len(name) > maxNameBytes {
-		return fmt.Errorf("notes: le nom dépasse %d octets", maxNameBytes)
+		return fmt.Errorf("notes: [%s] le nom dépasse %d octets", CodeNameTooLong, maxNameBytes)
 	}
 	if strings.ContainsAny(name, forbiddenInName) {
-		return fmt.Errorf("notes: le nom ne peut pas contenir un de ces caractères : %s", forbiddenInName)
+		return fmt.Errorf("notes: [%s] le nom ne peut pas contenir un de ces caractères : %s", CodeNameForbiddenChars, forbiddenInName)
 	}
 	for _, r := range name {
 		if unicode.IsControl(r) {
-			return fmt.Errorf("notes: le nom contient un caractère de contrôle")
+			return fmt.Errorf("notes: [%s] le nom contient un caractère de contrôle", CodeNameControlChar)
 		}
 	}
 	if name != strings.TrimSpace(name) {
-		return fmt.Errorf("notes: le nom ne peut pas commencer ni finir par une espace")
+		return fmt.Errorf("notes: [%s] le nom ne peut pas commencer ni finir par une espace", CodeNameSpaceEdge)
 	}
 	if strings.HasSuffix(name, ".") {
-		return fmt.Errorf("notes: le nom ne peut pas finir par un point")
+		return fmt.Errorf("notes: [%s] le nom ne peut pas finir par un point", CodeNameTrailingDot)
 	}
 	if strings.HasPrefix(name, ".") {
-		return fmt.Errorf("notes: le nom ne peut pas commencer par un point")
+		return fmt.Errorf("notes: [%s] le nom ne peut pas commencer par un point", CodeNameLeadingDot)
 	}
 
 	base := name
@@ -84,7 +115,7 @@ func ValidateName(name string) error {
 		base = base[:i]
 	}
 	if reservedDeviceNames[strings.ToUpper(base)] {
-		return fmt.Errorf("notes: %q est un nom réservé par Windows", base)
+		return fmt.Errorf("notes: [%s] %q est un nom réservé par Windows", CodeNameReservedDevice, base)
 	}
 
 	return nil

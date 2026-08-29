@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.opennote.appContainer
+import eu.opennote.ui.common.Texte
+import eu.opennote.ui.common.resoudre
 import androidx.compose.ui.platform.LocalContext
 
 /**
@@ -53,7 +55,7 @@ fun LoginScreen(
      * Message posé par le démarrage : token refusé, ou serveur injoignable au
      * lancement. Il s'efface dès que l'utilisateur tente une connexion.
      */
-    messageInitial: String? = null,
+    messageInitial: Texte? = null,
     viewModel: LoginViewModel = viewModel(
         factory = LoginViewModel.factory(LocalContext.current.appContainer),
     ),
@@ -154,7 +156,7 @@ fun LoginScreen(
 
         AideAppToken()
 
-        (etat.erreur ?: messageInitial.takeIf { !etat.enCours })?.let { message ->
+        (etat.erreur ?: messageInitial.takeIf { !etat.enCours })?.resoudre()?.let { message ->
             Surface(
                 color = MaterialTheme.colorScheme.errorContainer,
                 shape = MaterialTheme.shapes.medium,

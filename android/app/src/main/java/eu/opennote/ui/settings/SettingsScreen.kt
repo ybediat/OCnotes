@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.opennote.appContainer
 import eu.opennote.ui.common.Bandeau
+import eu.opennote.ui.common.resoudre
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -133,7 +134,7 @@ fun SettingsScreen(
 
             etat.resume?.let { texte ->
                 Bandeau(
-                    texte = texte,
+                    texte = texte.resoudre(),
                     couleurFond = if (etat.resumePartiel) {
                         MaterialTheme.colorScheme.tertiaryContainer
                     } else {
@@ -148,7 +149,7 @@ fun SettingsScreen(
             }
 
             etat.erreur?.let { message ->
-                Text(message, color = MaterialTheme.colorScheme.error)
+                Text(message.resoudre(), color = MaterialTheme.colorScheme.error)
             }
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))

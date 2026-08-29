@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Langues que l'application déclare savoir parler.
+
+    C'est ce qui permet à Android 13+ de proposer « Langue de l'application »
+    dans les réglages système : rien à construire dans l'application elle-même.
+    Une langue ajoutée ici sans `values-<langue>/` correspondant donnerait un
+    choix qui ne change rien — les deux vont ensemble.
+
+    L'ordre compte : la première est la langue de référence, celle de `values/`.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="fr" />
+</locale-config>

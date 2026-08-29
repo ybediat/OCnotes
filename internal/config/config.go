@@ -16,6 +16,18 @@ import (
 	"strings"
 )
 
+// Codes d'erreur des réglages.
+//
+// CodeStorageIO couvre les pannes du support lui-même — disque plein, dossier
+// illisible. Rare, mais réel, et sans code le message français remonterait tel
+// quel à l'écran.
+const (
+	CodeServerURLMissing = "SERVER_URL_MISSING"
+	CodeServerURLInvalid = "SERVER_URL_INVALID"
+	CodeUsernameMissing  = "USERNAME_MISSING"
+	CodeStorageIO        = "STORAGE_IO"
+)
+
 // FileName est le nom du fichier de configuration dans le dossier de données.
 const FileName = "config.json"
 
@@ -75,7 +87,7 @@ func Load(dataDir string) (Config, error) {
 		if os.IsNotExist(err) {
 			return Config{}, nil
 		}
-		return Config{}, fmt.Errorf("config: lecture de %s: %w", Path(dataDir), err)
+		return Config{}, fmt.Errorf("config: [%s] lecture de %s: %w", CodeStorageIO, Path(dataDir), err)
 	}
 
 	var c Config
@@ -97,20 +109,20 @@ func Save(dataDir string, c Config) error {
 	}
 
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
-		return fmt.Errorf("config: création de %s: %w", dataDir, err)
+		return fmt.Errorf("config: [%s] création de %s: %w", CodeStorageIO, dataDir, err)
 	}
 
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
-		return fmt.Errorf("config: sérialisation: %w", err)
+		return fmt.Errorf("config: [%s] sérialisation: %w", CodeStorageIO, err)
 	}
 
 	tmp := Path(dataDir) + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return fmt.Errorf("config: écriture: %w", err)
+		return fmt.Errorf("config: [%s] écriture: %w", CodeStorageIO, err)
 	}
 	if err := os.Rename(tmp, Path(dataDir)); err != nil {
-		return fmt.Errorf("config: remplacement: %w", err)
+		return fmt.Errorf("config: [%s] remplacement: %w", CodeStorageIO, err)
 	}
 	return nil
 }
@@ -119,7 +131,7 @@ func Save(dataDir string, c Config) error {
 func Clear(dataDir string) error {
 	err := os.Remove(Path(dataDir))
 	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("config: suppression: %w", err)
+		return fmt.Errorf("config: [%s] suppression: %w", CodeStorageIO, err)
 	}
 	return nil
 }
@@ -127,20 +139,20 @@ func Clear(dataDir string) error {
 // Validate vérifie qu'une configuration est cohérente avant d'être écrite.
 func (c Config) Validate() error {
 	if c.ServerURL == "" {
-		return fmt.Errorf("config: URL de serveur manquante")
+		return fmt.Errorf("config: [%s] URL de serveur manquante", CodeServerURLMissing)
 	}
 	u, err := url.Parse(c.ServerURL)
 	if err != nil {
-		return fmt.Errorf("config: URL de serveur invalide %q: %w", c.ServerURL, err)
+		return fmt.Errorf("config: [%s] URL de serveur invalide %q: %w", CodeServerURLInvalid, c.ServerURL, err)
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("config: URL de serveur invalide %q: schéma http ou https attendu", c.ServerURL)
+		return fmt.Errorf("config: [%s] URL de serveur invalide %q: schéma http ou https attendu", CodeServerURLInvalid, c.ServerURL)
 	}
 	if u.Host == "" {
-		return fmt.Errorf("config: URL de serveur invalide %q: hôte manquant", c.ServerURL)
+		return fmt.Errorf("config: [%s] URL de serveur invalide %q: hôte manquant", CodeServerURLInvalid, c.ServerURL)
 	}
 	if strings.TrimSpace(c.Username) == "" {
-		return fmt.Errorf("config: nom d'utilisateur manquant")
+		return fmt.Errorf("config: [%s] nom d'utilisateur manquant", CodeUsernameMissing)
 	}
 	return nil
 }

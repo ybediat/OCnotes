@@ -9,6 +9,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import eu.opennote.ui.browser.BrowserScreen
+import eu.opennote.ui.common.Texte
 import eu.opennote.ui.editor.EditorScreen
 import eu.opennote.ui.login.LoginScreen
 import eu.opennote.ui.login.SuiteConnexion
@@ -46,7 +47,7 @@ fun Depart.route(): String = when (this) {
 fun OpenNoteNavHost(
     navController: NavHostController,
     depart: Depart,
-    messageDemarrage: String?,
+    messageDemarrage: Texte?,
     modifier: Modifier = Modifier,
 ) {
     NavHost(

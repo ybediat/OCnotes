@@ -10,7 +10,8 @@ import eu.opennote.data.ErrorCategory
 import eu.opennote.data.OpenNoteException
 import eu.opennote.data.TokenStore
 import eu.opennote.data.OpenNoteRepository
-import eu.opennote.data.userMessage
+import eu.opennote.ui.common.Texte
+import eu.opennote.ui.common.texte
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +33,7 @@ data class LoginUiState(
     val appToken: String = "",
     val enCours: Boolean = false,
     /** Message d'erreur affiché sous le formulaire, s'il y en a un. */
-    val erreur: String? = null,
+    val erreur: Texte? = null,
     /**
      * Distingue « identifiants refusés » d'un « serveur injoignable ».
      *
@@ -118,7 +119,7 @@ class LoginViewModel(
                 _uiState.update {
                     it.copy(
                         enCours = false,
-                        erreur = e.userMessage(),
+                        erreur = e.texte(),
                         erreurEstAuth = e.category == ErrorCategory.AUTH,
                     )
                 }

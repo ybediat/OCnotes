@@ -11,6 +11,8 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import eu.opennote.R
 import eu.opennote.data.ConflictDto
+import eu.opennote.ui.common.Texte
+import eu.opennote.ui.common.resoudre
 
 /**
  * Notifie l'utilisateur des conflits de synchronisation.
@@ -47,26 +49,29 @@ class SyncNotifier(private val context: Context) {
 
         ensureChannel()
 
-        val titre = if (conflicts.size == 1) {
-            "Une note modifiée sur deux appareils"
-        } else {
-            "${conflicts.size} notes modifiées sur deux appareils"
-        }
+        // Une notification est postée maintenant, pour être lue maintenant :
+        // c'est le seul endroit de l'application où rédiger tout de suite est
+        // la bonne chose à faire. Ailleurs, `Texte` reste non résolu jusqu'à
+        // l'affichage, pour que la langue suive celle de l'appareil.
+        val res = context.resources
+        val rassurance = Texte.de(R.string.sync_conflits_rassurance).resoudre(res)
+        val titre = Texte.pluriel(R.plurals.sync_conflits_titre, conflicts.size).resoudre(res)
 
         val detail = buildString {
-            append("Votre version a été conservée à côté, rien n'est perdu.\n")
+            append(rassurance)
             conflicts.take(MAX_LIGNES).forEach { conflit ->
-                append("\n• ").append(nomAffichable(conflit.copyPath))
+                append(Texte.de(R.string.sync_conflits_ligne, nomAffichable(conflit.copyPath)).resoudre(res))
             }
-            if (conflicts.size > MAX_LIGNES) {
-                append("\n• …et ").append(conflicts.size - MAX_LIGNES).append(" autre(s)")
+            val reste = conflicts.size - MAX_LIGNES
+            if (reste > 0) {
+                append(Texte.pluriel(R.plurals.sync_conflits_reste, reste).resoudre(res))
             }
         }
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_warning)
             .setContentTitle(titre)
-            .setContentText("Votre version a été conservée à côté, rien n'est perdu.")
+            .setContentText(rassurance)
             .setStyle(NotificationCompat.BigTextStyle().bigText(detail))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)

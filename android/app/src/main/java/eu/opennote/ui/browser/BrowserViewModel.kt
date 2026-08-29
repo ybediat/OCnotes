@@ -6,10 +6,12 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import eu.opennote.AppContainer
+import eu.opennote.R
 import eu.opennote.data.FolderEntryDto
 import eu.opennote.data.OpenNoteException
 import eu.opennote.data.OpenNoteRepository
-import eu.opennote.data.userMessage
+import eu.opennote.ui.common.Texte
+import eu.opennote.ui.common.texte
 import eu.opennote.sync.SyncScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,7 +35,7 @@ data class BrowserUiState(
     val chargement: Boolean = true,
     /** Le listing vient du cache : le réseau manquait. */
     val depuisCache: Boolean = false,
-    val erreur: String? = null,
+    val erreur: Texte? = null,
     val enAttente: Int = 0,
 ) {
     /**
@@ -50,7 +52,7 @@ data class BrowserUiState(
 /** Ce que la vue doit faire une fois une opération terminée. */
 sealed interface BrowserEvent {
     data class OuvrirNote(val chemin: String) : BrowserEvent
-    data class Message(val texte: String) : BrowserEvent
+    data class Message(val texte: Texte) : BrowserEvent
 }
 
 /**
@@ -148,7 +150,7 @@ class BrowserViewModel(
                 }
                 repository.refreshPending()
             } catch (e: OpenNoteException) {
-                _uiState.update { it.copy(chargement = false, erreur = e.userMessage()) }
+                _uiState.update { it.copy(chargement = false, erreur = e.texte()) }
             }
         }
     }
@@ -179,7 +181,7 @@ class BrowserViewModel(
                 syncScheduler.syncAfterWrite()
                 _evenements.value = BrowserEvent.OuvrirNote(note.path)
             } catch (e: OpenNoteException) {
-                _evenements.value = BrowserEvent.Message(e.userMessage())
+                _evenements.value = BrowserEvent.Message(e.texte())
             }
         }
     }
@@ -190,7 +192,7 @@ class BrowserViewModel(
                 repository.createFolder(_uiState.value.cheminCourant, nom.trim())
                 recharger()
             } catch (e: OpenNoteException) {
-                _evenements.value = BrowserEvent.Message(e.userMessage())
+                _evenements.value = BrowserEvent.Message(e.texte())
             }
         }
     }
@@ -201,7 +203,7 @@ class BrowserViewModel(
                 repository.rename(entree.path, nouveauNom.trim())
                 recharger()
             } catch (e: OpenNoteException) {
-                _evenements.value = BrowserEvent.Message(e.userMessage())
+                _evenements.value = BrowserEvent.Message(e.texte())
             }
         }
     }
@@ -211,9 +213,9 @@ class BrowserViewModel(
             try {
                 repository.delete(entree.path)
                 recharger()
-                _evenements.value = BrowserEvent.Message("« ${entree.display} » supprimé.")
+                _evenements.value = BrowserEvent.Message(Texte.de(R.string.browser_supprime, entree.display))
             } catch (e: OpenNoteException) {
-                _evenements.value = BrowserEvent.Message(e.userMessage())
+                _evenements.value = BrowserEvent.Message(e.texte())
             }
         }
     }

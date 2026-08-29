@@ -68,9 +68,61 @@ gomobile bind -target=android/arm64 -androidapi 26 -ldflags="-s -w" -o android/a
 cd android && ./gradlew assembleDebug
 ```
 
+```bash
+cd android && ./gradlew testDebugUnitTest
+```
+
+Le second exécute `ChainesEnDurTest`, le garde-fou de localisation. Il tourne
+sur la JVM, sans appareil ni émulateur, mais exige que `opennote.aar` soit là :
+le module principal doit compiler avant que ses tests puissent l'être.
+
 `-ldflags="-s -w"` fait passer `libgojni.so` de 14 Mo à 7,2 Mo — le build
 Android ne sait pas stripper cette bibliothèque lui-même. APK release mesuré :
 8,5 Mo.
+
+### Ce que l'outillage ne dit pas
+
+Tout ce qui suit a été constaté sur cette machine, et coûte une demi-heure à
+qui le redécouvre.
+
+**Le SDK Android est installé et le réseau fonctionne.** `local.properties`
+pointe vers `%LOCALAPPDATA%/Android/Sdk`, `assembleDebug` aboutit, Gradle
+résout ses dépendances. Un commentaire de `libs.versions.toml` a longtemps
+affirmé le contraire ; il a été corrigé.
+
+**`gomobile bind` ne trouve rien tout seul.** Ni `ANDROID_HOME` ni
+`ANDROID_NDK_HOME` ne sont dans l'environnement, et le chemin du NDK contient
+son numéro de version :
+
+```powershell
+$env:ANDROID_HOME = "$env:LOCALAPPDATA/Android/Sdk"
+$env:ANDROID_NDK_HOME = "$env:ANDROID_HOME/ndk/30.0.16138531"
+```
+
+**Le `.aar` n'est pas régénéré par Gradle.** Toute fonction exportée ajoutée
+dans `mobile/` exige de relancer `gomobile bind` à la main. Sinon Kotlin
+compile contre l'ancien binding et se plaint d'une référence introuvable sur un
+symbole que vous venez pourtant d'écrire — le symptôme ne désigne pas sa cause.
+
+**Écrire les fichiers en LF.** Le dépôt est en LF alors que `core.autocrlf` est
+à `true`. Un outil d'édition qui traduit les fins de ligne (Python en mode
+texte sous Windows, par exemple) produit du CRLF, et `gofmt -l` signale alors
+le fichier **entier** comme mal formaté — un diff illisible pour une cause
+invisible.
+
+**`--offline` ne suffit pas pour une dépendance jamais téléchargée.** JUnit
+n'était pas dans le cache Gradle tant qu'aucun test Kotlin n'existait :
+`./gradlew --offline testDebugUnitTest` échoue là où la même commande sans
+`--offline` aboutit.
+
+**`assembleDebug` ne lance aucune tâche lint** — vérifié, zéro sur 41. Les
+règles de `build.gradle.kts` ne s'appliquent qu'à `./gradlew lintDebug`,
+demandé explicitement. C'est voulu : la traduction ne doit pas ralentir
+l'itération sur un écran.
+
+**Les tests Kotlin partent du dossier du module**, `android/app`, pas de la
+racine du dépôt. `ChainesEnDurTest` remonte l'arborescence plutôt que de le
+supposer.
 
 ## Architecture
 
@@ -178,59 +230,163 @@ catégorie entre crochets — `[AUTH]`, `[CONFLICT]`, `[NOTFOUND]`, `[OFFLINE]`,
 dans un message d'erreur** : c'est ce que faisait une première version, et
 `HTTPError.Error()` ne contenait pas la phrase attendue.
 
-## Localisation — prochain chantier
+Les règles du cœur — validation de nom, panne de stockage, URL de serveur —
+portent elles aussi un code, sur le même principe. `ErrorCode` reconnaît la
+*forme* `[NOM_EN_MAJUSCULES]` et non une liste fermée, mais **cherche d'abord
+les codes de transport** : une erreur du cache enveloppe couramment une erreur
+réseau (`store: [STORAGE_IO] … : opencloud: [NOTFOUND] …`), et c'est la cause
+profonde qui décide de la réaction. `TestErrorCodePrioriteTransport` protège
+cet ordre. Liste complète dans `docs/FACADE.md`.
 
-À faire tant que l'application est petite : chaque écran ajouté augmente le
-coût. État mesuré le 2026-08-29.
+## Localisation — le modèle en place, et comment s'y tenir
 
-**La couture est déjà en place, et c'est le morceau difficile.** Le schéma de
-catégories `[AUTH]` / `[CONFLICT]` / `[NOTFOUND]` / `[OFFLINE]` / `[HTTP]` fait
-que Kotlin **reformule** ces erreurs au lieu d'afficher le message Go. Le
-français du cœur ne remonte donc jamais à l'écran pour ces cas. Le dispositif
-avait été conçu parce que gomobile ne transmet qu'une chaîne — il se trouve
-être exactement le bon point de découpe.
+Les coutures sont posées et vérifiées. Ce qui reste est mécanique, mais **le
+modèle se contourne facilement sans le vouloir** : cette section dit comment
+ajouter un texte sans le casser.
 
-Reste trois chantiers, d'inégale difficulté.
+### Le principe : décrire, pas rédiger
 
-**1. Les chaînes Kotlin en dur.** Environ 82, contre 3 seulement dans
-`strings.xml`. Mécanique et sans risque : sortir vers `strings.xml`, puis créer
-`values-en/`. C'est le gros du volume.
+Un ViewModel n'a pas de `Context`, donc pas de ressources. Lui en donner un
+serait doublement mauvais — il devient intestable sans Robolectric, et surtout
+la langue se **fige au moment de l'émission** : un `StateFlow` portant déjà
+« Tout est à jour » ne repasserait pas en anglais après un changement de
+langue. Les ViewModels émettent donc un `ui.common.Texte` — un identifiant de
+ressource et ses paramètres — que le composable rédige à chaque recomposition.
 
-**2. Les erreurs Go de catégorie `LOCAL` passent brutes.**
-`OpenNoteError.userMessage()` fait `rawMessage.substringAfter("mobile: ")` :
-les messages de validation (« le nom ne peut pas contenir… », « CON est un nom
-réservé par Windows ») resteraient en français quelle que soit la langue de
-l'appareil. Une quinzaine de sites, dans `internal/notes` et `internal/config`.
+`Texte` a quatre variantes : `Ressource`, `Pluriel`, `Liste` (une énumération
+dont le séparateur est lui-même une ressource) et `Brut`, réservé à ce qui
+n'est pas une ressource — un nom de note, le repli d'une erreur Go.
 
-Le correctif suit la voie déjà tracée : donner un code à ces erreurs
-(`[NAME_FORBIDDEN]`, `[NAME_RESERVED]`, `[SERVER_URL_INVALID]`…) et laisser
-Kotlin les formuler. **C'est le seul point qui touche à l'architecture, donc
-celui par lequel commencer.**
+### Ajouter un texte : trois cas, trois gestes
 
-**3. Deux mots que Go écrit dans des noms de fichiers** : `"Sans titre"`
-(`notes.SanitizeName`) et `"(conflit <horodatage>)"` (`store.conflictPath`).
+**1. Dans un composable** → `stringResource(R.string.…)`. Rien d'autre.
 
-Ceux-là demandent une décision, pas un réflexe. Ce ne sont pas des textes
-d'interface mais de **vrais noms de fichiers sur le serveur**, visibles depuis
-l'interface web et depuis les autres appareils. Les faire suivre la langue de
-chaque téléphone produirait `(conflit …)` et `(conflict …)` dans le même
-dossier partagé. Piste retenue : les faire fournir une fois par Kotlin à
-travers la façade, pour que le choix soit explicite et cohérent — pas
-automatique.
+**2. Dans un ViewModel, une notification, un `LaunchedEffect`** → `Texte`, posé
+dans l'état, résolu par l'écran.
 
-**Détail annexe** : `BrowserScreen` affiche les dates en tronquant l'ISO à 10
-caractères (`2026-08-29`). Neutre, mais pas localisé.
+Le piège est le lieu de la résolution : `Texte.resoudre()` est un composable,
+donc **il ne peut pas être appelé depuis une coroutine**. Un `LaunchedEffect`
+en est une. Il faut résoudre au-dessus, dans la composition, et ne passer que
+la chaîne :
+
+```kotlin
+val message = etat.erreur?.resoudre()
+LaunchedEffect(message) { message?.let { snackbar.showSnackbar(it) } }
+```
+
+`BrowserScreen` et `EditorScreen` portent ce motif. `SyncNotifier` fait
+exception et résout tout de suite, avec `resoudre(context.resources)` : une
+notification est postée pour être lue dans la seconde, il n'y a pas de
+recomposition à attendre.
+
+**3. Une règle refusée par le cœur Go** → quatre gestes solidaires :
+
+1. un code dans le paquet Go concerné (`notes.CodeNameTooLong`…), inséré entre
+   crochets **devant** la phrase française, qui reste pour la CLI et les
+   journaux ;
+2. un cas dans `texteLocal()` de `ui/common/ErreurTexte.kt` ;
+3. une clé dans `strings.xml` ;
+4. une ligne dans le tableau de `docs/FACADE.md`.
+
+Un paramètre qui est une **constante du cœur** ne se recopie pas dans
+`strings.xml` : il s'expose par la façade, comme `MaxNameBytes()` et
+`ForbiddenNameChars()`. Un paramètre que Kotlin a déjà sous la main — le nom
+saisi, l'URL tapée — n'a pas à traverser la frontière du tout. C'est ce qui a
+permis de n'encoder **aucun** argument dans les messages d'erreur.
+
+### Migrer un des écrans restants
+
+Sortir les chaînes vers `strings.xml`, les lire avec `stringResource`, puis
+**retirer le fichier de `ECRANS_A_MIGRER`** dans `ChainesEnDurTest`. Le test
+vérifie les deux sens : il refuse un littéral hors liste, et refuse aussi qu'un
+fichier migré y reste — sinon le garde-fou deviendrait aveugle sur ce fichier
+sans le dire.
+
+Dans `strings.xml`, une apostrophe s'écrit `\'` : sans
+l'échappement, la compilation des ressources échoue.
+
+### Ce qu'il ne faut pas faire
+
+- **Pas de `Context` dans un ViewModel.** C'est le raccourci qui annule tout le
+  dispositif.
+- **Pas de `if (n > 1)`.** Un texte qui compte est un `<plurals>` : le nombre
+  de formes dépend de la langue — trois en polonais, six en arabe.
+  `Texte.Pluriel` passe la quantité **deux fois**, pour choisir la forme et
+  comme premier paramètre de format, ce qui évite l'oubli classique du `%d`.
+- **`Texte.Brut` n'est pas une échappatoire** pour du français en dur.
+- **Ne pas ajouter un écran neuf à `ECRANS_A_MIGRER`.** Cette liste ne fait que
+  décrire une dette existante ; y ajouter une ligne, c'est éteindre le
+  garde-fou là où il sert le plus.
+- **Toute catégorie ou tout code Go doit avoir son pendant Kotlin.** `OFFLINE`
+  n'en avait pas : la catégorie retombait en `LOCAL`, et « opencloud: serveur
+  injoignable » s'affichait brut à l'écran. Une catégorie orpheline ne casse
+  rien — elle fuit en silence.
+
+### Les deux garde-fous, et leur portée
+
+`ChainesEnDurTest` analyse les sources Kotlin et refuse tout littéral d'au
+moins deux mots hors des fichiers listés. Il existe parce que `HardcodedText`,
+la règle de lint prévue pour ça, ne lit que les dispositions XML — Compose lui
+est invisible. Même rôle que `mobile/gomobile_test.go` face au NDK absent :
+vérifier une contrainte de projet sans outil supplémentaire.
+
+Sa règle est volontairement grossière — aucun faux positif sur le dépôt
+actuel — et laisse donc passer les libellés d'un seul mot (« Annuler »).
+Ceux-là se voient sous la pseudo-langue `en-XA` des options développeur, qui
+affiche accentué et allongé tout ce qui est traduit, sans qu'aucun `values-en/`
+soit à maintenir. Un littéral délibéré se marque `i18n-ok` en commentaire sur
+la même ligne.
+
+`MissingTranslation` et `ExtraTranslation` sont réglés en erreurs dans
+`build.gradle.kts`. Ils ne signalent rien tant qu'il n'y a qu'une langue, et
+**ne tournent que sur `./gradlew lintDebug`** : `assembleDebug` ne lance aucune
+tâche lint. La traduction ne bloquera donc jamais le travail au quotidien.
+
+### Ce qui reste
+
+**Les ~81 chaînes des huit écrans de `ECRANS_A_MIGRER`.** Mécanique, sans
+risque, faisable un écran à la fois.
+
+**Les dates.** `BrowserScreen` tronque l'ISO à 10 caractères. `java.time` est
+disponible dès l'API 26 : `DateTimeFormatter.ofLocalizedDate`.
+
+### Décisions prises
+
+**La traduction se fait à la fin, en une passe, après l'extraction.** Les
+langues cibles ne sont pas arrêtées. Traduire plus tôt reviendrait à traduire
+un tiers de l'application, puis à rouvrir chaque `values-<langue>/` huit fois
+de plus ; et un écran en cours de conception change de formulation trois ou
+quatre fois. Le français est la langue de référence : `values/` est la seule
+que le code touche au moment d'écrire.
+
+**Une langue s'ajoute par deux gestes solidaires** : un `values-<langue>/` et
+une ligne dans `res/xml/locales_config.xml`. L'un sans l'autre donne soit un
+choix qui ne change rien, soit des ressources qu'Android n'annonce pas.
+Android 13+ propose alors « Langue de l'application » dans les réglages
+système — **pas de sélecteur à construire dans l'application**, ce qui
+éviterait d'ajouter `androidx.appcompat` pour son rétroportage.
+
+**« Sans titre » et « (conflit <horodatage>) » restent en français,
+invariants**, et ne passent pas par la façade. Ce ne sont pas des textes
+d'interface mais de vrais noms de fichiers sur le serveur, visibles depuis
+l'interface web et les autres appareils. Les faire suivre la langue de chaque
+téléphone produirait « (conflit …) » et « (conflict …) » côte à côte dans le
+même dossier partagé. Trois mots de français constants coûtent moins cher que
+cette incohérence, et que la mécanique d'injection qu'il aurait fallu
+construire.
 
 ## État et limites
 
 Le cœur Go est **vérifié** : ~200 cas unitaires plus une suite d'intégration.
 L'interface Compose **compile et tourne**, mais sa couverture repose sur des
-essais manuels — aucun test instrumenté.
+essais manuels — aucun test instrumenté. Le seul test côté Android est
+`ChainesEnDurTest`, qui analyse les sources plutôt que le comportement : il
+protège une règle de projet, il ne dit rien de ce que l'application fait.
 
 Distinguer « écrit », « compile » et « testé » dans tout rapport d'avancement.
 
-Restent ouverts, par ordre de priorité décidé : **la localisation** (section
-ci-dessus, à traiter avant que l'application grossisse), l'aperçu Markdown
+Restent ouverts, par ordre de priorité décidé : **l'extraction des chaînes
+d'écran** (section ci-dessus, mécanique désormais), l'aperçu Markdown
 rendu (brique 4-bis, goldmark), OIDC en alternative à l'App Token, et la
 signature de l'APK pour distribution.
 

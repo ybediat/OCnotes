@@ -11,7 +11,8 @@ import eu.opennote.AppContainer
 import eu.opennote.data.FormatAction
 import eu.opennote.data.OpenNoteException
 import eu.opennote.data.OpenNoteRepository
-import eu.opennote.data.userMessage
+import eu.opennote.ui.common.Texte
+import eu.opennote.ui.common.texte
 import eu.opennote.sync.SyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -36,7 +37,7 @@ data class EditorUiState(
     val actions: List<FormatAction> = emptyList(),
     val chargement: Boolean = true,
     val modifie: Boolean = false,
-    val erreur: String? = null,
+    val erreur: Texte? = null,
 )
 
 /**
@@ -79,7 +80,7 @@ class EditorViewModel(
                     )
                 }
             } catch (e: OpenNoteException) {
-                _uiState.update { it.copy(chargement = false, erreur = e.userMessage()) }
+                _uiState.update { it.copy(chargement = false, erreur = e.texte()) }
             }
         }
 
@@ -134,7 +135,7 @@ class EditorViewModel(
             } catch (e: OpenNoteException) {
                 // Une action inconnue est un bug de version, pas une panne :
                 // on le dit sans dramatiser et sans toucher au texte.
-                _uiState.update { it.copy(erreur = e.userMessage()) }
+                _uiState.update { it.copy(erreur = e.texte()) }
             }
         }
     }
@@ -182,7 +183,7 @@ class EditorViewModel(
         } catch (e: OpenNoteException) {
             // Le réseau n'entre pas en jeu ici. Ce qui reste — un cache
             // illisible, un disque plein — mérite d'être dit.
-            _uiState.update { it.copy(erreur = e.userMessage()) }
+            _uiState.update { it.copy(erreur = e.texte()) }
         }
     }
 

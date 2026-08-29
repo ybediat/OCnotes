@@ -36,6 +36,7 @@ import eu.opennote.appContainer
 import eu.opennote.data.DriveDto
 import eu.opennote.data.DriveType
 import eu.opennote.ui.common.ChargementPleinEcran
+import eu.opennote.ui.common.resoudre
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,7 +114,7 @@ fun WorkspaceScreen(
 
                     etat.erreur?.let { message ->
                         Text(
-                            text = message,
+                            text = message.resoudre(),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.error,
                         )

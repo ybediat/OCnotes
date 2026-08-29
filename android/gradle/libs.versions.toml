@@ -1,6 +1,9 @@
-# Catalogue de versions. Toutes ces versions sont plausibles au moment de
-# l'écriture mais n'ont pas été résolues (aucun réseau, aucun SDK Android sur
-# la machine de développement) : les ajuster au premier build.
+# Catalogue de versions.
+#
+# Ces versions ont été résolues et compilées : `assembleDebug` et
+# `testDebugUnitTest` aboutissent avec elles. Une note antérieure affirmait
+# qu'aucun SDK Android n'était disponible — c'est faux, et ça envoie sur une
+# fausse piste.
 [versions]
 agp = "8.7.3"
 kotlin = "2.0.21"

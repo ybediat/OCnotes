@@ -1,6 +1,109 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Textes de l'interface.
+
+    Ce fichier est la langue de référence, le français. Une traduction se fait
+    en copiant le fichier dans `values-<langue>/` et en n'y traduisant que les
+    valeurs : jamais les `name`, jamais les `%1$s`.
+
+    Trois règles à ne pas perdre de vue :
+
+      - une apostrophe doit s'écrire \' , sinon la compilation des ressources
+        échoue ;
+      - un texte qui compte quelque chose est un <plurals>, jamais un
+        `if (n > 1)` : le nombre de formes dépend de la langue ;
+      - `translatable="false"` marque ce qui ne doit pas être traduit.
+-->
 <resources>
-    <string name="app_name">OpenNote</string>
+    <string name="app_name" translatable="false">OpenNote</string>
+
+    <!-- ================================================================
+         Erreurs
+
+         Les catégories de transport ([AUTH], [CONFLICT]…) sont reformulées
+         plutôt que relayées : « HTTP 502 » sur une URL WebDAV n\'apprend rien
+         à personne. Les codes locaux ([NAME_*], [STORAGE_IO]…) viennent du
+         cœur Go, qui refuse de créer un nom que le cache ne saurait écrire.
+         ================================================================ -->
+    <string name="err_auth">Identifiants refusés. Vérifiez le nom d\'utilisateur et l\'App Token, qui a pu expirer.</string>
+    <string name="err_conflit">Cette note a été modifiée ailleurs entre-temps.</string>
+    <string name="err_introuvable">Introuvable sur le serveur. La note ou le dossier a peut-être été supprimé depuis un autre appareil.</string>
+    <string name="err_http">Le serveur est injoignable pour le moment.</string>
+    <string name="err_hors_ligne">Serveur injoignable. Réessayez une fois le réseau revenu.</string>
+    <string name="err_inconnue">Opération impossible.</string>
+
+    <string name="err_nom_vide">Le nom ne peut pas être vide.</string>
+    <string name="err_nom_reserve">Ce nom est réservé par le système.</string>
+    <!-- %1$d vient de Mobile.maxNameBytes() : la borne n\'est pas recopiée ici. -->
+    <string name="err_nom_trop_long">Le nom est trop long : %1$d octets au maximum.</string>
+    <!-- %1$s vient de Mobile.forbiddenNameChars(), pour la même raison. -->
+    <string name="err_nom_caracteres_interdits">Le nom ne peut pas contenir ces caractères : %1$s</string>
+    <string name="err_nom_caractere_controle">Le nom contient un caractère invisible.</string>
+    <string name="err_nom_espaces">Le nom ne peut pas commencer ni finir par une espace.</string>
+    <string name="err_nom_point_final">Le nom ne peut pas finir par un point.</string>
+    <string name="err_nom_point_initial">Le nom ne peut pas commencer par un point.</string>
+    <string name="err_nom_reserve_windows">Ce nom est réservé par Windows et ne peut pas être utilisé.</string>
+    <string name="err_nom_aucun_libre">Trop de notes portent déjà ce nom.</string>
+    <string name="err_racine_protegee">Le dossier de notes lui-même ne peut être ni renommé, ni déplacé, ni supprimé.</string>
+    <string name="err_deplacement_dans_soi">Un dossier ne peut pas être déplacé dans lui-même.</string>
+    <string name="err_chemin_vide">Aucun élément désigné.</string>
+    <string name="err_stockage">Impossible d\'écrire sur le stockage de l\'appareil. Vérifiez l\'espace disponible.</string>
+    <string name="err_url_serveur_manquante">Indiquez l\'adresse du serveur.</string>
+    <string name="err_url_serveur_invalide">Adresse de serveur invalide. Elle doit commencer par http:// ou https://</string>
+    <string name="err_utilisateur_manquant">Indiquez votre nom d\'utilisateur.</string>
+
+    <!-- ================================================================
+         Démarrage
+         ================================================================ -->
+    <string name="demarrage_token_refuse">Votre App Token n\'est plus accepté par le serveur. Il a sans doute expiré : créez-en un nouveau et saisissez-le.</string>
+    <string name="demarrage_espace_hors_ligne">Il reste un espace de notes à choisir, et cette étape demande une connexion au serveur. Réessayez une fois le réseau revenu.</string>
+
+    <!-- ================================================================
+         Synchronisation
+
+         Le résumé décrit ce qui s\'est passé plutôt que de conclure. Une
+         panne réseau donne un état partiel, pas un échec : « 3 notes
+         envoyées, 2 en attente » est exact, là où « échec » ferait croire
+         à une perte.
+         ================================================================ -->
+    <plurals name="sync_notes_envoyees">
+        <item quantity="one">%d note envoyée</item>
+        <item quantity="other">%d notes envoyées</item>
+    </plurals>
+    <plurals name="sync_deplacements">
+        <item quantity="one">%d déplacement</item>
+        <item quantity="other">%d déplacements</item>
+    </plurals>
+    <plurals name="sync_suppressions">
+        <item quantity="one">%d suppression</item>
+        <item quantity="other">%d suppressions</item>
+    </plurals>
+    <plurals name="sync_en_attente">
+        <item quantity="one">%d en attente</item>
+        <item quantity="other">%d en attente</item>
+    </plurals>
+    <!-- Séparateur d\'énumération : il change de forme selon la langue. -->
+    <string name="sync_separateur">", "</string>
+    <string name="sync_resume">%1$s.</string>
+    <string name="sync_resume_partiel">%1$s. Le serveur a cessé de répondre en cours de route.</string>
+    <string name="sync_a_jour">Tout est à jour.</string>
+    <string name="sync_hors_ligne">Serveur injoignable. Rien à envoyer pour l\'instant.</string>
+
     <string name="sync_channel_name">Synchronisation</string>
     <string name="sync_channel_description">Conflits et incidents de synchronisation des notes</string>
+    <plurals name="sync_conflits_titre">
+        <item quantity="one">Une note modifiée sur deux appareils</item>
+        <item quantity="other">%d notes modifiées sur deux appareils</item>
+    </plurals>
+    <string name="sync_conflits_rassurance">Votre version a été conservée à côté, rien n\'est perdu.</string>
+    <string name="sync_conflits_ligne">\n• %1$s</string>
+    <plurals name="sync_conflits_reste">
+        <item quantity="one">\n• …et %d autre</item>
+        <item quantity="other">\n• …et %d autres</item>
+    </plurals>
+
+    <!-- ================================================================
+         Navigateur
+         ================================================================ -->
+    <string name="browser_supprime">« %1$s » supprimé.</string>
 </resources>

@@ -284,7 +284,7 @@ func (s *Store) resolveConflict(ctx context.Context, remote Remote, notePath str
 
 	copyPath := conflictPath(notePath, time.Now())
 	if _, err := remote.Save(ctx, copyPath, local, ""); err != nil {
-		return nil, fmt.Errorf("store: sauvegarde de la version locale de %s: %w", notePath, err)
+		return nil, fmt.Errorf("store: [%s] sauvegarde de la version locale de %s: %w", CodeStorageIO, notePath, err)
 	}
 
 	if err := s.Accept(notePath, serverContent, serverETag); err != nil {
@@ -341,10 +341,10 @@ func (s *Store) Clear() error {
 	defer s.mu.Unlock()
 
 	if err := os.RemoveAll(s.notesDir()); err != nil {
-		return fmt.Errorf("store: purge du cache: %w", err)
+		return fmt.Errorf("store: [%s] purge du cache: %w", CodeStorageIO, err)
 	}
 	if err := os.MkdirAll(s.notesDir(), 0o700); err != nil {
-		return fmt.Errorf("store: recréation du cache: %w", err)
+		return fmt.Errorf("store: [%s] recréation du cache: %w", CodeStorageIO, err)
 	}
 
 	s.entries = map[string]*Entry{}

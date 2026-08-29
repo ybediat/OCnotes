@@ -13,6 +13,14 @@ import (
 	"opennote/internal/opencloud"
 )
 
+// Codes d'erreur d'arborescence, dans le même esprit que ceux du nommage.
+const (
+	CodeRootImmutable = "ROOT_IMMUTABLE"
+	CodeMoveIntoSelf  = "MOVE_INTO_SELF"
+	CodePathEmpty     = "PATH_EMPTY"
+	CodeNameNoSlot    = "NAME_NO_SLOT"
+)
+
 // Backend est la partie du client OpenCloud dont le modèle de notes a besoin.
 // *opencloud.Space l'implémente.
 //
@@ -264,7 +272,7 @@ func (l *Library) availableName(ctx context.Context, dir, name string) (string, 
 			return "", err
 		}
 	}
-	return "", fmt.Errorf("notes: impossible de trouver un nom libre pour %q", name)
+	return "", fmt.Errorf("notes: [%s] impossible de trouver un nom libre pour %q", CodeNameNoSlot, name)
 }
 
 // CreateFolder crée un sous-dossier.
@@ -297,7 +305,7 @@ func ResolveRename(itemPath, newName string) (string, error) {
 
 	itemPath = CleanPath(itemPath)
 	if itemPath == "" {
-		return "", errors.New("notes: la racine ne peut pas être renommée")
+		return "", fmt.Errorf("notes: [%s] la racine ne peut pas être renommée", CodeRootImmutable)
 	}
 	return path.Join(path.Dir(itemPath), newName), nil
 }
@@ -323,12 +331,12 @@ func (l *Library) Rename(ctx context.Context, itemPath, newName string) (string,
 func (l *Library) Move(ctx context.Context, itemPath, targetDir string) (string, error) {
 	itemPath = CleanPath(itemPath)
 	if itemPath == "" {
-		return "", errors.New("notes: la racine ne peut pas être déplacée")
+		return "", fmt.Errorf("notes: [%s] la racine ne peut pas être déplacée", CodeRootImmutable)
 	}
 
 	targetDir = CleanPath(targetDir)
 	if targetDir == itemPath || strings.HasPrefix(targetDir, itemPath+"/") {
-		return "", fmt.Errorf("notes: %q ne peut pas être déplacé dans lui-même", itemPath)
+		return "", fmt.Errorf("notes: [%s] %q ne peut pas être déplacé dans lui-même", CodeMoveIntoSelf, itemPath)
 	}
 
 	target := path.Join(targetDir, path.Base(itemPath))
@@ -349,7 +357,7 @@ func (l *Library) Move(ctx context.Context, itemPath, targetDir string) (string,
 func (l *Library) MoveTo(ctx context.Context, from, to string) error {
 	from, to = CleanPath(from), CleanPath(to)
 	if from == "" || to == "" {
-		return errors.New("notes: chemin vide")
+		return fmt.Errorf("notes: [%s] chemin vide", CodePathEmpty)
 	}
 	return l.backend.Move(ctx, l.resolve(from), l.resolve(to))
 }
@@ -368,7 +376,7 @@ func (l *Library) EnsureFolder(ctx context.Context, dir string) error {
 func (l *Library) Delete(ctx context.Context, itemPath string) error {
 	itemPath = CleanPath(itemPath)
 	if itemPath == "" {
-		return errors.New("notes: la racine ne peut pas être supprimée")
+		return fmt.Errorf("notes: [%s] la racine ne peut pas être supprimée", CodeRootImmutable)
 	}
 	return l.backend.Remove(ctx, l.resolve(itemPath))
 }

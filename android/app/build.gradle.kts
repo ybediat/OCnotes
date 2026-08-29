@@ -51,6 +51,17 @@ android {
         compose = true
     }
 
+    lint {
+        // Une clé absente d'une traduction, ou présente dans une traduction
+        // sans exister dans `values/`, est une erreur et non un
+        // avertissement : c'est le seul contrôle automatique une fois un
+        // `values-<langue>/` créé, et un avertissement ne se voit pas.
+        //
+        // Tant qu'il n'y a qu'une langue, ces règles ne signalent rien. Elles
+        // sont posées maintenant pour être en place le jour où elles servent.
+        error.addAll(listOf("MissingTranslation", "ExtraTranslation"))
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
