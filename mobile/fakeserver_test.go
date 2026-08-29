@@ -37,6 +37,13 @@ type fakeServer struct {
 	// respecte pas cet en-tête, et la protection des notes créées hors
 	// connexion ne doit donc pas en dépendre.
 	honorsIfNoneMatch bool
+
+	// search reste faux par défaut : le service de recherche s'éteint au
+	// déploiement, et un serveur plus ancien ne l'expose pas du tout. Le
+	// défaut est donc le serveur le plus pauvre, celui sur lequel le repli
+	// doit fonctionner — c'est le chemin que la plupart des tests éprouvent
+	// sans avoir à le demander.
+	search bool
 }
 
 // setOffline simule la perte du réseau, de façon réversible.
@@ -135,6 +142,8 @@ func (f *fakeServer) handle(w http.ResponseWriter, r *http.Request) {
 		f.mkcol(w, p)
 	case "MOVE":
 		f.move(w, r, p)
+	case "REPORT":
+		f.report(w, p)
 	case http.MethodDelete:
 		f.remove(w, p)
 	default:
@@ -191,6 +200,39 @@ func (f *fakeServer) propfind(w http.ResponseWriter, r *http.Request, p string) 
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
+
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.WriteHeader(http.StatusMultiStatus)
+	_, _ = fmt.Fprintf(w,
+		`<d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">%s</d:multistatus>`,
+		strings.Join(entries, ""))
+}
+
+// report imite le service de recherche, **avec ses deux travers mesurés**.
+//
+// D'abord il ignore le chemin sur lequel on l'interroge : la recherche porte
+// toujours sur l'espace entier, quel que soit le sous-dossier visé. Ensuite il
+// fait figurer la racine de l'espace parmi ses résultats. Corriger l'un ou
+// l'autre ici ferait passer des tests que le vrai serveur ferait échouer.
+//
+// Éteint, il répond 405 comme un serveur sans service de recherche : c'est ce
+// qui déclenche le repli sur le parcours PROPFIND.
+func (f *fakeServer) report(w http.ResponseWriter, _ string) {
+	if !f.search {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	entries := []string{f.responseXML("", true)}
+	for d := range f.folders {
+		if d != "" {
+			entries = append(entries, f.responseXML(d, true))
+		}
+	}
+	for file := range f.files {
+		entries = append(entries, f.responseXML(file, false))
+	}
+	sort.Strings(entries)
 
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	w.WriteHeader(http.StatusMultiStatus)

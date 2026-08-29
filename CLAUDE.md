@@ -465,10 +465,26 @@ vérifier une contrainte de projet sans outil supplémentaire.
 
 Sa règle est volontairement grossière — aucun faux positif sur le dépôt
 actuel — et laisse donc passer les libellés d'un seul mot (« Annuler »).
-Ceux-là se voient sous la pseudo-langue `en-XA` des options développeur, qui
-affiche accentué et allongé tout ce qui est traduit, sans qu'aucun `values-en/`
-soit à maintenir. Un littéral délibéré se marque `i18n-ok` en commentaire sur
-la même ligne.
+Ceux-là se voient sous la pseudo-langue `en-XA`, qui affiche accentué et
+allongé tout ce qui est traduit, sans qu'aucun `values-en/` soit à maintenir.
+Un littéral délibéré se marque `i18n-ok` en commentaire sur la même ligne.
+
+**Le sélecteur de langue de MIUI n'expose pas les pseudo-langues** — inutile
+de les chercher dans les options développeur de l'appareil de test, la ROM
+filtre la liste. On passe donc par la locale d'application, qui ne demande ni
+root ni réglage système :
+
+```powershell
+adb shell cmd locale set-app-locales eu.opennote.debug --locales en-XA
+adb shell cmd locale set-app-locales eu.opennote.debug --locales ""   # retour
+```
+
+Deux conditions, faciles à oublier : `isPseudoLocalesEnabled` doit être vrai
+sur le type de build `debug`, sinon l'APK ne contient aucune ressource `en-XA`
+et la commande ne change rien visiblement ; et le paquet porte le suffixe
+`.debug`, sans quoi la commande vise une application qui n'est pas installée
+et échoue sans un mot. `ar-XB` est générée en même temps, pour l'écriture de
+droite à gauche.
 
 `MissingTranslation` et `ExtraTranslation` sont réglés en erreurs dans
 `build.gradle.kts`. Ils ne signalent rien tant qu'il n'y a qu'une langue, et

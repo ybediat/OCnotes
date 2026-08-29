@@ -35,6 +35,19 @@ android {
         }
         debug {
             applicationIdSuffix = ".debug"
+
+            // Génère `en-XA` (accentuée et allongée) et `ar-XB` (écrite de
+            // droite à gauche) à partir de `values/`, sans qu'aucun
+            // `values-<langue>/` soit à maintenir. C'est ce qui rend visible
+            // un texte resté en dur : il s'affiche en français lisible au
+            // milieu de ce qui est traduit.
+            //
+            // Sur cette ROM Xiaomi, le sélecteur de langue système n'expose
+            // pas les pseudo-langues. On les applique à l'application seule :
+            //   adb shell cmd locale set-app-locales eu.opennote.debug \
+            //       --locales en-XA
+            // et on revient avec `--locales ""`.
+            isPseudoLocalesEnabled = true
         }
     }
 

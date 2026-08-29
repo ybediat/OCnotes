@@ -2,8 +2,15 @@ package eu.opennote.ui.browser
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -16,7 +23,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.unit.dp
 import eu.opennote.R
+import eu.opennote.data.FolderRefDto
 
 /**
  * Boîte de saisie d'une ligne : création de note, de dossier, renommage.
@@ -70,6 +79,109 @@ fun SaisieDialog(
                 enabled = valeur.text.isNotBlank(),
             ) {
                 Text(libelleValidation)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onFermer) { Text(stringResource(R.string.action_annuler)) }
+        },
+    )
+}
+
+/**
+ * Création d'une note : un titre, et le dossier où la ranger.
+ *
+ * # Pourquoi un sélecteur, alors qu'il n'y en avait pas
+ *
+ * L'application choisissait déjà un dossier — le dossier affiché — mais sans
+ * le dire. En arborescence ça se devinait ; en liste plate il n'y a pas de
+ * dossier affiché, et la note tomberait n'importe où sans que l'utilisateur
+ * puisse le prévoir. Rendre le choix visible dans les deux modes vaut mieux
+ * que deux comportements différents selon la page.
+ *
+ * La destination proposée suit donc le mode : le dossier courant en
+ * arborescence, le dernier utilisé en liste plate.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NouvelleNoteDialog(
+    dossiers: List<FolderRefDto>,
+    dossierPropose: String,
+    nomRacine: String,
+    onValider: (titre: String, dossier: String) -> Unit,
+    onFermer: () -> Unit,
+) {
+    var titre by remember { mutableStateOf("") }
+    var dossier by remember { mutableStateOf(dossierPropose) }
+    var deroule by remember { mutableStateOf(false) }
+
+    // Le dossier de notes a un chemin vide et un nom vide : la façade ne
+    // choisit pas son libellé, c'est l'écran qui le connaît.
+    val libelle: (FolderRefDto) -> String = { if (it.path.isEmpty()) nomRacine else it.path }
+    val choix = dossiers.ifEmpty { listOf(FolderRefDto()) }
+    val libelleCourant = choix.firstOrNull { it.path == dossier }?.let(libelle) ?: nomRacine
+
+    AlertDialog(
+        onDismissRequest = onFermer,
+        title = { Text(stringResource(R.string.browser_nouvelle_note)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = titre,
+                    onValueChange = { titre = it },
+                    label = { Text(stringResource(R.string.browser_note_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                ExposedDropdownMenuBox(
+                    expanded = deroule,
+                    onExpandedChange = { deroule = it },
+                    modifier = Modifier.padding(top = 12.dp),
+                ) {
+                    OutlinedTextField(
+                        value = libelleCourant,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(stringResource(R.string.browser_note_dossier)) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = deroule) },
+                        modifier = Modifier
+                            .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                            .fillMaxWidth(),
+                    )
+                    ExposedDropdownMenu(
+                        expanded = deroule,
+                        onDismissRequest = { deroule = false },
+                        modifier = Modifier.heightIn(max = 280.dp),
+                    ) {
+                        choix.forEach { ref ->
+                            DropdownMenuItem(
+                                text = { Text(libelle(ref)) },
+                                onClick = {
+                                    dossier = ref.path
+                                    deroule = false
+                                },
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = stringResource(R.string.browser_note_aide),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onValider(titre, dossier)
+                    onFermer()
+                },
+                enabled = titre.isNotBlank(),
+            ) {
+                Text(stringResource(R.string.action_creer))
             }
         },
         dismissButton = {

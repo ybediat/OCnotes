@@ -66,6 +66,18 @@ data class FolderListingDto(
     val fromCache: Boolean = false,
 )
 
+/**
+ * Un dossier proposé comme destination, tel que `App.foldersJSON()` le rend.
+ *
+ * Le dossier de notes lui-même a un `path` vide et un `name` vide : la façade
+ * ne choisit pas son libellé, parce que l'interface l'affiche déjà en titre.
+ */
+@Serializable
+data class FolderRefDto(
+    val path: String = "",
+    val name: String = "",
+)
+
 /** Réponse de `App.createNoteJSON(...)` et `App.createFolderJSON(...)`. */
 @Serializable
 data class NoteRefDto(

@@ -7,18 +7,22 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SortByAlpha
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -75,7 +80,6 @@ private sealed interface Dialogue {
 @Composable
 fun BrowserScreen(
     onOuvrirNote: (String) -> Unit,
-    onReglages: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: BrowserViewModel = viewModel(
         factory = BrowserViewModel.factory(LocalContext.current.appContainer),
@@ -107,9 +111,12 @@ fun BrowserScreen(
         }
     }
 
-    // Le retour système remonte d'un dossier tant qu'on n'est pas à la racine ;
-    // au-delà, on laisse le système fermer l'application.
-    BackHandler(enabled = etat.peutRemonter) { viewModel.remonter() }
+    // Le retour système annule d'abord la recherche, puis remonte d'un dossier
+    // tant qu'on n'est pas à la racine ; au-delà, on laisse le système fermer
+    // l'application. Les deux gardes s'excluent, l'ordre de déclaration ne
+    // décide donc de rien.
+    BackHandler(enabled = etat.recherche.isNotBlank()) { viewModel.effacerRecherche() }
+    BackHandler(enabled = etat.recherche.isBlank() && etat.peutRemonter) { viewModel.remonter() }
 
     Scaffold(
         modifier = modifier,
@@ -131,17 +138,15 @@ fun BrowserScreen(
                         }
                     }
                 },
+                // Deux actions, pas quatre : la recherche a sa propre ligne,
+                // et les réglages vivent dans le tiroir. Ce qui reste ici est
+                // ce qui agit sur la liste affichée.
                 actions = {
+                    BoutonTri(tri = etat.tri, onChanger = viewModel::changerTri)
                     IconButton(onClick = viewModel::rafraichir) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = stringResource(R.string.browser_rafraichir),
-                        )
-                    }
-                    IconButton(onClick = onReglages) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = stringResource(R.string.menu_reglages),
                         )
                     }
                 },
@@ -172,6 +177,21 @@ fun BrowserScreen(
         },
     ) { paddings ->
         Column(modifier = Modifier.padding(paddings)) {
+            BarreRecherche(
+                valeur = etat.recherche,
+                onValeur = viewModel::chercher,
+                onEffacer = viewModel::effacerRecherche,
+                // La recherche suit le mode, et son invite doit le dire : un
+                // résultat manquant ne doit jamais passer pour une note perdue.
+                invite = stringResource(
+                    if (etat.enListePlate) {
+                        R.string.browser_recherche_invite_tout
+                    } else {
+                        R.string.browser_recherche_invite
+                    },
+                ),
+            )
+
             if (etat.depuisCache) BandeauCache()
 
             etat.erreur?.let { message ->
@@ -189,20 +209,39 @@ fun BrowserScreen(
                 // renvoie désormais comme tel même hors connexion : listing
                 // vide plutôt qu'erreur réseau.
                 etat.entrees.isEmpty() -> EtatVide(
-                    titre = stringResource(R.string.browser_vide_titre),
-                    detail = stringResource(
-                        if (etat.depuisCache) {
-                            R.string.browser_vide_cache
+                    titre = stringResource(
+                        if (etat.enListePlate) {
+                            R.string.browser_liste_vide_titre
                         } else {
-                            R.string.browser_vide_detail
+                            R.string.browser_vide_titre
+                        },
+                    ),
+                    detail = stringResource(
+                        when {
+                            etat.depuisCache -> R.string.browser_vide_cache
+                            etat.enListePlate -> R.string.browser_liste_vide_detail
+                            else -> R.string.browser_vide_detail
                         },
                     ),
                 )
 
+                // Un dossier plein dont la recherche ne retient rien n'est pas
+                // un dossier vide : le premier se corrige en effaçant le
+                // champ, le second en créant une note.
+                etat.rechercheSansResultat -> EtatVide(
+                    titre = stringResource(R.string.browser_recherche_vide_titre),
+                    detail = stringResource(R.string.browser_recherche_vide_detail),
+                )
+
                 else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(etat.entrees, key = { it.path }) { entree ->
+                    items(etat.entreesAffichees, key = { it.path }) { entree ->
                         LigneEntree(
                             entree = entree,
+                            // En arborescence le dossier est le titre de
+                            // l'écran : le répéter sur chaque ligne serait du
+                            // bruit. En liste plate c'est la seule façon de
+                            // savoir où vit une note.
+                            afficherDossier = etat.enListePlate,
                             onClick = { viewModel.ouvrir(entree) },
                             onRenommer = { dialogue = Dialogue.Renommer(entree) },
                             onSupprimer = { dialogue = Dialogue.Supprimer(entree) },
@@ -216,12 +255,10 @@ fun BrowserScreen(
     when (val d = dialogue) {
         null -> Unit
 
-        Dialogue.NouvelleNote -> SaisieDialog(
-            titre = stringResource(R.string.browser_nouvelle_note),
-            label = stringResource(R.string.browser_note_label),
-            valeurInitiale = "",
-            libelleValidation = stringResource(R.string.action_creer),
-            aide = stringResource(R.string.browser_note_aide),
+        Dialogue.NouvelleNote -> NouvelleNoteDialog(
+            dossiers = etat.dossiers,
+            dossierPropose = etat.dossierPropose,
+            nomRacine = etat.nomRacine,
             onValider = viewModel::creerNote,
             onFermer = { dialogue = null },
         )
@@ -256,10 +293,82 @@ fun BrowserScreen(
     }
 }
 
+/**
+ * Barre de recherche, posée sous la barre de titre et toujours visible.
+ *
+ * Toujours visible et jamais focalisée d'office : ouvrir un dossier ne doit
+ * pas faire surgir le clavier. Le champ se voit, il n'insiste pas.
+ *
+ * La croix n'apparaît qu'une fois quelque chose saisi — un bouton d'effacement
+ * sur un champ vide est un bouton mort.
+ */
+@Composable
+private fun BarreRecherche(
+    valeur: String,
+    onValeur: (String) -> Unit,
+    onEffacer: () -> Unit,
+    invite: String,
+) {
+    OutlinedTextField(
+        value = valeur,
+        onValueChange = onValeur,
+        placeholder = { Text(invite) },
+        // Icône décorative : l'invite nomme déjà le champ, la redoubler ferait
+        // dire la même chose deux fois à TalkBack.
+        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+        trailingIcon = {
+            if (valeur.isNotEmpty()) {
+                IconButton(onClick = onEffacer) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = stringResource(
+                            R.string.browser_recherche_effacer,
+                        ),
+                    )
+                }
+            }
+        },
+        singleLine = true,
+        shape = MaterialTheme.shapes.extraLarge,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+}
+
+/**
+ * Bouton de tri à deux états.
+ *
+ * L'icône **et** la description annoncent la même chose : l'ordre qu'un appui
+ * donnerait, pas celui en cours. Les faire diverger — l'icône pour l'état, la
+ * description pour l'action — ferait entendre à TalkBack le contraire de ce
+ * que l'écran montre. L'ordre en vigueur, lui, se lit dans la liste.
+ */
+@Composable
+private fun BoutonTri(tri: Tri, onChanger: () -> Unit) {
+    val propose = tri.suivant()
+
+    IconButton(onClick = onChanger) {
+        Icon(
+            imageVector = when (propose) {
+                Tri.NOM -> Icons.Default.SortByAlpha
+                Tri.DATE -> Icons.Default.Schedule
+            },
+            contentDescription = stringResource(
+                when (propose) {
+                    Tri.NOM -> R.string.browser_tri_par_nom
+                    Tri.DATE -> R.string.browser_tri_par_date
+                },
+            ),
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LigneEntree(
     entree: FolderEntryDto,
+    afficherDossier: Boolean,
     onClick: () -> Unit,
     onRenommer: () -> Unit,
     onSupprimer: () -> Unit,
@@ -271,7 +380,7 @@ private fun LigneEntree(
             Text(entree.display, maxLines = 1, overflow = TextOverflow.Ellipsis)
         },
         supportingContent = {
-            sousTitre(entree)?.let { texte ->
+            sousTitre(entree, afficherDossier)?.let { texte ->
                 Text(
                     text = texte,
                     style = MaterialTheme.typography.bodySmall,
@@ -347,13 +456,18 @@ private fun LigneEntree(
  * de chaque langue.
  */
 @Composable
-private fun sousTitre(entree: FolderEntryDto): String? {
+private fun sousTitre(entree: FolderEntryDto, afficherDossier: Boolean): String? {
     if (entree.isDir) return null
 
     val taille = Formatter.formatShortFileSize(LocalContext.current, entree.size)
     val etat = if (entree.pending) stringResource(R.string.browser_en_attente) else null
 
-    return listOfNotNull(dateLocale(entree.modTime), taille, etat)
+    // Le dossier se lit dans le chemin, dont il est le préfixe : la façade
+    // n'a pas de champ pour lui. Vide pour une note posée à la racine, qui
+    // n'a alors rien à afficher.
+    val dossier = if (afficherDossier) entree.path.substringBeforeLast('/', "").ifBlank { null } else null
+
+    return listOfNotNull(dossier, dateLocale(entree.modTime), taille, etat)
         .joinToString(stringResource(R.string.browser_soustitre_separateur))
 }
 

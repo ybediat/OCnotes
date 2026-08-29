@@ -306,6 +306,40 @@ class OpenNoteRepository(
     suspend fun listFolder(dir: String): FolderListingDto =
         json.decodeFromString(call { it.listFolderJSON(dir) })
 
+    /**
+     * Inventaire complet, à plat : toutes les notes, aucun dossier.
+     *
+     * Le dossier de chaque note se lit dans son `path`, dont il est le
+     * préfixe — la façade n'ajoute pas de champ pour ça.
+     */
+    suspend fun listAll(): FolderListingDto =
+        json.decodeFromString(call { it.listAllJSON() })
+
+    /**
+     * Reconstruit l'inventaire sans rien renvoyer.
+     *
+     * Pour le travailleur de synchronisation : il vient de pousser, donc
+     * l'inventaire du serveur a changé, mais personne ne regarde l'écran.
+     * Un échec ne remonte pas — l'inventaire précédent reste valable, et une
+     * synchronisation réussie ne doit pas être rapportée en échec pour ça.
+     */
+    suspend fun refreshIndex() {
+        try {
+            call { it.refreshIndex() }
+        } catch (_: OpenNoteException) {
+            // Sans conséquence : le prochain affichage réessaiera.
+        }
+    }
+
+    /**
+     * Tous les dossiers connus, pour choisir une destination.
+     *
+     * Servi depuis le cache, sans réseau : un sélecteur doit s'ouvrir tout de
+     * suite. La première entrée, de chemin vide, est le dossier de notes.
+     */
+    suspend fun folders(): List<FolderRefDto> =
+        json.decodeFromString(call { it.foldersJSON() })
+
     suspend fun readNote(notePath: String): String = call { it.readNote(notePath) }
 
     /**

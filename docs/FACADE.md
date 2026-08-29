@@ -91,6 +91,9 @@ sur l'instance : `app.stateJSON()`. La première lettre passe en minuscule.
 | `SelectWorkspace(driveID, root string) error` | choisit l'espace et le dossier de notes |
 | `DefaultRoot() string` | nom de dossier proposé au premier démarrage (`Notes`) |
 | `ListFolderJSON(dir string) (string, error)` | contenu d'un dossier |
+| `ListAllJSON() (string, error)` | inventaire complet, à plat — toutes les notes, aucun dossier |
+| `FoldersJSON() (string, error)` | tous les dossiers connus, pour choisir une destination |
+| `RefreshIndex() error` | reconstruit l'inventaire sans rien renvoyer (travailleur de synchro) |
 | `ReadNote(notePath string) (string, error)` | contenu d'une note |
 | `WriteNote(notePath, content string) error` | enregistre localement, **jamais d'erreur réseau** |
 | `RefreshNote(notePath string) error` | relit depuis le serveur |
@@ -168,6 +171,63 @@ token est en mémoire. Après un redémarrage il faut toujours rappeler `Restore
 > Passer `root` comme chemin fait demander `Notes` à une façade qui préfixe
 > déjà par `Notes` : le serveur cherche `Notes/Notes` et répond que le dossier
 > n'existe pas. Ce bug a été rencontré en vrai au premier lancement.
+
+### `ListAllJSON`
+
+Même forme que `ListFolderJSON`, à trois différences près : `path` est vide,
+**aucune entrée n'a `isDir` à vrai**, et les notes viennent de toute
+l'arborescence.
+
+```json
+{
+  "path": "",
+  "fromCache": false,
+  "entries": [
+    {"path": "Projets/a.md", "name": "a.md", "display": "a",
+     "isDir": false, "size": 42, "modTime": "2026-08-29T09:00:00Z", "pending": false}
+  ]
+}
+```
+
+Le dossier d'une note **se lit dans son `path`**, dont il est le préfixe. Aucun
+champ n'a été ajouté pour lui : le contrat reste celui de `ListFolderJSON`, et
+un `substringBeforeLast('/')` côté Kotlin suffit.
+
+> ⚠️ **L'inventaire du serveur retarde sur les écritures locales.**
+>
+> Quand le serveur expose son service de recherche, l'inventaire s'obtient en
+> une requête — mais son index est mis à jour de façon asynchrone, mesuré à
+> **~1,3 s** après une écriture. La façade fusionne donc systématiquement
+> l'inventaire distant avec ce que le cache sait de plus frais : une note
+> créée, modifiée ou supprimée localement est toujours reflétée, même si le
+> serveur l'ignore encore.
+>
+> Sans cette fusion, la note que l'utilisateur vient d'écrire disparaîtrait de
+> la liste pendant une seconde ou deux — l'application aurait l'air d'avoir
+> perdu le travail. `TestListAllJSONMontreUneNoteCreeeHorsConnexion` et
+> `TestSetIndexNEffacePasUneNoteEcriteLocalement` protègent cette règle.
+
+`fromCache` a le même sens qu'ailleurs : le réseau a manqué, l'inventaire
+servi est le dernier connu. Si aucun inventaire n'a jamais été constitué,
+`ListAllJSON` remonte l'erreur plutôt que d'annoncer une bibliothèque vide.
+
+### `FoldersJSON`
+
+```json
+[
+  {"path": "", "name": ""},
+  {"path": "Projets", "name": "Projets"},
+  {"path": "Projets/Archives", "name": "Archives"}
+]
+```
+
+La première entrée, de chemin vide, est **le dossier de notes lui-même**. Son
+`name` est vide à dessein : l'interface affiche déjà ce libellé en titre, et le
+faire traverser la frontière obligerait à choisir en Go un mot qui est déjà
+côté Kotlin.
+
+La liste vient du cache, jamais du réseau — un sélecteur doit s'ouvrir sans
+attendre. Elle est alimentée par `ListAllJSON` et par la navigation.
 
 ### `ListDrivesJSON`
 

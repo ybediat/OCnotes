@@ -6,6 +6,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import eu.opennote.data.OpenNoteRepository
+import eu.opennote.data.PreferencesAffichage
 import eu.opennote.data.TokenStore
 import eu.opennote.sync.SyncNotifier
 import eu.opennote.sync.SyncScheduler
@@ -16,12 +17,15 @@ import kotlinx.coroutines.SupervisorJob
 /**
  * Conteneur de dépendances, construit à la main.
  *
- * L'application a quatre objets à durée de vie processus et aucun graphe
+ * L'application a cinq objets à durée de vie processus et aucun graphe
  * d'injection à démêler : Hilt coûterait plus cher qu'il ne rapporterait.
  */
 class AppContainer(context: Context) {
 
     val tokenStore = TokenStore(context)
+
+    /** Réglages d'affichage : l'ordre de tri de la liste de notes. */
+    val preferencesAffichage = PreferencesAffichage(context)
 
     /**
      * `filesDir` est le stockage privé de l'application : c'est là que le cœur

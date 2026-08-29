@@ -76,6 +76,14 @@ type Store struct {
 	entries map[string]*Entry
 	queue   []Operation
 
+	// known est l'inventaire : toutes les notes de l'espace, y compris celles
+	// dont le contenu n'a jamais été téléchargé. Voir index.go — c'est ce qui
+	// permet à la liste plate de s'ouvrir hors connexion.
+	known map[string]*Known
+
+	// indexed distingue « inventaire vide » de « inventaire jamais fait ».
+	indexed bool
+
 	// folders retient les dossiers connus. Le cache ne matérialise pas les
 	// dossiers sur le disque — seules les notes y sont stockées — mais un
 	// dossier vide créé hors connexion doit rester visible dans le
@@ -90,6 +98,8 @@ type persisted struct {
 	Entries map[string]*Entry `json:"entries"`
 	Queue   []Operation       `json:"queue"`
 	Folders map[string]bool   `json:"folders,omitempty"`
+	Known   map[string]*Known `json:"known,omitempty"`
+	Indexed bool              `json:"indexed,omitempty"`
 }
 
 // Open ouvre — ou crée — un cache dans le dossier indiqué.
@@ -106,6 +116,7 @@ func Open(dir string) (*Store, error) {
 		dir:     dir,
 		entries: map[string]*Entry{},
 		folders: map[string]bool{},
+		known:   map[string]*Known{},
 	}
 
 	data, err := os.ReadFile(s.indexPath())
@@ -126,6 +137,10 @@ func Open(dir string) (*Store, error) {
 	if state.Folders != nil {
 		s.folders = state.Folders
 	}
+	if state.Known != nil {
+		s.known = state.Known
+	}
+	s.indexed = state.Indexed
 	s.queue = state.Queue
 	return s, nil
 }
@@ -162,7 +177,14 @@ func contentHash(content []byte) string {
 // L'écriture passe par un fichier temporaire renommé : une coupure de courant
 // au mauvais moment laisserait sinon un index tronqué, donc un cache perdu.
 func (s *Store) save() error {
-	state := persisted{Version: indexVersion, Entries: s.entries, Queue: s.queue, Folders: s.folders}
+	state := persisted{
+		Version: indexVersion,
+		Entries: s.entries,
+		Queue:   s.queue,
+		Folders: s.folders,
+		Known:   s.known,
+		Indexed: s.indexed,
+	}
 	data, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("store: [%s] sérialisation de l'index: %w", CodeStorageIO, err)
@@ -344,6 +366,7 @@ func (s *Store) dropLocked(itemPath string) {
 		}
 	}
 	s.forgetFolderLocked(itemPath)
+	s.forgetKnownLocked(itemPath)
 }
 
 // Rename déplace une note dans le cache et inscrit le déplacement en file.
@@ -382,6 +405,8 @@ func (s *Store) rename(from, to string, enqueue bool) error {
 		delete(s.entries, from)
 		s.entries[to] = entry
 	}
+
+	s.renameKnownLocked(from, to)
 
 	if enqueue {
 		s.enqueueLocked(Operation{Kind: OpMove, Path: from, Target: to})

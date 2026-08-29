@@ -85,7 +85,6 @@ fun OpenNoteNavHost(
         composable(Routes.NAVIGATEUR) {
             BrowserScreen(
                 onOuvrirNote = { chemin -> navController.navigate(Routes.editeur(chemin)) },
-                onReglages = { navController.navigate(Routes.REGLAGES) },
             )
         }
 

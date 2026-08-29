@@ -179,6 +179,33 @@
     <string name="browser_type_note">Note</string>
     <string name="browser_actions">Actions sur « %1$s »</string>
 
+    <!-- Recherche. Elle ne porte que sur le dossier affiché : l'invite doit
+         le dire, sinon un résultat manquant passe pour une note perdue. -->
+    <string name="browser_recherche_invite">Rechercher dans ce dossier</string>
+    <string name="browser_recherche_invite_tout">Rechercher dans toutes les notes</string>
+    <string name="browser_recherche_effacer">Effacer la recherche</string>
+    <string name="browser_recherche_vide_titre">Aucun résultat</string>
+    <string name="browser_recherche_vide_detail">Aucun nom ne correspond à votre recherche.</string>
+
+    <!-- Créer une note demande désormais où la ranger. L\'application le
+         choisissait déjà, mais sans le dire. -->
+    <string name="browser_note_dossier">Dossier</string>
+
+    <!-- Choix de la forme de la page d\'accueil, dans le tiroir. -->
+    <string name="menu_affichage">Affichage</string>
+    <string name="menu_mode_arborescence">Par dossiers</string>
+    <string name="menu_mode_liste">Toutes les notes</string>
+
+    <!-- La liste plate n\'a pas de dossier courant : l\'invitation à créer une
+         note ne peut pas parler « de ce dossier ». -->
+    <string name="browser_liste_vide_titre">Aucune note</string>
+    <string name="browser_liste_vide_detail">Créez votre première note avec le bouton en bas de l\'écran.</string>
+
+    <!-- Bouton de tri : son icône montre l'ordre en cours, sa description dit
+         ce qu'un appui ferait — c'est ce dont TalkBack a besoin. -->
+    <string name="browser_tri_par_nom">Trier par nom</string>
+    <string name="browser_tri_par_date">Trier par date</string>
+
     <!-- Un dossier vide n'est pas une panne : le dire, et dire quoi faire. -->
     <string name="browser_vide_titre">Ce dossier est vide</string>
     <string name="browser_vide_detail">Créez une note avec le bouton en bas de l\'écran.</string>

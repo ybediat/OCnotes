@@ -4,6 +4,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.HorizontalDivider
@@ -15,11 +17,16 @@ import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.opennote.R
+import eu.opennote.appContainer
+import eu.opennote.ui.browser.ModeAffichage
 import kotlinx.coroutines.launch
 
 /**
@@ -41,6 +48,17 @@ import kotlinx.coroutines.launch
  *
  * `gestesActifs` sert à éteindre le geste là où le tiroir n'a rien à offrir —
  * la connexion, le choix d'espace — plutôt que d'ouvrir un menu inerte.
+ *
+ * # Le choix du mode d'affichage vit ici, pas dans les réglages
+ *
+ * Basculer entre l'arborescence et la liste plate n'est pas une configuration
+ * qu'on pose une fois : c'est deux façons de regarder la même bibliothèque, et
+ * on passe de l'une à l'autre selon ce qu'on cherche. Un réglage enfoui à deux
+ * écrans de là rendrait le second mode inutilisable en pratique.
+ *
+ * Le tiroir lit la préférence partagée plutôt que de traverser un ViewModel :
+ * il enveloppe le NavHost entier et ne sait pas quel écran est affiché
+ * dessous. Le navigateur observe le même flux et se recharge tout seul.
  */
 @Composable
 fun TiroirApplication(
@@ -63,6 +81,41 @@ fun TiroirApplication(
                     modifier = Modifier.padding(horizontal = 28.dp, vertical = 20.dp),
                 )
                 HorizontalDivider()
+
+                val preferences = LocalContext.current.appContainer.preferencesAffichage
+                val mode by preferences.mode.collectAsStateWithLifecycle()
+                val modeCourant = ModeAffichage.depuis(mode)
+
+                Text(
+                    text = stringResource(R.string.menu_affichage),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 12.dp),
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.FolderOpen, contentDescription = null) },
+                    label = { Text(stringResource(R.string.menu_mode_arborescence)) },
+                    selected = modeCourant == ModeAffichage.ARBORESCENCE,
+                    onClick = {
+                        preferences.definirMode(ModeAffichage.ARBORESCENCE.name)
+                        fermer()
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+                    label = { Text(stringResource(R.string.menu_mode_liste)) },
+                    selected = modeCourant == ModeAffichage.LISTE,
+                    onClick = {
+                        preferences.definirMode(ModeAffichage.LISTE.name)
+                        fermer()
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.Settings, contentDescription = null) },

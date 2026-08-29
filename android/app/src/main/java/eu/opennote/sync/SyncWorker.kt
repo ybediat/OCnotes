@@ -37,6 +37,13 @@ class SyncWorker(
                 container.syncNotifier.notifyConflicts(report.conflicts)
             }
 
+            // L'inventaire vient de changer : on vient de pousser. Le
+            // reconstruire maintenant, pendant qu'il y a du réseau, est ce qui
+            // permet à la liste plate de s'ouvrir instantanément la prochaine
+            // fois — y compris dans le métro. L'échec est sans conséquence :
+            // l'inventaire précédent reste servi.
+            container.repository.refreshIndex()
+
             // `SyncJSON` ne lève pas sur panne réseau : l'incident est dans le
             // champ `error`, à côté de ce qui a tout de même été poussé, et sa
             // catégorie arrive toute extraite dans `errorCode`. De quoi
