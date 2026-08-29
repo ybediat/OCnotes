@@ -144,3 +144,95 @@ object DriveType {
     const val VIRTUAL = "virtual"
     const val MOUNTPOINT = "mountpoint"
 }
+
+/**
+ * Une portion mise en forme dans le texte d'un [NoteBlockDto].
+ *
+ * [start] et [end] sont en **unités de code UTF-16**, comme partout ailleurs à
+ * la frontière : ce sont exactement les indices de `String` en Kotlin, donc ils
+ * se posent tels quels dans un `AnnotatedString`. Aucune conversion, dans
+ * aucun sens.
+ */
+@Serializable
+data class NoteSpanDto(
+    val start: Int = 0,
+    val end: Int = 0,
+    val style: String = "",
+    /** Destination, uniquement pour [SpanStyleId.LIEN]. */
+    val href: String = "",
+)
+
+/**
+ * Un bloc d'affichage de l'aperçu, tel que renvoyé par `renderNoteJSON`.
+ *
+ * Le modèle est **plat** : l'imbrication tient dans [depth] (listes) et
+ * [quote] (citations). Il n'y a pas d'arbre à descendre pour dessiner une
+ * liste, et les champs qui ne servent pas au [kind] du bloc restent à zéro.
+ */
+@Serializable
+data class NoteBlockDto(
+    val kind: String = "",
+    val text: String = "",
+    val spans: List<NoteSpanDto> = emptyList(),
+    /** Titre : 1 à 6. */
+    val level: Int = 0,
+    /** Imbrication de liste, 0 au premier niveau. */
+    val depth: Int = 0,
+    /** Imbrication de citation, 0 hors citation. */
+    val quote: Int = 0,
+    /** Liste numérotée : le numéro à **afficher**, pas le rang. */
+    val number: Int = 0,
+    val checked: Boolean = false,
+    /** Bloc de code : le langage annoncé, s'il y en a un. */
+    val lang: String = "",
+    val cells: List<String> = emptyList(),
+    /** Ligne de tableau : c'est l'en-tête. */
+    val header: Boolean = false,
+)
+
+/** Valeurs du champ `kind` d'un [NoteBlockDto]. */
+object BlockKind {
+    const val PARAGRAPHE = "paragraph"
+    const val TITRE = "heading"
+    const val PUCE = "bullet"
+    const val NUMEROTE = "ordered"
+    const val TACHE = "task"
+    const val CODE = "code"
+    const val TRAIT = "rule"
+    const val IMAGE = "image"
+    const val LIGNE_TABLEAU = "tablerow"
+
+    /** Fichier non interprété — un .txt — rendu tel quel, en un seul bloc. */
+    const val BRUT = "plain"
+}
+
+/** Valeurs du champ `style` d'un [NoteSpanDto]. */
+object SpanStyleId {
+    const val GRAS = "bold"
+    const val ITALIQUE = "italic"
+    const val BARRE = "strike"
+    const val CODE = "code"
+    const val LIEN = "link"
+}
+
+/**
+ * Réponse de `App.prepareEditJSON(...)` : une note prête pour le champ de
+ * saisie.
+ *
+ * [text] porte les données en ligne remplacées par des jetons courts, et
+ * [images] ce qui en a été retiré. **Les deux vont ensemble** : enregistrer
+ * [text] sans repasser par `restoreImages` écrirait le texte allégé sur le
+ * serveur, et l'image serait perdue dans la vraie note, sans message.
+ *
+ * [editable] reste faux quand le texte allégé porte encore un mot démesuré —
+ * un fichier qui n'a rien à voir avec une image. La note s'ouvre alors en
+ * aperçu seul : le champ de saisie ne survivrait pas à sa mise en page.
+ */
+@Serializable
+data class PreparedEditDto(
+    val text: String = "",
+    val images: List<String> = emptyList(),
+    val editable: Boolean = true,
+    /** Plus longue suite de caractères sans espace, en unités UTF-16. */
+    val longestWord: Int = 0,
+)

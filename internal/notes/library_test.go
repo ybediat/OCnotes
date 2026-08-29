@@ -229,6 +229,61 @@ func TestRenamePreserveLExtension(t *testing.T) {
 	}
 }
 
+// Un .txt est une note lisible.
+//
+// C'est le format par lequel OpenCloud crée ses fichiers texte : un dossier
+// alimenté depuis l'interface web en contient, et les ignorer donnerait un
+// dossier qui paraît vide alors qu'il ne l'est pas.
+func TestListInclutLeTexteBrut(t *testing.T) {
+	lib, _ := newLibrary(t, "Notes",
+		"Notes/note.md",
+		"Notes/liste.txt",
+		"Notes/photo.png",
+	)
+
+	listing, err := lib.List(context.Background(), "")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	got := map[string]string{}
+	for _, n := range listing.Notes {
+		got[n.Name] = n.DisplayName
+	}
+	if _, ok := got["liste.txt"]; !ok {
+		t.Errorf("le .txt n'est pas listé: %+v", listing.Notes)
+	}
+	if got["liste.txt"] != "liste.txt" {
+		t.Errorf("display du .txt = %q, attendu %q : un .txt garde son extension pour ne pas se confondre avec le .md de même nom", got["liste.txt"], "liste.txt")
+	}
+	if got["note.md"] != "note" {
+		t.Errorf("display du .md = %q, attendu %q", got["note.md"], "note")
+	}
+	if _, ok := got["photo.png"]; ok {
+		t.Error("un fichier qui n'est pas une note a été listé")
+	}
+}
+
+// Renommer un .txt ne le transforme pas en .md.
+//
+// L'utilisateur saisit un nom, pas un format. Réécrire l'extension changerait
+// le fichier — et son mode d'affichage — sans qu'il l'ait demandé.
+func TestRenameNeChangePasLeFormat(t *testing.T) {
+	lib, _ := newLibrary(t, "Notes", "Notes/Projets/journal.txt")
+	ctx := context.Background()
+
+	newPath, err := lib.Rename(ctx, "Projets/journal.txt", "carnet")
+	if err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+	if newPath != "Projets/carnet.txt" {
+		t.Fatalf("chemin = %q, attendu \"Projets/carnet.txt\"", newPath)
+	}
+	if _, _, err := lib.Read(ctx, newPath); err != nil {
+		t.Errorf("la note renommée est illisible: %v", err)
+	}
+}
+
 func TestRenameDossierSansExtension(t *testing.T) {
 	lib, _ := newLibrary(t, "Notes", "Notes/Ancien/a.md")
 

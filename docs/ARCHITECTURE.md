@@ -358,11 +358,11 @@ Ordre indicatif. Les briques 4 et 8 sont parallélisables dès le début.
 | **2** | ~~Modèle notes~~ **fait** | `internal/notes` — `Library`, validation de nommage, bootstrap, anti-collision |
 | **3** | ~~Store & sync~~ **fait** | `internal/store` — cache, file offline persistante, conflit ETag → copie `(conflit …)` |
 | **4** | ~~Markdown~~ **fait** | `internal/markdown` — 13 actions de mise en forme + extraction de titre |
-| **4-bis** | Rendu preview | goldmark, à ajouter quand l'aperçu sera au programme |
+| **4-bis** | ~~Rendu preview~~ **fait** | `internal/markdown/render.go` — goldmark en analyseur seul, blocs plats vers Compose ; 18 cas |
 | **5** | ~~Config~~ **fait** | `internal/config` — URL, compte, espace, URL WebDAV, racine ; **aucun secret**, vérifié par un test |
 | **6** | ~~Façade `mobile/`~~ **écrite** | 23 méthodes, contrat gelé dans [FACADE.md](FACADE.md), compatibilité gomobile vérifiée par analyse syntaxique |
 | **7** | ~~UI Compose~~ **compile** | 43 fichiers sous `android/`, AAR généré, APK produit — jamais exécutée sur un appareil |
-| **9** | Build & distrib | APK release à 8,5 Mo ; signature et distribution restent à faire |
+| **9** | Build & distrib | APK release à 9,2 Mo ; signature et distribution restent à faire |
 | **8** | ~~CLI desktop~~ **fait** | `cmd/opennote-cli` — `drives`, `ls`, `tree`, `cat`, `put`, `mkdir`, `mv`, `rm` |
 | **9** | Build & distrib | APK signé ; distribution par APK direct / Obtainium / F-Droid |
 
@@ -398,10 +398,12 @@ ABI `arm64-v8a` seule :
 | `libgojni.so` sans `-ldflags="-s -w"` | 14 Mo |
 | `libgojni.so` avec | 7,2 Mo |
 | APK debug | 32,9 Mo |
-| **APK release (R8 + shrink)** | **8,5 Mo** |
+| APK release avant goldmark | 8,5 Mo |
+| **APK release (R8 + shrink)** | **9,2 Mo** |
 
-Le risque est écarté : 8,5 Mo pour une application Compose embarquant le
-runtime Go complet.
+Le risque est écarté : 9,2 Mo pour une application Compose embarquant le
+runtime Go complet, l'analyseur Markdown compris. L'aperçu a coûté environ
+0,7 Mo — mesuré, pas estimé.
 
 ### Brique 4 — pourquoi elle est isolée
 

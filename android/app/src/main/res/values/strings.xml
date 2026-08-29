@@ -106,4 +106,27 @@
          Navigateur
          ================================================================ -->
     <string name="browser_supprime">« %1$s » supprimé.</string>
+
+    <!-- ================================================================
+         Menu latéral
+         ================================================================ -->
+    <string name="menu_reglages">Réglages</string>
+
+    <!-- ================================================================
+         Aperçu
+
+         Lecture seule : la note s'affiche mise en forme, sans champ de
+         saisie. Un fichier texte, lui, n'est jamais interprété.
+         ================================================================ -->
+    <string name="apercu_activer">Aperçu</string>
+    <string name="apercu_quitter">Modifier</string>
+    <!-- Repère posé à la place d'une image : la source n'est pas affichée. -->
+    <string name="apercu_image">Image</string>
+    <string name="apercu_vide">Cette note est vide.</string>
+    <!--
+        Affiché quand la note contient une suite de caractères sans espace trop
+        longue pour un champ de saisie — typiquement une image collée par
+        l'interface web. Le message dit la cause, pas la mécanique.
+    -->
+    <string name="apercu_lecture_seule">Cette note contient un élément trop long pour être modifié ici. Elle est ouverte en lecture seule.</string>
 </resources>

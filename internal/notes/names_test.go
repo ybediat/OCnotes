@@ -142,12 +142,67 @@ func TestWithExtension(t *testing.T) {
 		"note":          "note.md",
 		"note.md":       "note.md",
 		"note.markdown": "note.markdown",
-		"note.txt":      "note.txt.md",
-		"Ma réunion":    "Ma réunion.md",
+		// Depuis la prise en charge du texte brut, une extension .txt
+		// explicitement saisie est respectée : « note.txt.md » était le
+		// résultat d'une époque où .txt n'était pas un format connu.
+		"note.txt":   "note.txt",
+		"Ma réunion": "Ma réunion.md",
 	}
 	for in, want := range tests {
 		if got := WithExtension(in); got != want {
 			t.Errorf("WithExtension(%q) = %q, attendu %q", in, got, want)
+		}
+	}
+}
+
+// WithExtensionOf préserve le format du fichier renommé.
+//
+// C'est la règle qui empêche un renommage de transformer silencieusement un
+// texte brut en Markdown, et réciproquement.
+func TestWithExtensionOfPreserveLeFormat(t *testing.T) {
+	tests := []struct {
+		ref, name, want string
+	}{
+		{"Projets/journal.txt", "carnet", "carnet.txt"},
+		{"Projets/journal.md", "carnet", "carnet.md"},
+		{"Projets/journal.markdown", "carnet", "carnet.markdown"},
+		// Une extension explicitement saisie l'emporte sur celle d'origine :
+		// c'est une conversion demandée, pas un accident.
+		{"journal.txt", "carnet.md", "carnet.md"},
+		{"journal.md", "carnet.txt", "carnet.txt"},
+		// Une référence qui n'est pas une note — un dossier — retombe sur
+		// l'extension d'écriture.
+		{"Projets", "carnet", "carnet.md"},
+	}
+	for _, tc := range tests {
+		if got := WithExtensionOf(tc.ref, tc.name); got != tc.want {
+			t.Errorf("WithExtensionOf(%q, %q) = %q, attendu %q", tc.ref, tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestIsNoteEtIsMarkdownNeRepondentPasALaMemeQuestion(t *testing.T) {
+	tests := []struct {
+		name           string
+		note, md, brut bool
+	}{
+		{"journal.md", true, true, false},
+		{"journal.markdown", true, true, false},
+		{"journal.MD", true, true, false},
+		{"journal.txt", true, false, true},
+		{"journal.TXT", true, false, true},
+		{"photo.jpg", false, false, false},
+		{"Projets", false, false, false},
+	}
+	for _, tc := range tests {
+		if got := IsNote(tc.name); got != tc.note {
+			t.Errorf("IsNote(%q) = %v, attendu %v", tc.name, got, tc.note)
+		}
+		if got := IsMarkdown(tc.name); got != tc.md {
+			t.Errorf("IsMarkdown(%q) = %v, attendu %v", tc.name, got, tc.md)
+		}
+		if got := IsPlainText(tc.name); got != tc.brut {
+			t.Errorf("IsPlainText(%q) = %v, attendu %v", tc.name, got, tc.brut)
 		}
 	}
 }
@@ -158,6 +213,10 @@ func TestDisplayName(t *testing.T) {
 		"Ma réunion.md": "Ma réunion",
 		"note.markdown": "note",
 		"Projets":       "Projets",
+		// Le texte brut garde son extension : « notes.txt » et « notes.md »
+		// peuvent cohabiter dans un dossier, et deux lignes « notes » y
+		// désigneraient deux fichiers différents.
+		"notes.txt": "notes.txt",
 	}
 	for in, want := range tests {
 		if got := DisplayName(in); got != want {

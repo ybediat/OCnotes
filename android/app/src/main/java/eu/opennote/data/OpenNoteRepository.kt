@@ -402,4 +402,58 @@ class OpenNoteRepository(
         )
         return json.decodeFromString(call { it.applyFormatJSON(request) })
     }
+
+    // --- Aperçu -------------------------------------------------------------
+
+    /**
+     * Blocs d'affichage d'une note, pour l'aperçu en lecture seule.
+     *
+     * Appel **pur** : ni réseau, ni cache, ni session. L'aperçu marche donc
+     * hors connexion, et sur un brouillon que l'utilisateur vient de taper
+     * sans l'avoir enregistré — on passe le texte affiché, pas le chemin.
+     *
+     * Le [name] compte autant que le contenu : c'est lui qui décide si le
+     * texte est interprété comme du Markdown ou rendu tel quel.
+     */
+    suspend fun renderNote(name: String, content: String): List<NoteBlockDto> =
+        json.decodeFromString(call { it.renderNoteJSON(name, content) })
+
+    /**
+     * Vrai pour un fichier affiché tel quel, sans interprétation.
+     *
+     * La question se pose avant qu'il y ait des blocs à regarder — un fichier
+     * vide n'en produit aucun — d'où cet appel séparé. La liste des extensions
+     * reste en Go : la redériver ici la ferait diverger au premier format
+     * ajouté. Appel synchrone et sans effet, il ne touche ni disque ni réseau.
+     */
+    fun isPlainText(name: String): Boolean = Mobile.isPlainText(name)
+
+    /**
+     * Allège une note avant de l'ouvrir dans un champ de saisie.
+     *
+     * Une image insérée depuis l'interface web d'OpenCloud est un
+     * `data:image/jpeg;base64,…` de plusieurs dizaines de milliers de
+     * caractères **sans une espace**. Confié tel quel à un `TextField`, ce
+     * pavé fait tuer l'application par le système : le moteur de retour à la
+     * ligne d'Android cherche des points de coupure là où il n'y en a aucun,
+     * en mémoire native, hors du tas Java — d'où une mort de processus sans la
+     * moindre exception à lire.
+     *
+     * Le résultat doit toujours repartir par [restoreImages] avant écriture.
+     */
+    suspend fun prepareEdit(name: String, content: String): PreparedEditDto =
+        json.decodeFromString(call { it.prepareEditJSON(name, content) })
+
+    /**
+     * Remet les données en ligne à la place de leurs jetons.
+     *
+     * **À appeler avant chaque écriture.** Un jeton effacé par l'utilisateur ne
+     * revient pas : supprimer le repère d'une image, c'est supprimer l'image,
+     * et c'est le seul geste dont il dispose pour ça depuis un téléphone.
+     */
+    suspend fun restoreImages(text: String, images: List<String>): String {
+        if (images.isEmpty()) return text
+        val encodees = json.encodeToString(images)
+        return call { it.restoreImages(text, encodees) }
+    }
 }

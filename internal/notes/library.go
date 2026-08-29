@@ -144,7 +144,7 @@ func (l *Library) List(ctx context.Context, dir string) (Listing, error) {
 			listing.Folders = append(listing.Folders, Folder{Path: relative, Name: r.Name})
 			continue
 		}
-		if !IsMarkdown(r.Name) {
+		if !IsNote(r.Name) {
 			continue
 		}
 		listing.Notes = append(listing.Notes, Note{
@@ -290,14 +290,19 @@ func (l *Library) CreateFolder(ctx context.Context, dir, name string) (Folder, e
 }
 
 // ResolveRename calcule le chemin résultant d'un renommage, sans rien
-// contacter. L'extension .md est réajoutée si la cible est une note.
+// contacter.
+//
+// L'extension est réajoutée si la cible est une note, et c'est *celle du
+// fichier renommé* qui est reprise : renommer « journal.txt » en « carnet »
+// donne « carnet.txt ». Forcer .md ici changerait le format du fichier au dos
+// de l'utilisateur, qui n'a demandé qu'un nouveau nom.
 //
 // Exposé pour que la façade puisse renommer hors connexion, où elle doit
 // aboutir au même chemin que le fera plus tard la synchronisation.
 func ResolveRename(itemPath, newName string) (string, error) {
 	newName = strings.TrimSpace(newName)
-	if IsMarkdown(itemPath) {
-		newName = WithExtension(newName)
+	if IsNote(itemPath) {
+		newName = WithExtensionOf(itemPath, newName)
 	}
 	if err := ValidateName(newName); err != nil {
 		return "", err
@@ -383,9 +388,41 @@ func (l *Library) Delete(ctx context.Context, itemPath string) error {
 
 // TitleOf renvoie le titre à afficher pour une note : celui écrit dans le
 // contenu s'il y en a un, sinon le nom du fichier.
+//
+// Le format décide de la lecture, d'où le besoin de Note.Name : dans un .txt
+// il n'y a pas de « # » à retirer, seulement une première ligne.
 func TitleOf(note Note, content []byte) string {
-	if title := markdown.Title(string(content)); title != "" {
+	title := markdown.Title(string(content))
+	if IsPlainText(note.Name) {
+		title = markdown.PlainTitle(string(content))
+	}
+	if title != "" {
 		return title
 	}
 	return note.DisplayName
+}
+
+// Render prépare l'affichage d'une note : le format est déduit du nom.
+//
+// C'est ici, et nulle part ailleurs, que se décide si un contenu doit être
+// interprété. Le paquet markdown ne connaît pas les extensions et l'interface
+// n'a pas à les connaître : lui laisser ce choix reviendrait à recopier la
+// liste des extensions en Kotlin, où elle divergerait au premier ajout.
+func Render(name string, content []byte) []markdown.Block {
+	if IsPlainText(name) {
+		return markdown.RenderPlain(string(content))
+	}
+	return markdown.Render(string(content))
+}
+
+// PrepareEdit allège un contenu avant de le confier à un champ de saisie.
+//
+// Comme Render, c'est le nom qui décide : un .txt n'est pas du Markdown, il
+// n'a pas d'image en ligne à en sortir. Les données retirées reviennent par
+// markdown.RestoreInlineData au moment d'enregistrer.
+func PrepareEdit(name, content string) (string, []string) {
+	if IsPlainText(name) {
+		return content, nil
+	}
+	return markdown.ExtractInlineData(content)
 }

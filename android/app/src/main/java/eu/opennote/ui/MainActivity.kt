@@ -8,7 +8,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Surface
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -16,9 +18,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import eu.opennote.appContainer
 import eu.opennote.ui.common.ChargementPleinEcran
+import eu.opennote.ui.common.TiroirApplication
 import eu.opennote.ui.root.DemarrageState
 import eu.opennote.ui.root.RootViewModel
 import eu.opennote.ui.theme.OpenNoteTheme
@@ -62,6 +66,16 @@ private fun OpenNoteApp(
     val demarrage by viewModel.etat.collectAsStateWithLifecycle()
     val sessionExpiree by viewModel.sessionExpiree.collectAsStateWithLifecycle()
     val navController = rememberNavController()
+    val etatTiroir = rememberDrawerState(DrawerValue.Closed)
+
+    // Le geste ne s'active que là où le menu a quelque chose à offrir : sur
+    // l'écran de connexion ou le choix d'espace, il n'y a nulle part où aller,
+    // et un tiroir vide qui s'ouvre est une promesse en l'air.
+    val destination by navController.currentBackStackEntryAsState()
+    val gestesActifs = when (destination?.destination?.route) {
+        Routes.NAVIGATEUR, Routes.EDITEUR -> true
+        else -> false
+    }
 
     // Un token rejeté en arrière-plan ne se répare pas tout seul : on ramène
     // l'utilisateur à la saisie plutôt que de le laisser devant une liste qui
@@ -77,10 +91,18 @@ private fun OpenNoteApp(
     when (val etat = demarrage) {
         DemarrageState.EnCours -> ChargementPleinEcran()
 
-        is DemarrageState.Pret -> OpenNoteNavHost(
-            navController = navController,
-            depart = etat.depart,
-            messageDemarrage = etat.message,
-        )
+        is DemarrageState.Pret -> TiroirApplication(
+            etatTiroir = etatTiroir,
+            gestesActifs = gestesActifs,
+            onReglages = {
+                navController.navigate(Routes.REGLAGES) { launchSingleTop = true }
+            },
+        ) {
+            OpenNoteNavHost(
+                navController = navController,
+                depart = etat.depart,
+                messageDemarrage = etat.message,
+            )
+        }
     }
 }

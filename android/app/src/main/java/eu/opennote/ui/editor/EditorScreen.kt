@@ -5,9 +5,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -15,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -26,10 +31,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.opennote.R
 import eu.opennote.appContainer
 import eu.opennote.ui.common.ChargementPleinEcran
 import eu.opennote.ui.common.resoudre
@@ -104,11 +112,47 @@ fun EditorScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour")
                     }
                 },
+                actions = {
+                    // Rien à basculer sur une note en lecture seule : un
+                    // bouton qui ne fait rien vaut moins que pas de bouton.
+                    if (!etat.modifiable) return@TopAppBar
+
+                    // Emplacement provisoire : ce geste rejoindra le menu
+                    // latéral, où il sera nommé plutôt que dessiné.
+                    IconButton(onClick = viewModel::basculerApercu) {
+                        if (etat.apercu) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = stringResource(R.string.apercu_quitter),
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Visibility,
+                                contentDescription = stringResource(R.string.apercu_activer),
+                            )
+                        }
+                    }
+                },
             )
         },
     ) { paddings ->
         if (etat.chargement) {
             ChargementPleinEcran(Modifier.padding(paddings))
+            return@Scaffold
+        }
+
+        // L'aperçu remplace la saisie plutôt que de la doubler : sur un
+        // téléphone, deux volets côte à côte ne laisseraient de place ni à
+        // l'un ni à l'autre.
+        if (etat.apercu) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddings),
+            ) {
+                if (!etat.modifiable) BandeauLectureSeule()
+                VueMarkdown(blocs = etat.blocs, modifier = Modifier.weight(1f))
+            }
             return@Scaffold
         }
 
@@ -138,9 +182,45 @@ fun EditorScreen(
                     .padding(horizontal = 4.dp),
             )
 
-            FormatToolbar(
-                actions = etat.actions,
-                onAction = viewModel::appliquer,
+            // Rien à mettre en forme dans un .txt : les marqueurs y
+            // resteraient des marqueurs, y compris à l'aperçu.
+            if (!etat.texteBrut) {
+                FormatToolbar(
+                    actions = etat.actions,
+                    onAction = viewModel::appliquer,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Explique pourquoi la note ne s'ouvre pas en saisie.
+ *
+ * Sans ce bandeau, l'absence de champ de texte passerait pour une panne. Le
+ * message dit la cause — une suite de caractères démesurée — plutôt que la
+ * mécanique, dont l'utilisateur n'a rien à faire.
+ */
+@Composable
+private fun BandeauLectureSeule() {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Default.Lock,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.padding(end = 12.dp),
+            )
+            Text(
+                text = stringResource(R.string.apercu_lecture_seule),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
         }
     }

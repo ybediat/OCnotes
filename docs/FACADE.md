@@ -104,18 +104,25 @@ sur l'instance : `app.stateJSON()`. La première lettre passe en minuscule.
 | `PendingCount() int` | opérations en attente |
 | `ApplyFormatJSON(requestJSON string) (string, error)` | mise en forme Markdown |
 | `FormatActionsJSON() (string, error)` | liste des actions de la barre d'outils |
+| `RenderNoteJSON(name, content string) (string, error)` | blocs d'affichage pour l'aperçu en lecture seule |
+| `PrepareEditJSON(name, content string) (string, error)` | allège une note avant de l'ouvrir en saisie |
+| `RestoreImages(text, imagesJSON string) (string, error)` | **obligatoire avant toute écriture** d'une note allégée |
 | `ErrorCode(message string) string` | code d'une erreur |
 | `IsAuthError` / `IsConflictError` / `IsNotFoundError` `(message string) bool` | tests de catégorie |
 | `MaxNameBytes() int` | longueur maximale d'un nom, en octets |
 | `ForbiddenNameChars() string` | caractères refusés à la création d'un nom |
+| `MaxEditableWord() int` | longueur maximale d'un mot affichable en saisie |
+| `IsPlainText(name string) bool` | *fonction de paquet* — le fichier s'affiche tel quel, sans interprétation |
 
 Tous les chemins sont **relatifs au dossier de notes**, sans slash initial.
 Une chaîne vide désigne la racine.
 
-`Rename` réajoute `.md` si le chemin visé est une note : passez le nom sans
-extension (le champ `display` d'un listing), c'est ce que l'utilisateur a sous
-les yeux. Passer le nom avec `.md` fonctionne aussi, l'extension n'est pas
-doublée.
+`Rename` réajoute l'extension si le chemin visé est une note, et c'est **celle
+du fichier renommé** : `journal.txt` renommé en `carnet` donne `carnet.txt`.
+Passez le nom sans extension (le champ `display` d'un listing), c'est ce que
+l'utilisateur a sous les yeux ; passer le nom avec son extension fonctionne
+aussi, elle n'est pas doublée. Saisir une *autre* extension de note la change
+délibérément.
 
 ### Détails de binding à connaître
 
@@ -193,9 +200,12 @@ L'espace `virtual` nommé « Shares » est un agrégat de partages, pas un stock
 }
 ```
 
-Les dossiers viennent en premier. `display` est le nom sans extension, à
-afficher tel quel. `pending: true` signale une modification locale pas encore
-synchronisée — un bon endroit pour une pastille.
+Les dossiers viennent en premier. `display` est le nom **sans extension pour le
+Markdown**, à afficher tel quel. Un fichier texte garde la sienne
+(`liste.txt`) : il peut cohabiter avec un `liste.md` dans le même dossier, et
+deux lignes « liste » désigneraient alors deux fichiers différents.
+`pending: true` signale une modification locale pas encore synchronisée — un
+bon endroit pour une pastille.
 
 > **`entries` et `conflicts` sont toujours des tableaux, jamais `null`.** Go
 > sérialiserait naturellement une slice vide en `null` ; la façade les
@@ -212,7 +222,8 @@ vient du cache : prévenez que la vue peut être incomplète.
 ```
 
 Le nom reçoit `.md` s'il ne l'a pas, et un suffixe `(2)`, `(3)`… si le nom est
-déjà pris.
+déjà pris. Une extension de note explicitement saisie — `liste.txt` — est
+respectée telle quelle.
 
 ### `SyncJSON`
 
@@ -268,6 +279,139 @@ quote  codeblock
 ```
 
 Chaque action est une **bascule** : la réappliquer retire la mise en forme.
+
+### `RenderNoteJSON`
+
+Prépare l'affichage **en lecture seule** d'une note. Fonction pure : ni réseau,
+ni cache, ni session — l'aperçu marche donc hors connexion, et sur un brouillon
+que l'utilisateur vient de taper sans l'avoir enregistré.
+
+```kotlin
+app.renderNoteJSON("Projets/a.md", texteAffiché)
+```
+
+> **Le nom compte autant que le contenu.** C'est lui qui décide si le texte est
+> interprété. Un `.md` est analysé ; un `.txt` revient en un seul bloc `plain`,
+> caractère pour caractère — dans un fichier texte, `#` est un dièse et non un
+> titre. Ne devinez pas le format côté Kotlin : la liste des extensions vit
+> dans `internal/notes` et n'a pas à être recopiée.
+
+Réponse : un tableau **plat** de blocs, à parcourir dans l'ordre.
+
+```json
+[
+  {"kind": "heading", "text": "Titre", "level": 1},
+  {"kind": "paragraph", "text": "é😀 gras",
+   "spans": [{"start": 4, "end": 8, "style": "bold"}]},
+  {"kind": "task", "text": "acheter du pain", "checked": true},
+  {"kind": "bullet", "text": "sous-point", "depth": 1},
+  {"kind": "ordered", "text": "premier", "number": 1},
+  {"kind": "code", "text": "fmt.Println()", "lang": "go"},
+  {"kind": "tablerow", "cells": ["Nom", "Âge"], "header": true},
+  {"kind": "image", "text": "texte alternatif"},
+  {"kind": "rule"}
+]
+```
+
+Le modèle est plat exprès : l'imbrication tient dans `depth` (listes) et
+`quote` (citations), il n'y a pas d'arbre à descendre pour dessiner une liste.
+Les champs à zéro sont omis.
+
+| `kind` | Champs qui comptent |
+|---|---|
+| `paragraph` | `text`, `spans`, `depth`, `quote` |
+| `heading` | `level` (1 à 6) |
+| `bullet` | `depth` |
+| `ordered` | `number` — le numéro à **afficher**, pas le rang |
+| `task` | `checked` |
+| `code` | `lang` — vide si le bloc n'annonce rien ; jamais de `spans` |
+| `tablerow` | `cells`, `header` |
+| `rule` | aucun |
+| `image` | `text` — le texte alternatif, **jamais la source** |
+| `plain` | `text` — le fichier entier, non interprété |
+
+`style` d'un span vaut `bold`, `italic`, `strike`, `code` ou `link` ; seul
+`link` porte un `href`.
+
+> **`start` et `end` sont en unités de code UTF-16**, comme pour
+> `ApplyFormatJSON` : posez-les tels quels dans un `AnnotatedString`. En
+> octets, `é😀 **gras**` donnerait `{7, 11}` au lieu de `{4, 8}`, et le gras
+> tomberait à côté.
+
+Deux choses ne traversent pas, volontairement :
+
+- **Le HTML brut est ignoré.** L'aperçu n'a pas de moteur pour l'interpréter,
+  et une note vient d'un serveur partagé.
+- **La source d'une image ne traverse jamais.** L'éditeur web d'OpenCloud
+  insère les images en `data:image/jpeg;base64,…`, soit plusieurs mégaoctets
+  d'URL. Un bloc `image` porte le texte alternatif, à afficher comme un
+  repère — c'est à l'interface d'écrire « Image » quand ce texte est vide, dans
+  la langue de l'appareil.
+
+
+### `PrepareEditJSON` et `RestoreImages`
+
+Ces deux méthodes vont **par paire**. Ouvrir une note en saisie sans la première
+peut tuer l'application ; enregistrer sans la seconde détruit l'image dans la
+note, sur le serveur, sans message.
+
+```kotlin
+val prepare = app.prepareEditJSON("Projets/a.md", contenuLu)
+// … l'utilisateur modifie prepare.text …
+app.writeNote(chemin, app.restoreImages(texteModifié, imagesEncodéesEnJSON))
+```
+
+```json
+{
+  "text": "# Photo
+
+![vacances](opennote-image:0)
+
+Une légende.
+",
+  "images": ["data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ…"],
+  "editable": true,
+  "longestWord": 22
+}
+```
+
+> ⚠️ **Un `TextField` ne survit pas à une image en base64.**
+>
+> L'éditeur web d'OpenCloud insère les images en `data:image/jpeg;base64,…` :
+> des dizaines de milliers de caractères **sans une seule espace**. Le moteur
+> de retour à la ligne d'Android y cherche des points de coupure qui n'existent
+> pas, en mémoire native — l'application est tuée par le système, sans
+> exception Java, et le téléphone purge ses autres applications dans la foulée.
+> Constaté sur appareil, pas déduit.
+>
+> Ce n'est **pas** une question de taille : 285 ko de prose s'ouvrent sans
+> broncher, 44 ko de base64 non. Le prédicat est la longueur du plus long mot,
+> et rien d'autre.
+
+`text` porte les données remplacées par des jetons `opennote-image:N`. Le jeton
+est une URL bien formée, donc le texte allégé reste du Markdown valide :
+`RenderNoteJSON` continue de le lire et d'en tirer ses blocs `image`.
+
+`images` est toujours un tableau, jamais `null`. Gardez-le tel quel le temps de
+l'édition et repassez-le à `RestoreImages` avant **chaque** écriture — l'appel
+est sans effet quand le tableau est vide, il n'y a donc pas de cas à distinguer.
+
+Un jeton que l'utilisateur a effacé ne revient pas : supprimer le repère d'une
+image, c'est supprimer l'image. C'est voulu — c'est le seul geste dont il
+dispose pour ça depuis un téléphone.
+
+`editable: false` signale un mot démesuré **qui subsiste après l'extraction** :
+un fichier sans rapport avec une image. Ouvrez la note en aperçu seul et
+dites-le, sans proposer de retour vers la saisie.
+
+Deux garde-fous du cœur, à connaître :
+
+- Si le contenu porte **déjà** quelque chose qui ressemble à un jeton,
+  l'extraction est abandonnée en bloc — restituer pourrait injecter une image
+  là où l'utilisateur avait écrit du texte. La note retombe alors sur
+  `editable: false` si elle est réellement inaffichable.
+- La restitution se fait à l'envers, du dernier jeton au premier :
+  `opennote-image:1` est un préfixe de `opennote-image:12`.
 
 ---
 

@@ -41,3 +41,17 @@ func Title(text string) string {
 	}
 	return fallback
 }
+
+// PlainTitle extrait un titre d'un fichier qui n'est pas du Markdown.
+//
+// La première ligne non vide, telle quelle : aucun préfixe n'est retiré, parce
+// qu'aucun n'a de sens à retirer. Dans un .txt, « - courses » est une ligne qui
+// commence par un tiret, pas une puce.
+func PlainTitle(text string) string {
+	for _, raw := range strings.Split(text, "\n") {
+		if line := strings.TrimSpace(raw); line != "" {
+			return line
+		}
+	}
+	return ""
+}

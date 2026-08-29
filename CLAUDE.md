@@ -78,7 +78,7 @@ le module principal doit compiler avant que ses tests puissent l'être.
 
 `-ldflags="-s -w"` fait passer `libgojni.so` de 14 Mo à 7,2 Mo — le build
 Android ne sait pas stripper cette bibliothèque lui-même. APK release mesuré :
-8,5 Mo.
+9,2 Mo, dont environ 0,7 Mo pour goldmark et l'aperçu (8,5 Mo avant).
 
 ### Ce que l'outillage ne dit pas
 
@@ -130,7 +130,7 @@ supposer.
 internal/opencloud/   HTTP, auth App Token, LibreGraph, WebDAV
 internal/notes/       Library : arbre, nommage, bootstrap        (au-dessus de opencloud)
 internal/store/       cache local, file offline, conflits         (au-dessus de notes)
-internal/markdown/    mise en forme, extraction de titre          (indépendant)
+internal/markdown/    mise en forme, titre, rendu de l'aperçu      (indépendant)
 internal/config/      réglages non sensibles                      (indépendant)
 mobile/               façade gomobile — contrat gelé
 cmd/opennote-cli/     harnais desktop
@@ -177,6 +177,89 @@ et emoji compris. Il est donc **plus permissif que le cache local**, qui doit
 écrire de vrais fichiers. D'où deux règles : le cache nomme ses fichiers par
 une empreinte SHA-256 du chemin, et `notes.ValidateName` refuse à la *création*
 des noms que l'application sait pourtant *lire*.
+
+## Formats de fichier : trois questions, trois fonctions
+
+L'application lit le Markdown **et** le texte brut — OpenCloud crée ses
+fichiers en `.txt`, et un dossier alimenté depuis l'interface web en contient.
+Une seule fonction répondait autrefois à trois questions distinctes, et les
+confondre a un coût immédiat :
+
+- **`notes.IsNote`** — « faut-il l'afficher dans la liste ? » Dit oui au `.txt`.
+- **`notes.IsMarkdown`** — « faut-il l'interpréter ? » Dit non au `.txt` : un
+  `#` y est un dièse, un `-` un tiret.
+- **`notes.WithExtension`** — « quelle extension écrire ? » Répond toujours
+  `.md` : l'application ne *crée* que du Markdown.
+
+Le renommage a sa propre règle, **`WithExtensionOf`** : il reprend l'extension
+du fichier renommé. Sans elle, `journal.txt` renommé en `carnet` perdait son
+extension — l'utilisateur avait demandé un nom, pas une conversion.
+
+`DisplayName` ne retire que l'extension Markdown. Un `.txt` garde la sienne
+parce qu'il peut cohabiter avec un `.md` du même nom dans le même dossier.
+
+## L'aperçu : Go analyse, Compose dessine
+
+`internal/markdown/render.go` utilise goldmark comme **analyseur seul** — son
+moteur HTML est jeté — et renvoie une liste **plate** de blocs. Compose les
+dessine en `Text` et `AnnotatedString`, ce qui donne la typographie Material3,
+le thème sombre et la sélection sans rien écrire pour eux. Un WebView aurait
+demandé de réécrire les trois en CSS ; une bibliothèque Markdown Kotlin aurait
+mis la règle dans la seule couche du dépôt sans test de comportement.
+
+Deux choses ne traversent jamais la frontière, et c'est voulu :
+
+- **le HTML brut**, ignoré — il n'y a pas de moteur pour l'interpréter, et une
+  note vient d'un serveur partagé ;
+- **la source d'une image.** L'éditeur web d'OpenCloud insère les images en
+  `data:image/jpeg;base64,…`, soit plusieurs mégaoctets d'URL. Un bloc `image`
+  ne porte que le texte alternatif.
+
+Les bornes de span sont en **unités UTF-16**, comme partout ailleurs — mais ici
+elles se comptent *au fil de l'écriture* du texte, pendant le parcours de
+l'AST. goldmark repère ses nœuds en octets ; convertir après coup demanderait
+de retraduire chaque borne, avec une occasion de se tromper par borne.
+
+## Le piège du mot sans espace, constaté sur appareil
+
+Une note contenant une image insérée depuis l'interface web d'OpenCloud
+**faisait tuer l'application par le système**. Pas une exception Java, pas un
+`OutOfMemoryError` : une mort de processus muette, suivie d'une purge mémoire
+de tout le téléphone. Le tas Java, lui, n'avait jamais dépassé 11 Mo.
+
+La cause n'est pas la taille. Un fichier de 285 ko de prose s'ouvre sans
+broncher ; 44 ko de base64 tuent l'appareil. Ce qui compte est le **nombre de
+points de coupure** : une image en base64 est un mot unique de dizaines de
+milliers de caractères sans une seule espace, et le moteur de retour à la ligne
+d'Android s'y épuise en mémoire native.
+
+D'où deux dispositifs, dans cet ordre :
+
+1. **`markdown.ExtractInlineData`** sort les `data:…` du texte avant qu'il
+   n'atteigne le champ de saisie et les remplace par des jetons
+   `opennote-image:N`. `RestoreInlineData` les remet à l'écriture. Le jeton est
+   une URL bien formée : le texte allégé reste du Markdown valide, donc
+   l'aperçu continue de le lire.
+2. **`markdown.Editable`** attrape le reste — un fichier qui porte un mot
+   démesuré sans rapport avec une image. La note s'ouvre alors en aperçu seul.
+3. **`markdown.ShortenLongWords`**, appliqué à *tous* les blocs de l'aperçu.
+   Sans lui, le repli du point 2 ne protégeait rien : un `Text` et un
+   `TextField` partagent le même moteur de mise en page, et l'aperçu serait
+   mort sur le pavé qu'il était censé sauver. C'est une troncature
+   d'**affichage** — elle ne touche jamais ce qui part sur le serveur.
+
+**Ne jamais écrire sans restituer.** C'est le seul chemin du dépôt qui peut
+détruire des données de l'utilisateur en silence : enregistrer le texte à
+jetons remplacerait l'image par `opennote-image:0` dans la vraie note, sur le
+serveur, sans le moindre message. `TestInlineDataAllerRetour` et
+`TestPrepareEditJSONAllerRetour` sont là pour ça, et la restitution se fait du
+dernier jeton au premier — `opennote-image:1` est un préfixe de
+`opennote-image:12`.
+
+Corollaire pour le diagnostic : sur cette ROM Xiaomi, `crash_dump helper failed
+to exec`. Un crash natif ne laisse **aucun tombstone**. Chercher `am_kill` et
+`am_proc_died` dans `adb logcat -b events`, et l'absence d'exception Java dans
+le tampon `crash`, dit plus que l'attente d'une pile qui ne viendra jamais.
 
 ## Deux confusions de référentiel qui ont déjà coûté cher
 
@@ -386,9 +469,21 @@ protège une règle de projet, il ne dit rien de ce que l'application fait.
 Distinguer « écrit », « compile » et « testé » dans tout rapport d'avancement.
 
 Restent ouverts, par ordre de priorité décidé : **l'extraction des chaînes
-d'écran** (section ci-dessus, mécanique désormais), l'aperçu Markdown
-rendu (brique 4-bis, goldmark), OIDC en alternative à l'App Token, et la
-signature de l'APK pour distribution.
+d'écran** (section ci-dessus, mécanique désormais), OIDC en alternative à
+l'App Token, et la signature de l'APK pour distribution.
+
+**Le défilement d'une très grande note est poussif dans l'éditeur** — constaté
+sur un fichier de 285 ko. Ce n'est pas le piège du mot sans espace, qui est
+traité : c'est que `BasicTextField` met en page tout son texte, sans rien
+virtualiser, là où l'aperçu s'appuie sur une `LazyColumn` et reste fluide.
+Compose n'offre pas d'éditeur virtualisé ; il n'y a donc pas de correctif
+local, seulement des contournements. Peu urgent : une note de cette taille est
+une anomalie, et elle reste lisible.
+
+**La traduction vient après l'extraction, pas avant** — décision prise, motifs
+dans la section Localisation. Elle n'est pas un chantier d'architecture : à ce
+stade il ne restera qu'à remplir un `values-<langue>/` et à déclarer la langue
+dans `locales_config.xml`.
 
 Le chemin de module est `opennote` alors que le dépôt existe
 (`github.com/ybediat/OpenNote`) — renommage mécanique jamais fait.

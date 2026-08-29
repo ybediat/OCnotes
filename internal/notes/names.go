@@ -17,6 +17,14 @@ const Extension = ".md"
 // parce qu'elles peuvent avoir été créées ailleurs.
 var markdownExtensions = []string{".md", ".markdown", ".mdown", ".mkd"}
 
+// plainExtensions liste ce que l'application ouvre sans l'interpréter.
+//
+// OpenCloud crée ses fichiers texte en .txt : ce sont eux qu'on trouve dans un
+// dossier alimenté depuis l'interface web. Ils sont donc lisibles et
+// modifiables, mais jamais rendus comme du Markdown — un « # » y est un dièse,
+// pas un titre.
+var plainExtensions = []string{".txt"}
+
 // forbiddenInName rassemble les caractères qu'un nom de note ne peut pas
 // contenir.
 //
@@ -171,18 +179,62 @@ func lastRune(s string) (rune, int) {
 	return last, len(string(last))
 }
 
-// WithExtension garantit qu'un nom porte l'extension d'une note.
+// WithExtension garantit qu'un nom porte l'extension d'écriture.
+//
+// L'application ne crée que du Markdown : un nom sans extension de note
+// reçoit .md. Pour un renommage, qui doit préserver le format existant,
+// voir WithExtensionOf.
 func WithExtension(name string) string {
-	if IsMarkdown(name) {
+	if IsNote(name) {
 		return name
 	}
 	return name + Extension
 }
 
-// IsMarkdown indique si un nom de fichier désigne une note.
+// WithExtensionOf garantit qu'un nom porte une extension de note, en
+// reprenant celle de ref quand le nom n'en porte pas.
+//
+// C'est ce qui fait qu'un renommage préserve le format : « journal.txt »
+// renommé en « carnet » donne « carnet.txt », et non « carnet.md » — un
+// changement de format silencieux, que l'utilisateur n'a pas demandé.
+func WithExtensionOf(ref, name string) string {
+	if IsNote(name) {
+		return name
+	}
+	if IsNote(ref) {
+		return name + path.Ext(ref)
+	}
+	return name + Extension
+}
+
+// IsMarkdown indique si un nom de fichier désigne du Markdown, donc du texte
+// à interpréter.
 func IsMarkdown(name string) bool {
+	return hasExtension(name, markdownExtensions)
+}
+
+// IsPlainText indique si un nom de fichier désigne du texte brut, affiché tel
+// quel et jamais interprété.
+func IsPlainText(name string) bool {
+	return hasExtension(name, plainExtensions)
+}
+
+// IsNote indique si l'application sait ouvrir ce fichier, quel que soit son
+// format.
+//
+// Trois questions distinctes se posaient autrefois à la même fonction, et les
+// confondre coûte cher :
+//
+//   - IsNote  : « faut-il l'afficher dans la liste ? » — dit oui au .txt ;
+//   - IsMarkdown : « faut-il l'interpréter ? » — dit non au .txt ;
+//   - WithExtension : « quelle extension écrire ? » — répond toujours .md.
+func IsNote(name string) bool {
+	return IsMarkdown(name) || IsPlainText(name)
+}
+
+func hasExtension(name string, extensions []string) bool {
 	ext := strings.ToLower(path.Ext(name))
-	for _, candidate := range markdownExtensions {
+	for _, candidate := range extensions {
 		if ext == candidate {
 			return true
 		}
@@ -191,6 +243,11 @@ func IsMarkdown(name string) bool {
 }
 
 // DisplayName retire l'extension d'un nom de note pour l'affichage.
+//
+// Seul le Markdown perd la sienne. Un « notes.txt » garde la sienne parce
+// qu'il peut cohabiter avec un « notes.md » dans le même dossier : les
+// afficher tous deux sous « notes » donnerait deux lignes identiques
+// désignant deux fichiers différents.
 func DisplayName(name string) string {
 	if !IsMarkdown(name) {
 		return name

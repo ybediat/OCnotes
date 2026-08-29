@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import eu.opennote.AppContainer
 import eu.opennote.data.FormatAction
+import eu.opennote.data.NoteBlockDto
 import eu.opennote.data.OpenNoteException
 import eu.opennote.data.OpenNoteRepository
 import eu.opennote.ui.common.Texte
@@ -38,6 +39,27 @@ data class EditorUiState(
     val chargement: Boolean = true,
     val modifie: Boolean = false,
     val erreur: Texte? = null,
+
+    /** Mode lecture : le texte est rendu, la saisie est suspendue. */
+    val apercu: Boolean = false,
+
+    /** Blocs de l'aperçu, recalculés à chaque bascule. */
+    val blocs: List<NoteBlockDto> = emptyList(),
+
+    /**
+     * Fichier affiché tel quel — un .txt.
+     *
+     * La barre de mise en forme est alors masquée : y insérer du Markdown
+     * écrirait des marqueurs que rien ne rendra jamais.
+     */
+    val texteBrut: Boolean = false,
+
+    /**
+     * Faux quand la note porte un mot si long qu'un champ de saisie ne
+     * survivrait pas à sa mise en page. Elle s'ouvre alors en aperçu, sans
+     * retour possible vers la saisie.
+     */
+    val modifiable: Boolean = true,
 )
 
 /**
@@ -59,24 +81,59 @@ class EditorViewModel(
     private val applicationScope: CoroutineScope,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(EditorUiState(chemin = chemin))
+    private val nom = chemin.substringAfterLast('/')
+
+    // Le format se demande à Go, et dès la construction : la question se pose
+    // avant qu'il y ait le moindre bloc à regarder, ne serait-ce que pour un
+    // fichier vide. C'est aussi ce qui évite de recopier la liste des
+    // extensions ici, où elle divergerait au premier format ajouté.
+    private val _uiState = MutableStateFlow(
+        EditorUiState(chemin = chemin, texteBrut = repository.isPlainText(nom)),
+    )
     val uiState: StateFlow<EditorUiState> = _uiState.asStateFlow()
 
     private var enregistrement: Job? = null
+
+    /**
+     * Données en ligne retirées du texte au chargement.
+     *
+     * Elles vivent ici plutôt que dans l'état : ce sont plusieurs dizaines de
+     * milliers de caractères, que rien n'a à recomposer. [ecrire] les remet en
+     * place avant chaque écriture.
+     */
+    private var images: List<String> = emptyList()
 
     init {
         viewModelScope.launch {
             try {
                 val contenu = repository.readNote(chemin)
-                val nom = chemin.substringAfterLast('/')
+
+                // Les images en ligne sortent du texte avant qu'il n'atteigne
+                // le champ de saisie, et n'y reviennent qu'à l'écriture. Sans
+                // cette étape, une note contenant une photo insérée depuis
+                // l'interface web fait tuer l'application par le système.
+                val prepare = repository.prepareEdit(nom, contenu)
+                images = prepare.images
+
                 // `update` prend une lambda non suspendue : tout appel à la
                 // façade se fait avant, jamais dedans.
-                val titre = repository.titleOf(nom, contenu)
+                val titre = repository.titleOf(nom, prepare.text)
+                val blocs = if (prepare.editable) {
+                    emptyList()
+                } else {
+                    repository.renderNote(nom, prepare.text)
+                }
+
                 _uiState.update {
                     it.copy(
                         chargement = false,
-                        valeur = TextFieldValue(contenu, TextRange(contenu.length)),
+                        valeur = TextFieldValue(prepare.text, TextRange(prepare.text.length)),
                         titre = titre,
+                        modifiable = prepare.editable,
+                        // Une note inaffichable en saisie s'ouvre directement
+                        // en lecture : c'est le seul mode qui tienne.
+                        apercu = !prepare.editable,
+                        blocs = blocs,
                     )
                 }
             } catch (e: OpenNoteException) {
@@ -141,6 +198,38 @@ class EditorViewModel(
     }
 
     /**
+     * Bascule entre saisie et aperçu.
+     *
+     * Le rendu part du **texte affiché**, pas du fichier : l'aperçu montre donc
+     * ce que l'utilisateur vient de taper, avant même que l'enregistrement
+     * différé se déclenche. C'est aussi pourquoi il est refait à chaque
+     * bascule plutôt que gardé en cache.
+     *
+     * `renderNote` ne touche ni réseau ni disque : l'aperçu s'ouvre hors
+     * connexion comme le reste.
+     */
+    fun basculerApercu() {
+        // Une note non modifiable n'a pas d'autre mode : la bascule ne mène
+        // nulle part, et proposer un retour vers la saisie serait un piège.
+        if (!_uiState.value.modifiable) return
+
+        if (_uiState.value.apercu) {
+            _uiState.update { it.copy(apercu = false) }
+            return
+        }
+
+        viewModelScope.launch {
+            val texte = _uiState.value.valeur.text
+            try {
+                val blocs = repository.renderNote(nom, texte)
+                _uiState.update { it.copy(apercu = true, blocs = blocs) }
+            } catch (e: OpenNoteException) {
+                _uiState.update { it.copy(erreur = e.texte()) }
+            }
+        }
+    }
+
+    /**
      * Enregistre après un temps de calme.
      *
      * Le cache absorbe déjà les écritures répétées — la file n'en garde qu'une
@@ -177,8 +266,16 @@ class EditorViewModel(
     }
 
     private suspend fun ecrire(contenu: String) {
+        // Garde-fou : une note ouverte en lecture seule n'a rien à enregistrer.
+        // `modifie` ne devrait jamais y passer à vrai, mais écrire ici
+        // écraserait le fichier par sa version allégée.
+        if (!_uiState.value.modifiable) return
+
         try {
-            repository.writeNote(chemin, contenu)
+            // La restitution n'est pas une commodité : sans elle, c'est le
+            // texte à jetons qui partirait sur le serveur, et l'image serait
+            // perdue dans la vraie note, en silence.
+            repository.writeNote(chemin, repository.restoreImages(contenu, images))
             _uiState.update { it.copy(modifie = false) }
         } catch (e: OpenNoteException) {
             // Le réseau n'entre pas en jeu ici. Ce qui reste — un cache

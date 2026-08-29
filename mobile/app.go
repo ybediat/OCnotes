@@ -814,7 +814,7 @@ func (a *App) SuggestName(title string) string {
 // TitleOf renvoie le titre à afficher : celui écrit dans le contenu, sinon le
 // nom du fichier.
 func (a *App) TitleOf(name, content string) string {
-	return notes.TitleOf(notes.Note{DisplayName: notes.DisplayName(name)}, []byte(content))
+	return notes.TitleOf(notes.Note{Name: name, DisplayName: notes.DisplayName(name)}, []byte(content))
 }
 
 // --- Synchronisation --------------------------------------------------------
@@ -932,6 +932,136 @@ func (a *App) FormatActionsJSON() (string, error) {
 	return toJSON(out)
 }
 
+// --- Aperçu -----------------------------------------------------------------
+
+// noteSpan est une portion mise en forme du texte d'un bloc.
+//
+// Start et End sont en unités de code UTF-16, comme partout ailleurs à la
+// frontière : Kotlin les pose tels quels dans un AnnotatedString, sans aucune
+// conversion.
+type noteSpan struct {
+	Start int    `json:"start"`
+	End   int    `json:"end"`
+	Style string `json:"style"`
+	Href  string `json:"href,omitempty"`
+}
+
+// noteBlock est une unité d'affichage de l'aperçu : un paragraphe, un titre,
+// une puce, une ligne de tableau.
+//
+// Le modèle est plat : l'imbrication tient dans depth et quote, ce qui évite à
+// Kotlin de descendre un arbre pour dessiner une liste.
+type noteBlock struct {
+	Kind    string     `json:"kind"`
+	Text    string     `json:"text,omitempty"`
+	Spans   []noteSpan `json:"spans,omitempty"`
+	Level   int        `json:"level,omitempty"`
+	Depth   int        `json:"depth,omitempty"`
+	Quote   int        `json:"quote,omitempty"`
+	Number  int        `json:"number,omitempty"`
+	Checked bool       `json:"checked,omitempty"`
+	Lang    string     `json:"lang,omitempty"`
+	Cells   []string   `json:"cells,omitempty"`
+	Header  bool       `json:"header,omitempty"`
+}
+
+// RenderNoteJSON prépare l'affichage d'une note en lecture seule.
+//
+// Fonction pure : ni réseau, ni cache, ni session. L'interface passe le
+// contenu qu'elle a déjà en main — l'aperçu marche donc hors connexion, et sur
+// un brouillon jamais enregistré.
+//
+// Le **nom** compte autant que le contenu : c'est lui qui décide si le texte
+// est interprété comme du Markdown ou affiché tel quel. Un .txt n'est jamais
+// interprété.
+func (a *App) RenderNoteJSON(name, content string) (string, error) {
+	blocks := notes.Render(name, []byte(content))
+
+	out := make([]noteBlock, 0, len(blocks))
+	for _, b := range blocks {
+		converti := noteBlock{
+			Kind:    string(b.Kind),
+			Text:    b.Text,
+			Level:   b.Level,
+			Depth:   b.Depth,
+			Quote:   b.Quote,
+			Number:  b.Number,
+			Checked: b.Checked,
+			Lang:    b.Lang,
+			Cells:   b.Cells,
+			Header:  b.Header,
+		}
+		for _, s := range b.Spans {
+			converti.Spans = append(converti.Spans, noteSpan{
+				Start: s.Start,
+				End:   s.End,
+				Style: string(s.Style),
+				Href:  s.Href,
+			})
+		}
+		out = append(out, converti)
+	}
+	return toJSON(out)
+}
+
+// --- Préparation de l'édition -----------------------------------------------
+
+// preparedEdit est le contenu tel que le champ de saisie doit le recevoir.
+type preparedEdit struct {
+	Text        string   `json:"text"`
+	Images      []string `json:"images"`
+	Editable    bool     `json:"editable"`
+	LongestWord int      `json:"longestWord"`
+}
+
+// PrepareEditJSON allège une note avant de l'ouvrir dans un champ de saisie.
+//
+// # Pourquoi cette étape existe
+//
+// L'éditeur web d'OpenCloud insère les images en « data:image/jpeg;base64,… ».
+// Confier ce pavé à un champ de texte fait tuer l'application par le système —
+// constaté sur appareil : mort du processus, sans exception Java, suivie d'une
+// purge mémoire de tout le téléphone. Le coupable n'est pas la taille mais
+// l'absence de point de coupure : 285 ko de prose passent, 44 ko de base64 non.
+//
+// `text` est donc le contenu avec ses données remplacées par des jetons courts,
+// et `images` ce qui en a été retiré. **L'interface doit repasser `images` à
+// RestoreImages avant tout enregistrement** : sans ça, elle écrirait le texte
+// allégé sur le serveur et l'image serait perdue dans la vraie note.
+//
+// `editable` reste faux quand le texte allégé porte encore un mot démesuré —
+// un fichier qui n'a rien à voir avec une image. La note s'ouvre alors en
+// lecture seule : l'aperçu, lui, n'a pas cette limite.
+func (a *App) PrepareEditJSON(name, content string) (string, error) {
+	text, images := notes.PrepareEdit(name, content)
+	if images == nil {
+		images = []string{}
+	}
+	return toJSON(preparedEdit{
+		Text:        text,
+		Images:      images,
+		Editable:    markdown.Editable(text),
+		LongestWord: markdown.LongestWord(text),
+	})
+}
+
+// RestoreImages remet les données en ligne à la place de leurs jetons.
+//
+// À appeler avant chaque écriture, sur le texte sorti du champ de saisie.
+// Un jeton que l'utilisateur a effacé ne revient pas : supprimer le repère
+// d'une image, c'est supprimer l'image.
+func (a *App) RestoreImages(text, imagesJSON string) (string, error) {
+	var images []string
+	if err := json.Unmarshal([]byte(imagesJSON), &images); err != nil {
+		return "", fmt.Errorf("mobile: liste d'images illisible: %w", err)
+	}
+	return markdown.RestoreInlineData(text, images), nil
+}
+
+// MaxEditableWord est la borne exposée à l'interface : au-delà, un mot sans
+// espace n'est plus confié à un champ de saisie.
+func MaxEditableWord() int { return markdown.MaxEditableWord() }
+
 // --- Erreurs ----------------------------------------------------------------
 
 // ErrorCode extrait l'étiquette de catégorie d'un message d'erreur.
@@ -1018,6 +1148,17 @@ func IsNotFoundError(message string) bool {
 // l'interface ne doit pas présenter cela comme un échec de l'opération.
 func IsOfflineError(message string) bool {
 	return ErrorCode(message) == opencloud.CodeOffline
+}
+
+// IsPlainText indique qu'un nom de fichier désigne du texte brut, à afficher
+// tel quel et à modifier sans barre de mise en forme.
+//
+// *fonction de paquet* — l'interface a besoin de la réponse avant d'avoir un
+// contenu à rendre, ne serait-ce que pour un fichier vide. Elle existe pour
+// que la liste des extensions ne soit pas recopiée en Kotlin, où elle
+// divergerait au premier format ajouté.
+func IsPlainText(name string) bool {
+	return notes.IsPlainText(name)
 }
 
 func errNotConnected() error {

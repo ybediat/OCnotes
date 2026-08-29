@@ -367,3 +367,166 @@ func TestApplyFormatJSON(t *testing.T) {
 		t.Error("un JSON invalide devrait produire une erreur")
 	}
 }
+
+// L'aperçu est une fonction pure : aucun espace de travail n'est ouvert ici.
+//
+// C'est ce qui le rend utilisable hors connexion et sur un brouillon jamais
+// enregistré — l'interface passe le texte qu'elle a déjà sous les yeux.
+func TestRenderNoteJSONMarkdown(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	raw, err := app.RenderNoteJSON("note.md", "# Titre\n\né😀 **gras**\n")
+	if err != nil {
+		t.Fatalf("RenderNoteJSON: %v", err)
+	}
+
+	var blocks []noteBlock
+	decodeJSON(t, raw, &blocks)
+	if len(blocks) != 2 {
+		t.Fatalf("%d blocs, 2 attendus: %+v", len(blocks), blocks)
+	}
+	if b := blocks[0]; b.Kind != "heading" || b.Level != 1 || b.Text != "Titre" {
+		t.Errorf("bloc 0 = %+v", b)
+	}
+
+	b := blocks[1]
+	if b.Kind != "paragraph" || b.Text != "é😀 gras" {
+		t.Fatalf("bloc 1 = %+v", b)
+	}
+	if len(b.Spans) != 1 {
+		t.Fatalf("%d spans, 1 attendu: %+v", len(b.Spans), b.Spans)
+	}
+	// Bornes en unités UTF-16 : « é » 1, « 😀 » 2, espace 1. En octets, la
+	// frontière livrerait {7, 11} et Compose graisserait au mauvais endroit.
+	if s := b.Spans[0]; s.Style != "bold" || s.Start != 4 || s.End != 8 {
+		t.Errorf("span = %+v, attendu {4, 8, bold}", s)
+	}
+}
+
+// C'est le nom qui décide de l'interprétation, pas le contenu.
+func TestRenderNoteJSONTexteBrut(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	source := "# pas un titre\n- pas une puce"
+
+	raw, err := app.RenderNoteJSON("note.txt", source)
+	if err != nil {
+		t.Fatalf("RenderNoteJSON: %v", err)
+	}
+	var brut []noteBlock
+	decodeJSON(t, raw, &brut)
+	if len(brut) != 1 {
+		t.Fatalf("%d blocs pour un .txt, 1 attendu: %+v", len(brut), brut)
+	}
+	if brut[0].Kind != "plain" || brut[0].Text != source {
+		t.Errorf("bloc = %+v, attendu le contenu inchangé", brut[0])
+	}
+
+	// Le même contenu sous un nom .md est interprété : sans quoi le test
+	// ci-dessus passerait aussi avec un moteur qui ne rend jamais rien.
+	raw, err = app.RenderNoteJSON("note.md", source)
+	if err != nil {
+		t.Fatalf("RenderNoteJSON: %v", err)
+	}
+	var md []noteBlock
+	decodeJSON(t, raw, &md)
+	if len(md) != 2 || md[0].Kind != "heading" || md[1].Kind != "bullet" {
+		t.Errorf("blocs pour un .md = %+v, attendu un titre puis une puce", md)
+	}
+}
+
+// L'aller-retour complet, tel que l'interface l'exécute.
+//
+// C'est le chemin qui peut détruire une note : si l'interface enregistre le
+// texte allégé au lieu du texte restitué, l'image disparaît de la vraie note,
+// sur le serveur, sans message. Le test le rejoue de bout en bout.
+func TestPrepareEditJSONAllerRetour(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	source := "# Photo\n\n![vacances](data:image/jpeg;base64," +
+		strings.Repeat("A", 60000) + ")\n\nUne légende.\n"
+
+	raw, err := app.PrepareEditJSON("note.md", source)
+	if err != nil {
+		t.Fatalf("PrepareEditJSON: %v", err)
+	}
+	var prepare preparedEdit
+	decodeJSON(t, raw, &prepare)
+
+	if !prepare.Editable {
+		t.Errorf("la note allégée devrait être modifiable, plus long mot = %d", prepare.LongestWord)
+	}
+	if strings.Contains(prepare.Text, "base64") {
+		t.Fatal("la donnée est restée dans le texte confié au champ de saisie")
+	}
+	if len(prepare.Images) != 1 {
+		t.Fatalf("%d images retirées, 1 attendue", len(prepare.Images))
+	}
+
+	imagesJSON, _ := json.Marshal(prepare.Images)
+	restitue, err := app.RestoreImages(prepare.Text, string(imagesJSON))
+	if err != nil {
+		t.Fatalf("RestoreImages: %v", err)
+	}
+	if restitue != source {
+		t.Error("le contenu restitué diffère de l'original : la note serait écrasée")
+	}
+}
+
+// Un fichier sans image traverse sans être touché, et « images » reste un
+// tableau — jamais null, comme le reste du contrat.
+func TestPrepareEditJSONSansImage(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	source := "# Note\n\nRien de spécial.\n"
+	raw, err := app.PrepareEditJSON("note.md", source)
+	if err != nil {
+		t.Fatalf("PrepareEditJSON: %v", err)
+	}
+	if !strings.Contains(raw, `"images":[]`) {
+		t.Errorf("images devrait être un tableau vide, pas null: %s", raw)
+	}
+
+	var prepare preparedEdit
+	decodeJSON(t, raw, &prepare)
+	if prepare.Text != source || !prepare.Editable {
+		t.Errorf("prepare = %+v, attendu le contenu inchangé et modifiable", prepare)
+	}
+}
+
+// Un mot démesuré qui n'est pas une image ferme quand même l'édition.
+func TestPrepareEditJSONMotDemesureResteNonModifiable(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	source := "début\n" + strings.Repeat("z", 50000) + "\nfin\n"
+	for _, nom := range []string{"note.md", "note.txt"} {
+		raw, err := app.PrepareEditJSON(nom, source)
+		if err != nil {
+			t.Fatalf("PrepareEditJSON(%s): %v", nom, err)
+		}
+		var prepare preparedEdit
+		decodeJSON(t, raw, &prepare)
+
+		if prepare.Editable {
+			t.Errorf("%s : la note devrait être en lecture seule", nom)
+		}
+		if prepare.Text != source {
+			t.Errorf("%s : le contenu a été modifié alors qu'il n'y avait rien à extraire", nom)
+		}
+	}
+}
