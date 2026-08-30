@@ -2,7 +2,9 @@ package eu.opennote.ui.browser
 
 import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -36,6 +37,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -62,7 +64,10 @@ import eu.opennote.ui.common.ChargementPleinEcran
 import eu.opennote.ui.common.EtatVide
 import eu.opennote.ui.common.PastilleEnAttente
 import eu.opennote.ui.common.resoudre
+import eu.opennote.ui.theme.CouleurSignatureClaire
+import eu.opennote.ui.theme.CouleurSignatureSombre
 import java.time.Instant
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
@@ -234,29 +239,15 @@ fun BrowserScreen(
                     detail = stringResource(R.string.browser_recherche_vide_detail),
                 )
 
-                else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(etat.entreesAffichees, key = { it.path }) { entree ->
-                        LigneEntree(
-                            entree = entree,
-                            // En arborescence le dossier est le titre de
-                            // l'écran : le répéter sur chaque ligne serait du
-                            // bruit. En liste plate c'est la seule façon de
-                            // savoir où vit une note.
-                            afficherDossier = etat.enListePlate,
-                            onClick = { viewModel.ouvrir(entree) },
-                            onRenommer = { dialogue = Dialogue.Renommer(entree) },
-                            // Réservé aux notes : déplacer un dossier suit
-                            // une règle de cache différente, non couverte
-                            // par DeplacerDialog.
-                            onDeplacer = if (entree.isDir) {
-                                null
-                            } else {
-                                { dialogue = Dialogue.Deplacer(entree) }
-                            },
-                            onSupprimer = { dialogue = Dialogue.Supprimer(entree) },
-                        )
-                    }
-                }
+                else -> ListeEntrees(
+                    entrees = etat.entreesAffichees,
+                    grouperParMois = etat.enListePlate && etat.tri == Tri.DATE,
+                    afficherDossier = etat.enListePlate,
+                    onOuvrir = viewModel::ouvrir,
+                    onRenommer = { dialogue = Dialogue.Renommer(it) },
+                    onDeplacer = { dialogue = Dialogue.Deplacer(it) },
+                    onSupprimer = { dialogue = Dialogue.Supprimer(it) },
+                )
             }
         }
     }
@@ -319,6 +310,75 @@ fun BrowserScreen(
  * La croix n'apparaît qu'une fois quelque chose saisi — un bouton d'effacement
  * sur un champ vide est un bouton mort.
  */
+@Composable
+private fun ListeEntrees(
+    entrees: List<FolderEntryDto>,
+    grouperParMois: Boolean,
+    afficherDossier: Boolean,
+    onOuvrir: (FolderEntryDto) -> Unit,
+    onRenommer: (FolderEntryDto) -> Unit,
+    onDeplacer: (FolderEntryDto) -> Unit,
+    onSupprimer: (FolderEntryDto) -> Unit,
+) {
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        var moisPrecedent: YearMonth? = null
+
+        entrees.forEach { entree ->
+            if (grouperParMois && !entree.isDir) {
+                val mois = moisDe(entree.modTime)
+                if (mois != null && mois != moisPrecedent) {
+                    item(key = "mois-${mois.year}-${mois.monthValue}") {
+                        SeparateurMois(mois)
+                    }
+                    moisPrecedent = mois
+                }
+            }
+
+            item(key = entree.path) {
+                LigneEntree(
+                    entree = entree,
+                    afficherDossier = afficherDossier,
+                    onClick = { onOuvrir(entree) },
+                    onRenommer = { onRenommer(entree) },
+                    onDeplacer = if (entree.isDir) null else { onDeplacer(entree) },
+                    onSupprimer = { onSupprimer(entree) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SeparateurMois(mois: YearMonth) {
+    val locale = LocalConfiguration.current.locales[0]
+    val couleur = if (isSystemInDarkTheme()) CouleurSignatureSombre else CouleurSignatureClaire
+    val libelle = remember(mois, locale) {
+        mois.atDay(1)
+            .format(DateTimeFormatter.ofPattern("LLLL yyyy", locale))
+            .replaceFirstChar { it.titlecase(locale) }
+    }
+
+    Row(
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, couleur),
+        ) {
+            Text(
+                text = libelle,
+                style = MaterialTheme.typography.labelLarge,
+                color = couleur,
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 5.dp),
+            )
+        }
+    }
+}
+
 @Composable
 private fun BarreRecherche(
     valeur: String,
@@ -523,3 +583,10 @@ private fun dateLocale(modTime: String): String? {
         null
     }
 }
+
+private fun moisDe(modTime: String): YearMonth? =
+    try {
+        YearMonth.from(Instant.parse(modTime).atZone(ZoneId.systemDefault()))
+    } catch (_: DateTimeParseException) {
+        null
+    }

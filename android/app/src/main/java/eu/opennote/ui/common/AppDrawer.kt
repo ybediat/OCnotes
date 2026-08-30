@@ -1,12 +1,15 @@
 package eu.opennote.ui.common
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -16,17 +19,24 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.opennote.R
 import eu.opennote.appContainer
 import eu.opennote.ui.browser.ModeAffichage
+import eu.opennote.ui.theme.CouleurSignatureClaire
+import eu.opennote.ui.theme.CouleurSignatureSombre
 import kotlinx.coroutines.launch
 
 /**
@@ -69,6 +79,8 @@ fun TiroirApplication(
 ) {
     val portee = rememberCoroutineScope()
     val fermer: () -> Unit = { portee.launch { etatTiroir.close() } }
+    var aProposOuvert by rememberSaveable { mutableStateOf(false) }
+    val couleurTitre = if (isSystemInDarkTheme()) CouleurSignatureSombre else CouleurSignatureClaire
 
     ModalNavigationDrawer(
         drawerState = etatTiroir,
@@ -78,6 +90,7 @@ fun TiroirApplication(
                 Text(
                     text = stringResource(R.string.app_name),
                     style = MaterialTheme.typography.titleLarge,
+                    color = couleurTitre,
                     modifier = Modifier.padding(horizontal = 28.dp, vertical = 20.dp),
                 )
                 HorizontalDivider()
@@ -127,6 +140,17 @@ fun TiroirApplication(
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                 )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Info, contentDescription = null) },
+                    label = { Text(stringResource(R.string.menu_a_propos)) },
+                    selected = false,
+                    onClick = {
+                        fermer()
+                        aProposOuvert = true
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                )
             }
         },
     ) {
@@ -141,4 +165,37 @@ fun TiroirApplication(
             BackHandler(enabled = etatTiroir.isOpen, onBack = fermer)
         }
     }
+
+    if (aProposOuvert) {
+        AProposDialog(onFermer = { aProposOuvert = false })
+    }
+}
+
+@Composable
+private fun AProposDialog(onFermer: () -> Unit) {
+    val uriHandler = LocalUriHandler.current
+    val depot = stringResource(R.string.a_propos_depot_url)
+
+    AlertDialog(
+        onDismissRequest = onFermer,
+        title = { Text(stringResource(R.string.a_propos_titre)) },
+        text = {
+            Text(
+                listOf(
+                    stringResource(R.string.a_propos_description),
+                    stringResource(R.string.a_propos_licence),
+                ).joinToString("\n\n"),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { uriHandler.openUri(depot) }) {
+                Text(stringResource(R.string.a_propos_depot))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onFermer) {
+                Text(stringResource(R.string.action_retour))
+            }
+        },
+    )
 }

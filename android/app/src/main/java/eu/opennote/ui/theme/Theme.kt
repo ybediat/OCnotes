@@ -20,6 +20,9 @@ private val Vert = Color(0xFF1F6F5C)
 private val VertClair = Color(0xFF6FD9BC)
 private val Ardoise = Color(0xFF3F4A54)
 
+val CouleurSignatureClaire = Color(0xFF20434F)
+val CouleurSignatureSombre = Color(0xFFE2BAFF)
+
 private val PaletteClaire = lightColorScheme(
     primary = Vert,
     secondary = Ardoise,

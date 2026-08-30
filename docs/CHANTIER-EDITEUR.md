@@ -135,7 +135,7 @@ Les règles, chacune avec son test :
    l'image.
 3. **On coupe sur une ligne vide**, jamais au milieu d'un paragraphe.
 4. **On ne coupe jamais dans une clôture de code ni entre deux éléments d'une
-   même liste.** Chaque section est rendue *seule* par `markdown.Render` :
+   même liste. ou d'un même marqueur de mise en page** Chaque section est rendue *seule* par `markdown.Render` :
    couper une liste en deux la ferait redémarrer à 1, et couper une clôture
    ferait interpréter du code comme du Markdown.
 5. **La règle 4 gagne contre la règle 2.** Une liste de 500 lignes donne une

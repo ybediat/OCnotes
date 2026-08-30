@@ -241,6 +241,11 @@
          Menu latéral
          ================================================================ -->
     <string name="menu_reglages">Settings</string>
+    <string name="menu_a_propos">About</string>
+    <string name="a_propos_titre">About OpenNote</string>
+    <string name="a_propos_description">A lightweight Android app for writing Markdown notes stored on an OpenCloud server.</string>
+    <string name="a_propos_licence">License: to be filled in.</string>
+    <string name="a_propos_depot">Git repository</string>
 
     <!-- ================================================================
          Réglages

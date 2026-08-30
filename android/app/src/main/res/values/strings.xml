@@ -236,6 +236,12 @@
          Menu latéral
          ================================================================ -->
     <string name="menu_reglages">Réglages</string>
+    <string name="menu_a_propos">À propos</string>
+    <string name="a_propos_titre">À propos d\'OpenNote</string>
+    <string name="a_propos_description">Application Android légère pour écrire des notes Markdown stockées sur un serveur OpenCloud.</string>
+    <string name="a_propos_licence">Licence : à renseigner.</string>
+    <string name="a_propos_depot">Dépôt Git</string>
+    <string name="a_propos_depot_url" translatable="false">https://github.com/ybediat/OpenNote</string>
 
     <!-- ================================================================
          Réglages
