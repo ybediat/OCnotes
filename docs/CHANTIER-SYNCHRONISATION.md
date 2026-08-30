@@ -5,11 +5,11 @@ Lire d'abord `CLAUDE.md`, `docs/ARCHITECTURE.md` (§ 5) et `docs/FACADE.md`.
 Les constats de ce document ont été relus dans le code et, pour les points
 WebDAV les plus importants, vérifiés contre le serveur OpenCloud de test.
 
-**État au 30 août 2026.** La synchronisation des contenus est bien construite :
+**État au 30 août 2026 — terminé.** La synchronisation des contenus est bien construite :
 local-first, file persistante, ETag, `If-Match` sur les écritures, copie locale
 en cas de conflit et reprise après panne réseau. En revanche, les opérations
-structurelles différées (`DELETE` et `MOVE`) peuvent détruire silencieusement
-une modification distante. Ce chantier corrige cette asymétrie avant toute
+structurelles différées (`DELETE` et `MOVE`) pouvaient détruire silencieusement
+une modification distante. Ce chantier a corrigé cette asymétrie avant toute
 optimisation de cadence ou de performance.
 
 ---

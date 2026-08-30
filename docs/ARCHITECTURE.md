@@ -383,6 +383,27 @@ le reste en file. Un conflit, lui, se résout sur place et la passe continue.
 les contenus avant de créer une copie évite de polluer le dossier de l'utilisateur
 quand la cause est une passe précédente interrompue.
 
+**Les mutations structurelles différées sont protégées côté client.** Le
+serveur OpenCloud ignore `If-Match` sur `DELETE` et `MOVE` et n'annonce pas la
+classe DAV 2 : il n'existe donc ni précondition fiable, ni verrou WebDAV. La
+file mémorise l'ETag vu au geste local, puis relit la ressource avant de la
+supprimer ou déplacer. Si l'ETag diffère, la mutation distante n'est pas
+envoyée : une suppression est annulée ; un déplacement laisse la source
+distante à sa place et publie la version locale sous un nom de conflit à la
+destination. La lecture puis mutation reste non atomique ; c'est une réduction
+forte du risque, pas une promesse de sérialisation serveur.
+
+**Une opération structurelle sans ETag n'est jamais destructive.** C'est le
+cas d'une file écrite par une ancienne version de l'application ou d'une note
+jamais observée : elle produit le même état de conflit prudent. Les dossiers
+ne disposent pas d'un ETag représentant leur descendance ; leurs suppressions,
+renommages et déplacements différés sont donc refusés en v1.
+
+**Une passe de synchronisation est sérialisée dans `mobile.App`.** Les trois
+travaux WorkManager et la synchronisation manuelle peuvent coexister, mais un
+sémaphore unique couvre la durée entière de `SyncJSON`. L'attente est bornée
+par le délai de passe, sans verrouiller l'ouverture ou la fermeture de session.
+
 **L'index est écrit par fichier temporaire renommé**, et un index illisible
 fait repartir le cache à vide plutôt qu'échouer : perdre le cache est bénin,
 refuser de démarrer ne l'est pas.

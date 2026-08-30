@@ -273,7 +273,7 @@ class EditorViewModel(
         enregistrement = viewModelScope.launch {
             delay(DELAI_ENREGISTREMENT_MS)
             enregistrer()
-            syncScheduler.syncAfterWrite()
+            syncScheduler.syncAfterLocalChange()
         }
     }
 
@@ -298,7 +298,7 @@ class EditorViewModel(
         // ViewModel est détruit avant que la coroutine ait pu écrire.
         applicationScope.launch {
             ecrire(contenu)
-            syncScheduler.syncAfterWrite()
+            syncScheduler.syncAfterLocalChange()
         }
     }
 

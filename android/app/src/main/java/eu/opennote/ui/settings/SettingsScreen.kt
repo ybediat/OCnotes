@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
+import eu.opennote.data.ConflictDto
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -255,10 +256,7 @@ fun SettingsScreen(
                     Text(stringResource(R.string.reglages_conflits_explication))
                     etat.conflits.forEach { conflit ->
                         Text(
-                            text = stringResource(
-                                R.string.reglages_conflits_ligne,
-                                conflit.copyPath.substringAfterLast('/'),
-                            ),
+                            text = ligneConflit(conflit),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -271,6 +269,13 @@ fun SettingsScreen(
             },
         )
     }
+}
+
+@Composable
+private fun ligneConflit(conflit: ConflictDto): String = when (conflit.operation) {
+    "delete" -> stringResource(R.string.reglages_conflits_suppression, conflit.path.substringAfterLast('/'))
+    "move" -> stringResource(R.string.reglages_conflits_deplacement, conflit.copyPath.substringAfterLast('/'))
+    else -> stringResource(R.string.reglages_conflits_ligne, conflit.copyPath.substringAfterLast('/'))
 }
 
 @Composable

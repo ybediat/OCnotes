@@ -56,6 +56,7 @@
     <string name="err_racine_protegee">La carpeta de notas no se puede renombrar, mover ni eliminar.</string>
     <string name="err_deplacement_dans_soi">Una carpeta no se puede mover dentro de sí misma.</string>
     <string name="err_chemin_vide">No se ha seleccionado ningún elemento.</string>
+    <string name="err_dossier_hors_ligne">No se puede cambiar el nombre, mover ni eliminar una carpeta sin conexión. Vuelve a conectarte primero.</string>
     <string name="err_stockage">No se puede escribir en el almacenamiento del dispositivo. Compruebe el espacio disponible.</string>
     <string name="err_url_serveur_manquante">Introduzca la dirección del servidor.</string>
     <string name="err_url_serveur_invalide">Dirección del servidor no válida. Debe comenzar por http:// o https://</string>
@@ -328,4 +329,8 @@
         l'interface web. Le message dit la cause, pas la mécanique.
     -->
     <string name="apercu_lecture_seule">Esta nota contiene un elemento demasiado largo para editarlo aquí. Se ha abierto en modo de solo lectura.</string>
+    <string name="sync_conflits_suppression">\n• eliminación cancelada: %1$s cambió de forma remota</string>
+    <string name="sync_conflits_deplacement">\n• traslado cancelado; copia conservada: %1$s</string>
+    <string name="reglages_conflits_suppression">• Eliminación cancelada: %1$s cambió de forma remota</string>
+    <string name="reglages_conflits_deplacement">• Traslado cancelado; copia conservada: %1$s</string>
 </resources>

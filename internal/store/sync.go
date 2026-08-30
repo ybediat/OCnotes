@@ -27,9 +27,10 @@ const (
 // La file est persistée avec l'index : une écriture faite dans le métro
 // survit à la fermeture de l'application.
 type Operation struct {
-	Kind   OpKind `json:"kind"`
-	Path   string `json:"path"`
-	Target string `json:"target,omitempty"`
+	Kind         OpKind `json:"kind"`
+	Path         string `json:"path"`
+	Target       string `json:"target,omitempty"`
+	ExpectedETag string `json:"expectedETag,omitempty"`
 }
 
 // Remote est la partie de la bibliothèque de notes dont la synchronisation a
@@ -37,6 +38,7 @@ type Operation struct {
 type Remote interface {
 	Read(ctx context.Context, notePath string) ([]byte, string, error)
 	Exists(ctx context.Context, itemPath string) (bool, error)
+	Stat(ctx context.Context, itemPath string) (string, error)
 	Save(ctx context.Context, notePath string, content []byte, ifMatch string) (string, error)
 	SaveNew(ctx context.Context, notePath string, content []byte) (string, error)
 	Delete(ctx context.Context, itemPath string) error
@@ -47,6 +49,9 @@ type Remote interface {
 // Conflict décrit une écriture refusée parce que le serveur avait une version
 // plus récente.
 type Conflict struct {
+	// Operation identifie le geste local qui a rencontré une divergence.
+	Operation OpKind
+
 	// Path est la note concernée : elle porte désormais la version du serveur.
 	Path string
 
@@ -177,7 +182,14 @@ func (s *Store) apply(ctx context.Context, remote Remote, op Operation, report *
 		return nil, nil
 
 	case OpDelete:
-		err := remote.Delete(ctx, op.Path)
+		changed, err := s.structuralChange(ctx, remote, op)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			return s.resolveDeleteConflict(ctx, remote, op.Path)
+		}
+		err = remote.Delete(ctx, op.Path)
 		if err != nil && !errors.Is(err, opencloud.ErrNotFound) {
 			return nil, err
 		}
@@ -186,7 +198,14 @@ func (s *Store) apply(ctx context.Context, remote Remote, op Operation, report *
 		return nil, nil
 
 	case OpMove:
-		err := remote.MoveTo(ctx, op.Path, op.Target)
+		changed, err := s.structuralChange(ctx, remote, op)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			return s.resolveMoveConflict(ctx, remote, op)
+		}
+		err = remote.MoveTo(ctx, op.Path, op.Target)
 		if err != nil && !errors.Is(err, opencloud.ErrNotFound) {
 			return nil, err
 		}
@@ -199,6 +218,66 @@ func (s *Store) apply(ctx context.Context, remote Remote, op Operation, report *
 	default:
 		return nil, fmt.Errorf("store: opération inconnue %q", op.Kind)
 	}
+}
+
+// structuralChange compare la version observée au geste local avec celle qui
+// est présente juste avant la mutation. OpenCloud ignorant If-Match sur DELETE
+// et MOVE, cette lecture est la barrière qui évite le cas courant de perte.
+func (s *Store) structuralChange(ctx context.Context, remote Remote, op Operation) (bool, error) {
+	if op.ExpectedETag == "" {
+		return true, nil
+	}
+	etag, err := remote.Stat(ctx, op.Path)
+	if errors.Is(err, opencloud.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return etag != op.ExpectedETag, nil
+}
+
+func (s *Store) resolveDeleteConflict(ctx context.Context, remote Remote, notePath string) (*Conflict, error) {
+	server, etag, err := remote.Read(ctx, notePath)
+	if errors.Is(err, opencloud.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := s.Accept(notePath, server, etag); err != nil {
+		return nil, err
+	}
+	return &Conflict{Operation: OpDelete, Path: notePath}, nil
+}
+
+func (s *Store) resolveMoveConflict(ctx context.Context, remote Remote, op Operation) (*Conflict, error) {
+	server, etag, err := remote.Read(ctx, op.Path)
+	if errors.Is(err, opencloud.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	local, _, ok := s.Get(op.Target)
+	if !ok {
+		return nil, fmt.Errorf("store: copie locale absente pendant le conflit de déplacement de %s", op.Path)
+	}
+	copyPath := conflictPath(op.Target, time.Now())
+	copyETag, err := remote.Save(ctx, copyPath, local, "")
+	if err != nil {
+		return nil, err
+	}
+	if err := s.Accept(op.Path, server, etag); err != nil {
+		return nil, err
+	}
+	if err := s.Accept(copyPath, local, copyETag); err != nil {
+		return nil, err
+	}
+	if err := s.Forget(op.Target); err != nil {
+		return nil, err
+	}
+	return &Conflict{Operation: OpMove, Path: op.Path, CopyPath: copyPath}, nil
 }
 
 // pushWrite envoie le contenu en cache, en protégeant la version du serveur
@@ -335,7 +414,7 @@ func (s *Store) resolveConflict(ctx context.Context, remote Remote, notePath str
 		return nil, err
 	}
 
-	return &Conflict{Path: notePath, CopyPath: copyPath}, nil
+	return &Conflict{Operation: OpWrite, Path: notePath, CopyPath: copyPath}, nil
 }
 
 // conflictPath construit le nom de la copie de secours.

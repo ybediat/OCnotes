@@ -315,7 +315,7 @@ class BrowserViewModel(
                 // aucun dossier courant ne peut servir de proposition.
                 preferences.definirDernierDossier(dossier)
                 recharger()
-                syncScheduler.syncAfterWrite()
+                syncScheduler.syncAfterLocalChange()
                 _evenements.value = BrowserEvent.OuvrirNote(note.path)
             } catch (e: OpenNoteException) {
                 _evenements.value = BrowserEvent.Message(e.texte())
@@ -328,6 +328,7 @@ class BrowserViewModel(
             try {
                 repository.createFolder(_uiState.value.cheminCourant, nom.trim())
                 recharger()
+                syncScheduler.syncAfterLocalChange()
             } catch (e: OpenNoteException) {
                 _evenements.value = BrowserEvent.Message(e.texte())
             }
@@ -339,6 +340,7 @@ class BrowserViewModel(
             try {
                 repository.rename(entree.path, nouveauNom.trim())
                 recharger()
+                syncScheduler.syncAfterLocalChange()
             } catch (e: OpenNoteException) {
                 _evenements.value = BrowserEvent.Message(e.texte())
             }
@@ -358,6 +360,7 @@ class BrowserViewModel(
             try {
                 repository.move(entree.path, dossier)
                 recharger()
+                syncScheduler.syncAfterLocalChange()
                 _evenements.value = BrowserEvent.Message(Texte.de(R.string.browser_deplace, entree.display))
             } catch (e: OpenNoteException) {
                 _evenements.value = BrowserEvent.Message(e.texte())
@@ -370,6 +373,7 @@ class BrowserViewModel(
             try {
                 repository.delete(entree.path)
                 recharger()
+                syncScheduler.syncAfterLocalChange()
                 _evenements.value = BrowserEvent.Message(Texte.de(R.string.browser_supprime, entree.display))
             } catch (e: OpenNoteException) {
                 _evenements.value = BrowserEvent.Message(e.texte())

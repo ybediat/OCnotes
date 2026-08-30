@@ -291,7 +291,7 @@ respectée telle quelle.
 ```json
 {
   "pushed": 3, "deleted": 0, "moved": 1,
-  "conflicts": [{"path": "Notes/a.md", "copyPath": "Notes/a (conflit 2026-08-28T14-32-05).md"}],
+  "conflicts": [{"operation": "move", "path": "a.md", "copyPath": "a (conflit 2026-08-28T14-32-05).md"}],
   "remaining": 2,
   "error": "opencloud: [HTTP] PUT …: HTTP 502",
   "errorCode": "HTTP"
@@ -305,9 +305,18 @@ passe : c'est le token qu'il faut renouveler, réessayer ne servira à rien.
 dans `error`, avec ce qui a tout de même été propagé. Affichez
 « 3 notes envoyées, 2 en attente » plutôt qu'un échec sec.
 
-Un `conflicts` non vide mérite une notification : la version distante a
-remplacé la note, et la version locale de l'utilisateur a été conservée sous
-`copyPath`. Rien n'est perdu, mais il faut le lui dire.
+Un `conflicts` non vide mérite une notification. `operation` vaut `write`,
+`delete` ou `move` :
+
+- `write` : la version distante devient la référence et `copyPath` conserve la
+  version locale ;
+- `delete` : la suppression est annulée, la note distante reste disponible et
+  `copyPath` est vide ;
+- `move` : la source distante reste à son chemin initial et `copyPath` désigne
+  la copie locale conservée à la destination.
+
+L'interface doit donc demander une action utilisateur sans jamais supposer que
+`copyPath` existe.
 
 ### `ApplyFormatJSON`
 

@@ -31,3 +31,4 @@ Thumbs.db
 
 # Claude Code (parametres locaux a la machine)
 /.claude/settings.local.json
+CLAUDE.md

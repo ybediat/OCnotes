@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 // prepare monte une application connectée à un serveur factice, avec un espace
@@ -31,6 +32,30 @@ func decodeJSON(t *testing.T, raw string, into any) {
 	t.Helper()
 	if err := json.Unmarshal([]byte(raw), into); err != nil {
 		t.Fatalf("JSON illisible (%s): %v", strings.TrimSpace(raw), err)
+	}
+}
+
+// Deux déclencheurs peuvent arriver en même temps (WorkManager et geste
+// manuel). Le second attend la passe en cours, puis abandonne proprement si le
+// délai d'annulation expire plutôt que de rejouer la file en parallèle.
+func TestSyncJSONAttendUnePasseDejaEnCours(t *testing.T) {
+	app, _, _ := prepare(t)
+
+	app.syncPass <- struct{}{}
+	defer func() { <-app.syncPass }()
+
+	oldTimeout := syncPassTimeout
+	syncPassTimeout = 10 * time.Millisecond
+	defer func() { syncPassTimeout = oldTimeout }()
+
+	raw, err := app.SyncJSON()
+	if err != nil {
+		t.Fatalf("SyncJSON: %v", err)
+	}
+	var result syncResult
+	decodeJSON(t, raw, &result)
+	if !strings.Contains(result.Error, "deadline exceeded") {
+		t.Errorf("Error = %q, attente annulée attendue", result.Error)
 	}
 }
 

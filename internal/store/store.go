@@ -352,9 +352,27 @@ func (s *Store) Delete(itemPath string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	expectedETag := s.expectedETagLocked(itemPath)
+	if s.folders[itemPath] {
+		return fmt.Errorf("store: [STRUCTURAL_OFFLINE_FOLDER] suppression différée du dossier %s refusée", itemPath)
+	}
 	s.dropLocked(itemPath)
-	s.enqueueLocked(Operation{Kind: OpDelete, Path: itemPath})
+	s.enqueueLocked(Operation{Kind: OpDelete, Path: itemPath, ExpectedETag: expectedETag})
 	return s.save()
+}
+
+// expectedETagLocked retrouve la version observée avant qu'une opération locale
+// ne retire ou ne déplace son entrée. Une valeur vide est volontairement
+// conservée : une ancienne file ne doit jamais autoriser une mutation distante
+// destructive sans version de référence.
+func (s *Store) expectedETagLocked(itemPath string) string {
+	if entry, ok := s.entries[itemPath]; ok {
+		return entry.ETag
+	}
+	if known, ok := s.known[itemPath]; ok {
+		return known.ETag
+	}
+	return ""
 }
 
 // dropLocked retire du cache un chemin et tout ce qu'il contient.
@@ -386,6 +404,10 @@ func (s *Store) rename(from, to string, enqueue bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	expectedETag := s.expectedETagLocked(from)
+	if enqueue && s.folders[from] {
+		return fmt.Errorf("store: [STRUCTURAL_OFFLINE_FOLDER] déplacement différé du dossier %s refusé", from)
+	}
 	if s.folders[from] {
 		s.forgetFolderLocked(from)
 		s.rememberFolderLocked(to)
@@ -409,7 +431,7 @@ func (s *Store) rename(from, to string, enqueue bool) error {
 	s.renameKnownLocked(from, to)
 
 	if enqueue {
-		s.enqueueLocked(Operation{Kind: OpMove, Path: from, Target: to})
+		s.enqueueLocked(Operation{Kind: OpMove, Path: from, Target: to, ExpectedETag: expectedETag})
 	}
 	return s.save()
 }

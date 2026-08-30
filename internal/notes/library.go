@@ -210,6 +210,16 @@ func (l *Library) Exists(ctx context.Context, itemPath string) (bool, error) {
 	return false, err
 }
 
+// Stat renvoie l'ETag d'une ressource. La synchronisation l'utilise pour
+// comparer une mutation structurelle différée à la version vue localement.
+func (l *Library) Stat(ctx context.Context, itemPath string) (string, error) {
+	resource, err := l.backend.Stat(ctx, l.resolve(itemPath))
+	if err != nil {
+		return "", err
+	}
+	return resource.ETag, nil
+}
+
 // SaveNew écrit une note en exigeant qu'elle n'existe pas encore côté serveur.
 //
 // Réservé aux notes créées hors connexion, dont on ignore si le nom est déjà

@@ -76,6 +76,17 @@ func (r *fakeRemote) Exists(_ context.Context, p string) (bool, error) {
 	return ok, nil
 }
 
+func (r *fakeRemote) Stat(_ context.Context, p string) (string, error) {
+	if r.offline {
+		return "", errOffline
+	}
+	r.calls = append(r.calls, "stat "+p)
+	if _, ok := r.files[p]; !ok {
+		return "", fmt.Errorf("fake: %s: %w", p, opencloud.ErrNotFound)
+	}
+	return r.etags[p], nil
+}
+
 // SaveNew refuse d'écraser : c'est la protection des notes créées hors
 // connexion, dont on ignore si le nom est déjà pris côté serveur.
 func (r *fakeRemote) SaveNew(ctx context.Context, p string, content []byte) (string, error) {
@@ -340,6 +351,9 @@ func TestSuppressionAnnuleLEcritureEnAttente(t *testing.T) {
 
 	remote.files["a.md"] = "sur le serveur"
 	remote.etags["a.md"] = `"e0"`
+	if err := s.Accept("a.md", []byte("sur le serveur"), `"e0"`); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
 
 	if err := s.Put("a.md", []byte("brouillon")); err != nil {
 		t.Fatalf("Put: %v", err)
@@ -758,6 +772,25 @@ func TestRename(t *testing.T) {
 	}
 	if _, ok := remote.files["ancienne.md"]; ok {
 		t.Error("l'ancien chemin existe encore sur le serveur")
+	}
+}
+
+// Un dossier n'a pas d'ETag qui représente sûrement toute sa descendance. Une
+// mutation différée récursive serait donc aveugle : elle est refusée avant même
+// d'entrer dans la file.
+func TestMutationDiffereeSurDossierRefusee(t *testing.T) {
+	s := newStore(t)
+	if err := s.RememberFolder("Archives"); err != nil {
+		t.Fatalf("RememberFolder: %v", err)
+	}
+	if err := s.Delete("Archives"); err == nil || !strings.Contains(err.Error(), "STRUCTURAL_OFFLINE_FOLDER") {
+		t.Errorf("Delete dossier = %v, refus explicite attendu", err)
+	}
+	if err := s.Rename("Archives", "Archive"); err == nil || !strings.Contains(err.Error(), "STRUCTURAL_OFFLINE_FOLDER") {
+		t.Errorf("Rename dossier = %v, refus explicite attendu", err)
+	}
+	if pending := s.Pending(); len(pending) != 0 {
+		t.Errorf("file = %+v, aucune mutation de dossier ne doit être inscrite", pending)
 	}
 }
 

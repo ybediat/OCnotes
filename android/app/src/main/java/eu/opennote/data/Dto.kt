@@ -89,6 +89,7 @@ data class NoteRefDto(
 /** Une note dont la version locale a été mise de côté. */
 @Serializable
 data class ConflictDto(
+    val operation: String = "write",
     val path: String = "",
     val copyPath: String = "",
 )

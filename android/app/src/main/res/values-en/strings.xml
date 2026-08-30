@@ -75,6 +75,7 @@
     <string name="err_racine_protegee">The notes folder itself cannot be renamed, moved, or deleted.</string>
     <string name="err_deplacement_dans_soi">A folder cannot be moved into itself.</string>
     <string name="err_chemin_vide">No item specified.</string>
+    <string name="err_dossier_hors_ligne">A folder cannot be renamed, moved, or deleted while offline. Reconnect first.</string>
     <string name="err_stockage">Unable to write to the device storage. Check the available space.</string>
     <string name="err_url_serveur_manquante">Enter the server address.</string>
     <string name="err_url_serveur_invalide">Invalid server address. It must start with http:// or https://</string>
@@ -349,4 +350,8 @@
         l'interface web. Le message dit la cause, pas la mécanique.
     -->
     <string name="apercu_lecture_seule">This note contains an element that is too long to edit here. It is open in read-only mode.</string>
+    <string name="sync_conflits_suppression">\n• deletion cancelled: %1$s changed remotely</string>
+    <string name="sync_conflits_deplacement">\n• move cancelled; copy kept: %1$s</string>
+    <string name="reglages_conflits_suppression">• Deletion cancelled: %1$s changed remotely</string>
+    <string name="reglages_conflits_deplacement">• Move cancelled; copy kept: %1$s</string>
 </resources>

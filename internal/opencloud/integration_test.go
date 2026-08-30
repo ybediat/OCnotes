@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"testing"
 	"time"
@@ -208,6 +209,66 @@ func TestIntegrationWriteNewEtIfNoneMatch(t *testing.T) {
 	default:
 		t.Errorf("comportement inattendu : erreur = %v, contenu = %q", err, got)
 	}
+}
+
+// OpenCloud ignore aussi If-Match sur les mutations structurelles. Un DELETE
+// ou un MOVE avec un ETag périmé aboutit quand même : l'application ne peut
+// donc pas déléguer la protection d'une suppression ou d'un déplacement hors
+// connexion au serveur.
+//
+// Ce test documente le comportement mesuré du serveur réel. Le Store devra
+// relire et comparer l'ETag avant toute mutation différée, puis conserver la
+// ressource distante en cas de divergence.
+func TestIntegrationMutationsStructurellesIgnorentIfMatch(t *testing.T) {
+	space, ctx, sandbox := integrationSpace(t)
+
+	t.Run("DELETE", func(t *testing.T) {
+		note := sandbox + "/suppression.md"
+		ancien, err := space.Write(ctx, note, []byte("version 1"), "")
+		if err != nil {
+			t.Fatalf("création: %v", err)
+		}
+		if _, err := space.Write(ctx, note, []byte("version 2"), ancien); err != nil {
+			t.Fatalf("modification distante: %v", err)
+		}
+
+		if _, _, err := space.c.do(ctx, http.MethodDelete, space.resourceURL(note, false), nil, map[string]string{
+			"If-Match": ancien,
+		}); err != nil {
+			t.Fatalf("DELETE avec ETag périmé: %v", err)
+		}
+		if _, _, err := space.Read(ctx, note); !errors.Is(err, ErrNotFound) {
+			t.Errorf("après DELETE avec ETag périmé, lecture = %v, attendu ErrNotFound", err)
+		}
+	})
+
+	t.Run("MOVE", func(t *testing.T) {
+		from := sandbox + "/source.md"
+		to := sandbox + "/destination.md"
+		ancien, err := space.Write(ctx, from, []byte("version 1"), "")
+		if err != nil {
+			t.Fatalf("création: %v", err)
+		}
+		if _, err := space.Write(ctx, from, []byte("version 2"), ancien); err != nil {
+			t.Fatalf("modification distante: %v", err)
+		}
+
+		if _, _, err := space.c.do(ctx, "MOVE", space.resourceURL(from, false), nil, map[string]string{
+			"Destination": space.resourceURL(to, false).String(),
+			"Overwrite":   "F",
+			"If-Match":    ancien,
+		}); err != nil {
+			t.Fatalf("MOVE avec ETag périmé: %v", err)
+		}
+		if _, _, err := space.Read(ctx, from); !errors.Is(err, ErrNotFound) {
+			t.Errorf("après MOVE avec ETag périmé, source = %v, attendu ErrNotFound", err)
+		}
+		if got, _, err := space.Read(ctx, to); err != nil {
+			t.Fatalf("destination après MOVE: %v", err)
+		} else if string(got) != "version 2" {
+			t.Errorf("contenu déplacé = %q, attendu version distante", got)
+		}
+	})
 }
 
 func TestIntegrationDossiers(t *testing.T) {

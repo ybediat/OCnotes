@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
  *
  *  - [schedulePeriodic] — filet de sécurité horaire, contraint au réseau ;
  *  - [syncNow] — retour au premier plan, ou geste explicite de l'utilisateur ;
- *  - [syncAfterWrite] — après une écriture, **avec anti-rebond**.
+ *  - [syncAfterLocalChange] — après une modification locale, **avec anti-rebond**.
  */
 class SyncScheduler(context: Context) {
 
@@ -77,7 +77,7 @@ class SyncScheduler(context: Context) {
      * attente, et la passe ne part que [DEBOUNCE_SECONDS] secondes après la
      * **dernière** écriture.
      */
-    fun syncAfterWrite() {
+    fun syncAfterLocalChange() {
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(networkRequired)
             .setInitialDelay(DEBOUNCE_SECONDS, TimeUnit.SECONDS)

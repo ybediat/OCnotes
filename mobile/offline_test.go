@@ -165,6 +165,50 @@ func TestSuppressionHorsConnexion(t *testing.T) {
 	}
 }
 
+// Le serveur réel ignore If-Match sur DELETE. Une suppression décidée hors
+// connexion ne doit donc jamais effacer une version modifiée entre-temps sur un
+// autre appareil : elle devient un conflit structurel et la version distante
+// reste accessible.
+func TestSuppressionHorsConnexionPreserveLaVersionDistanteDivergente(t *testing.T) {
+	app, server, _ := prepare(t)
+	if _, err := app.CreateNoteJSON("", "partagee", "version 1"); err != nil {
+		t.Fatalf("CreateNoteJSON: %v", err)
+	}
+	if _, err := app.SyncJSON(); err != nil {
+		t.Fatalf("synchronisation initiale: %v", err)
+	}
+
+	server.setOffline(true)
+	if err := app.Delete("partagee.md"); err != nil {
+		t.Fatalf("suppression hors connexion: %v", err)
+	}
+
+	// Simulation d'un autre appareil : le serveur change pendant l'absence du
+	// téléphone. Le faux serveur ignore volontairement If-Match sur DELETE.
+	server.mu.Lock()
+	server.files["Notes/partagee.md"] = []byte("version distante")
+	server.etags["Notes/partagee.md"] = server.nextETag()
+	server.mu.Unlock()
+
+	server.setOffline(false)
+	raw, err := app.SyncJSON()
+	if err != nil {
+		t.Fatalf("SyncJSON: %v", err)
+	}
+	var sync syncResult
+	decodeJSON(t, raw, &sync)
+
+	server.mu.Lock()
+	got := string(server.files["Notes/partagee.md"])
+	server.mu.Unlock()
+	if got != "version distante" {
+		t.Fatalf("la suppression différée a effacé la version distante : %q", got)
+	}
+	if len(sync.Conflicts) != 1 {
+		t.Fatalf("%d conflit(s), 1 attendu", len(sync.Conflicts))
+	}
+}
+
 func TestRenommageHorsConnexion(t *testing.T) {
 	app, server, _ := prepare(t)
 
@@ -197,6 +241,46 @@ func TestRenommageHorsConnexion(t *testing.T) {
 	server.mu.Unlock()
 	if !nouvelle || ancienne {
 		t.Errorf("le serveur n'a pas suivi le renommage: %v", keys(server.files))
+	}
+}
+
+// Même règle pour MOVE : le déplacement local devient une copie de conflit à
+// la destination, sans retirer la source distante qui a changé.
+func TestRenommageHorsConnexionPreserveLaVersionDistanteDivergente(t *testing.T) {
+	app, server, _ := prepare(t)
+	if _, err := app.CreateNoteJSON("", "partagee", "version 1"); err != nil {
+		t.Fatalf("CreateNoteJSON: %v", err)
+	}
+	if _, err := app.SyncJSON(); err != nil {
+		t.Fatalf("synchronisation initiale: %v", err)
+	}
+
+	server.setOffline(true)
+	if _, err := app.Rename("partagee.md", "archive"); err != nil {
+		t.Fatalf("renommage hors connexion: %v", err)
+	}
+
+	server.mu.Lock()
+	server.files["Notes/partagee.md"] = []byte("version distante")
+	server.etags["Notes/partagee.md"] = server.nextETag()
+	server.mu.Unlock()
+
+	server.setOffline(false)
+	raw, err := app.SyncJSON()
+	if err != nil {
+		t.Fatalf("SyncJSON: %v", err)
+	}
+	var sync syncResult
+	decodeJSON(t, raw, &sync)
+
+	server.mu.Lock()
+	source := string(server.files["Notes/partagee.md"])
+	server.mu.Unlock()
+	if source != "version distante" {
+		t.Fatalf("MOVE différé a retiré la source distante : %q", source)
+	}
+	if len(sync.Conflicts) != 1 || !strings.HasPrefix(sync.Conflicts[0].CopyPath, "archive (conflit ") {
+		t.Fatalf("conflit de renommage = %+v", sync.Conflicts)
 	}
 }
 

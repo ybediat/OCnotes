@@ -69,6 +69,7 @@
     <string name="err_racine_protegee">Le dossier de notes lui-même ne peut être ni renommé, ni déplacé, ni supprimé.</string>
     <string name="err_deplacement_dans_soi">Un dossier ne peut pas être déplacé dans lui-même.</string>
     <string name="err_chemin_vide">Aucun élément désigné.</string>
+    <string name="err_dossier_hors_ligne">Un dossier ne peut pas être renommé, déplacé ou supprimé hors connexion. Reconnectez-vous d\'abord.</string>
     <string name="err_stockage">Impossible d\'écrire sur le stockage de l\'appareil. Vérifiez l\'espace disponible.</string>
     <string name="err_url_serveur_manquante">Indiquez l\'adresse du serveur.</string>
     <string name="err_url_serveur_invalide">Adresse de serveur invalide. Elle doit commencer par http:// ou https://</string>
@@ -349,4 +350,8 @@
         l'interface web. Le message dit la cause, pas la mécanique.
     -->
     <string name="apercu_lecture_seule">Cette note contient un élément trop long pour être modifié ici. Elle est ouverte en lecture seule.</string>
+    <string name="sync_conflits_suppression">\n• suppression annulée : %1$s a changé à distance</string>
+    <string name="sync_conflits_deplacement">\n• déplacement annulé ; copie conservée : %1$s</string>
+    <string name="reglages_conflits_suppression">• Suppression annulée : %1$s a changé à distance</string>
+    <string name="reglages_conflits_deplacement">• Déplacement annulé ; copie conservée : %1$s</string>
 </resources>

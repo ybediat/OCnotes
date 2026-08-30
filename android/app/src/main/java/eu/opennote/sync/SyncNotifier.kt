@@ -73,7 +73,7 @@ class SyncNotifier(private val context: Context) {
         val detail = buildString {
             append(rassurance)
             conflicts.take(MAX_LIGNES).forEach { conflit ->
-                append(Texte.de(R.string.sync_conflits_ligne, nomAffichable(conflit.copyPath)).resoudre(res))
+                append(ligneConflit(conflit, res))
             }
             val reste = conflicts.size - MAX_LIGNES
             if (reste > 0) {
@@ -96,6 +96,12 @@ class SyncNotifier(private val context: Context) {
     /** Dernier segment du chemin, sans l'extension `.md`. */
     private fun nomAffichable(path: String): String =
         path.substringAfterLast('/').removeSuffix(".md")
+
+    private fun ligneConflit(conflit: ConflictDto, res: android.content.res.Resources): String = when (conflit.operation) {
+        "delete" -> Texte.de(R.string.sync_conflits_suppression, nomAffichable(conflit.path)).resoudre(res)
+        "move" -> Texte.de(R.string.sync_conflits_deplacement, nomAffichable(conflit.copyPath)).resoudre(res)
+        else -> Texte.de(R.string.sync_conflits_ligne, nomAffichable(conflit.copyPath)).resoudre(res)
+    }
 
     private companion object {
         const val CHANNEL_ID = "opennote-sync"

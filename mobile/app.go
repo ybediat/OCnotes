@@ -54,14 +54,20 @@ const refreshTimeout = 8 * time.Second
 // chaque ouverture de note.
 const offlineBackoff = 20 * time.Second
 
+// syncPassTimeout borne aussi l'attente d'une passe déjà en cours. C'est une
+// variable pour que le test puisse vérifier cette annulation sans attendre cinq
+// minutes.
+var syncPassTimeout = 5 * time.Minute
+
 // App est le point d'entrée unique pour Android.
 type App struct {
-	mu      sync.Mutex
-	dataDir string
-	cfg     config.Config
-	client  *opencloud.Client
-	lib     *notes.Library
-	cache   *store.Store
+	mu       sync.Mutex
+	syncPass chan struct{}
+	dataDir  string
+	cfg      config.Config
+	client   *opencloud.Client
+	lib      *notes.Library
+	cache    *store.Store
 
 	// offlineUntil retient qu'un appel réseau vient d'échouer, pour éviter de
 	// réessayer à chaque geste.
@@ -81,7 +87,7 @@ func NewApp(dataDir string) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &App{dataDir: dataDir, cfg: cfg, cache: cache}, nil
+	return &App{dataDir: dataDir, cfg: cfg, cache: cache, syncPass: make(chan struct{}, 1)}, nil
 }
 
 func (a *App) ctx() (context.Context, context.CancelFunc) {
@@ -864,8 +870,9 @@ func (a *App) TitleOf(name, content string) string {
 
 // conflictInfo signale une note dont la version locale a été mise de côté.
 type conflictInfo struct {
-	Path     string `json:"path"`
-	CopyPath string `json:"copyPath"`
+	Operation string `json:"operation"`
+	Path      string `json:"path"`
+	CopyPath  string `json:"copyPath"`
 }
 
 // syncResult résume une passe de synchronisation.
@@ -900,8 +907,24 @@ func (a *App) SyncJSON() (string, error) {
 		return "", errNoWorkspace()
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), syncPassTimeout)
 	defer cancel()
+
+	// WorkManager, le bouton manuel et tout futur appel de la façade convergent
+	// ici. Le Store protège sa mémoire, mais une passe entière doit être seule à
+	// parler au serveur : sinon deux appels peuvent rejouer la même tête de file.
+	select {
+	case a.syncPass <- struct{}{}:
+		defer func() { <-a.syncPass }()
+	case <-ctx.Done():
+		err := ctx.Err()
+		return toJSON(syncResult{
+			Conflicts: []conflictInfo{},
+			Remaining: a.PendingCount(),
+			Error:     err.Error(),
+			ErrorCode: ErrorCode(err.Error()),
+		})
+	}
 
 	report, err := a.cache.Push(ctx, lib)
 
@@ -913,7 +936,7 @@ func (a *App) SyncJSON() (string, error) {
 		Conflicts: []conflictInfo{},
 	}
 	for _, c := range report.Conflicts {
-		result.Conflicts = append(result.Conflicts, conflictInfo{Path: c.Path, CopyPath: c.CopyPath})
+		result.Conflicts = append(result.Conflicts, conflictInfo{Operation: string(c.Operation), Path: c.Path, CopyPath: c.CopyPath})
 	}
 	if err != nil {
 		result.Error = err.Error()

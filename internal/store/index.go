@@ -20,6 +20,7 @@ import (
 // à s'en méfier un par un aurait été la vraie source de bugs.
 type Known struct {
 	Path    string    `json:"path"`
+	ETag    string    `json:"etag,omitempty"`
 	Size    int64     `json:"size"`
 	ModTime time.Time `json:"modTime"`
 }

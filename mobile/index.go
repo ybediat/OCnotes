@@ -62,7 +62,7 @@ func (a *App) ListAllJSON() (string, error) {
 
 	connues := make([]store.Known, 0, len(index.Notes))
 	for _, n := range index.Notes {
-		connues = append(connues, store.Known{Path: n.Path, Size: n.Size, ModTime: n.ModTime})
+		connues = append(connues, store.Known{Path: n.Path, ETag: n.ETag, Size: n.Size, ModTime: n.ModTime})
 	}
 	dossiers := make([]string, 0, len(index.Folders))
 	for _, f := range index.Folders {
