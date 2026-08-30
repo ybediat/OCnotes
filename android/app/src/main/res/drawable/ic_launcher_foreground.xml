@@ -11,25 +11,25 @@
 
     <!-- Quiet corner accents: decoration, not part of the logo itself. -->
     <path
-        android:fillColor="#A8E6D8"
+        android:fillColor="#20434f"
         android:fillAlpha="0.24"
         android:pathData="M0,18L10,8L31,29L21,39Z" />
     <path
-        android:fillColor="#A8E6D8"
+        android:fillColor="#20434f"
         android:fillAlpha="0.24"
         android:pathData="M0,43L10,33L24,47L14,57Z" />
     <path
-        android:fillColor="#A8E6D8"
+        android:fillColor="#20434f"
         android:fillAlpha="0.24"
         android:pathData="M84,79L94,69L108,83L108,103Z" />
     <path
-        android:fillColor="#A8E6D8"
+        android:fillColor="#20434f"
         android:fillAlpha="0.24"
         android:pathData="M77,101L87,91L104,108L84,108Z" />
 
     <!-- Dark outline gives the white clipboard a clean separation. -->
     <path
-        android:fillColor="#123F36"
+        android:fillColor="#e2baff"
         android:pathData="M35,27L44,27L44,25C44,20.6 48.5,17 54,17C59.5,17 64,20.6 64,25L64,27L73,27C77.4,27 81,30.6 81,35L81,79C81,83.4 77.4,87 73,87L35,87C30.6,87 27,83.4 27,79L27,35C27,30.6 30.6,27 35,27Z" />
 
     <!-- Clipboard sheet. -->
@@ -39,7 +39,7 @@
 
     <!-- Clip tab. -->
     <path
-        android:fillColor="#123F36"
+        android:fillColor="#20434f"
         android:pathData="M47,31L47,26C47,23.2 50.1,21 54,21C57.9,21 61,23.2 61,26L61,31Z" />
     <path
         android:fillColor="#76CDB9"
@@ -47,12 +47,12 @@
 
     <!-- Note lines. -->
     <path
-        android:fillColor="#1F6F5C"
+        android:fillColor="#20434f"
         android:pathData="M40,46L68,46C69.1,46 70,46.9 70,48C70,49.1 69.1,50 68,50L40,50C38.9,50 38,49.1 38,48C38,46.9 38.9,46 40,46Z" />
     <path
-        android:fillColor="#1F6F5C"
+        android:fillColor="#20434f"
         android:pathData="M40,57L68,57C69.1,57 70,57.9 70,59C70,60.1 69.1,61 68,61L40,61C38.9,61 38,60.1 38,59C38,57.9 38.9,57 40,57Z" />
     <path
-        android:fillColor="#1F6F5C"
+        android:fillColor="#20434f"
         android:pathData="M40,68L59,68C60.1,68 61,68.9 61,70C61,71.1 60.1,72 59,72L40,72C38.9,72 38,71.1 38,70C38,68.9 38.9,68 40,68Z" />
 </vector>
