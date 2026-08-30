@@ -108,6 +108,8 @@ sur l'instance : `app.stateJSON()`. La première lettre passe en minuscule.
 | `SuggestName(title string) string` | nom de fichier valide depuis un titre |
 | `TitleOf(name, content string) string` | titre à afficher |
 | `SyncJSON() (string, error)` | une passe de synchronisation |
+| `ConflictsJSON() (string, error)` | conflits ouverts persistants |
+| `ResolveConflictJSON(requestJSON string) (string, error)` | applique une décision de résolution sûre |
 | `PendingCount() int` | opérations en attente |
 | `ApplyFormatJSON(requestJSON string) (string, error)` | mise en forme Markdown |
 | `FormatActionsJSON() (string, error)` | liste des actions de la barre d'outils |
@@ -310,7 +312,7 @@ respectée telle quelle.
 ```json
 {
   "pushed": 3, "deleted": 0, "moved": 1,
-  "conflicts": [{"operation": "move", "path": "a.md", "copyPath": "a (conflit 2026-08-28T14-32-05).md"}],
+  "conflicts": [{"id": "…", "operation": "move", "path": "a.md", "copyPath": "a (conflit 2026-08-28T14-32-05).md", "createdAt": "2026-08-30T14:32:05Z"}],
   "remaining": 2,
   "error": "opencloud: [HTTP] PUT …: HTTP 502",
   "errorCode": "HTTP"
@@ -336,6 +338,32 @@ Un `conflicts` non vide mérite une notification. `operation` vaut `write`,
 
 L'interface doit donc demander une action utilisateur sans jamais supposer que
 `copyPath` existe.
+
+### `ConflictsJSON` et `ResolveConflictJSON`
+
+`ConflictsJSON` renvoie un tableau (éventuellement vide) des conflits encore
+ouverts. Chaque élément possède un `id` stable, `operation`, `path`,
+`copyPath` (vide pour une suppression conflictuelle) et `createdAt`. Il est
+persisté dans le cache : il ne disparaît pas après le rapport `SyncJSON` ni au
+redémarrage de l'application.
+
+Pour prendre une décision, envoyer :
+
+```json
+{"id":"…", "resolution":"server"}
+```
+
+`resolution` vaut `server`, `local` ou `both` :
+
+- `server` supprime uniquement la copie de conflit, après avoir vérifié son
+  ETag ;
+- `local` publie la copie locale avec l'ETag mémorisé lors du conflit ; si le
+  serveur a encore changé, il ne l'écrase pas et retourne un nouveau conflit ;
+- `both` ferme le conflit sans modifier aucun fichier.
+
+La réponse est `{"conflict":null}` après une résolution normale, ou contient
+le nouveau conflit lorsque la version distante a changé entre-temps. La
+résolution est sérialisée avec `SyncJSON`.
 
 ### `ApplyFormatJSON`
 

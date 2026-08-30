@@ -420,6 +420,16 @@ class OpenNoteRepository(
         return result
     }
 
+    /** Conflits ouverts, conservés par le cœur Go au-delà d'une passe Sync. */
+    suspend fun conflicts(): List<ConflictDto> =
+        json.decodeFromString(call { it.conflictsJSON() })
+
+    /** Applique une décision explicite, protégée côté Go par l'ETag mémorisé. */
+    suspend fun resolveConflict(id: String, resolution: String): ResolveConflictResultDto {
+        val request = json.encodeToString(ResolveConflictRequestDto(id, resolution))
+        return json.decodeFromString(call { it.resolveConflictJSON(request) })
+    }
+
     suspend fun refreshPending() {
         _pendingCount.value = call { it.pendingCount().toInt() }
     }

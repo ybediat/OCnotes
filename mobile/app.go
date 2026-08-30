@@ -906,9 +906,36 @@ func (a *App) TitleOf(name, content string) string {
 
 // conflictInfo signale une note dont la version locale a été mise de côté.
 type conflictInfo struct {
+	ID        string `json:"id"`
 	Operation string `json:"operation"`
 	Path      string `json:"path"`
 	CopyPath  string `json:"copyPath"`
+	CreatedAt string `json:"createdAt"`
+}
+
+// conflictResolutionRequest est la décision explicite prise dans l'interface.
+// Server, local et both correspondent aux constantes du Store, mais restent
+// des chaînes pour que la façade gomobile n'expose que du JSON.
+type conflictResolutionRequest struct {
+	ID         string `json:"id"`
+	Resolution string `json:"resolution"`
+}
+
+type conflictResolutionResult struct {
+	// Conflict est rempli seulement si le serveur a encore changé pendant une
+	// résolution « garder le local » : l'interface doit alors reproposer le
+	// choix sur sa dernière version.
+	Conflict *conflictInfo `json:"conflict,omitempty"`
+}
+
+func conflictInfoOf(c store.Conflict) conflictInfo {
+	return conflictInfo{
+		ID:        c.ID,
+		Operation: string(c.Operation),
+		Path:      c.Path,
+		CopyPath:  c.CopyPath,
+		CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339Nano),
+	}
 }
 
 // syncResult résume une passe de synchronisation.
@@ -972,11 +999,67 @@ func (a *App) SyncJSON() (string, error) {
 		Conflicts: []conflictInfo{},
 	}
 	for _, c := range report.Conflicts {
-		result.Conflicts = append(result.Conflicts, conflictInfo{Operation: string(c.Operation), Path: c.Path, CopyPath: c.CopyPath})
+		result.Conflicts = append(result.Conflicts, conflictInfoOf(c))
 	}
 	if err != nil {
 		result.Error = err.Error()
 		result.ErrorCode = ErrorCode(result.Error)
+	}
+	return toJSON(result)
+}
+
+// ConflictsJSON renvoie les conflits ouverts, y compris ceux créés par une
+// passe de synchronisation précédente ou avant le redémarrage de l'appareil.
+func (a *App) ConflictsJSON() (string, error) {
+	conflicts := a.cache.Conflicts()
+	result := make([]conflictInfo, 0, len(conflicts))
+	for _, c := range conflicts {
+		result = append(result, conflictInfoOf(c))
+	}
+	return toJSON(result)
+}
+
+// ResolveConflictJSON applique une décision explicite sur un conflit ouvert.
+// Cette opération partage le verrou d'une passe SyncJSON : elle lit ou écrit
+// le serveur et ne doit jamais se superposer à une synchronisation.
+func (a *App) ResolveConflictJSON(requestJSON string) (string, error) {
+	var request conflictResolutionRequest
+	if err := json.Unmarshal([]byte(requestJSON), &request); err != nil {
+		return "", fmt.Errorf("résolution de conflit invalide : %w", err)
+	}
+	if request.ID == "" {
+		return "", errors.New("résolution de conflit invalide : id manquant")
+	}
+
+	resolution := store.ConflictResolution(request.Resolution)
+	if resolution != store.KeepServer && resolution != store.KeepLocal && resolution != store.KeepBoth {
+		return "", errors.New("résolution de conflit invalide : décision inconnue")
+	}
+
+	a.mu.Lock()
+	lib := a.lib
+	a.mu.Unlock()
+	if lib == nil {
+		return "", errNoWorkspace()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), syncPassTimeout)
+	defer cancel()
+	select {
+	case a.syncPass <- struct{}{}:
+		defer func() { <-a.syncPass }()
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+
+	next, err := a.cache.ResolveConflict(ctx, lib, request.ID, resolution)
+	if err != nil {
+		return "", err
+	}
+	result := conflictResolutionResult{}
+	if next != nil {
+		info := conflictInfoOf(*next)
+		result.Conflict = &info
 	}
 	return toJSON(result)
 }

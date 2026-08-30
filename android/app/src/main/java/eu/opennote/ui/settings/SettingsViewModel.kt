@@ -40,6 +40,8 @@ data class SettingsUiState(
     /** Vrai quand ce résumé décrit une passe incomplète. */
     val resumePartiel: Boolean = false,
     val conflits: List<ConflictDto> = emptyList(),
+    val dialogueConflits: Boolean = false,
+    val conflitEnResolution: String? = null,
     val erreur: Texte? = null,
     val deconnecte: Boolean = false,
 )
@@ -69,7 +71,15 @@ class SettingsViewModel(
             try {
                 val etat = repository.state()
                 val cache = repository.cacheState()
-                _uiState.update { it.copy(etat = etat, cache = cache) }
+                val conflits = repository.conflicts()
+                _uiState.update {
+                    it.copy(
+                        etat = etat,
+                        cache = cache,
+                        conflits = conflits,
+                        dialogueConflits = conflits.isNotEmpty(),
+                    )
+                }
                 repository.refreshPending()
             } catch (e: OpenNoteException) {
                 _uiState.update { it.copy(erreur = e.texte()) }
@@ -95,12 +105,14 @@ class SettingsViewModel(
                     syncNotifier.notifyConflicts(rapport.conflicts)
                 }
                 val apres = repository.state()
+                val conflits = repository.conflicts()
                 _uiState.update {
                     it.copy(
                         syncEnCours = false,
                         resume = resumeDe(rapport),
                         resumePartiel = rapport.hasError,
-                        conflits = rapport.conflicts,
+                        conflits = conflits,
+                        dialogueConflits = conflits.isNotEmpty(),
                         etat = apres,
                     )
                 }
@@ -162,7 +174,31 @@ class SettingsViewModel(
         }
     }
 
-    fun conflitsConsommes() = _uiState.update { it.copy(conflits = emptyList()) }
+    fun ouvrirConflits() = _uiState.update { it.copy(dialogueConflits = it.conflits.isNotEmpty()) }
+
+    fun fermerConflits() = _uiState.update { it.copy(dialogueConflits = false) }
+
+    fun resoudreConflit(conflit: ConflictDto, resolution: String) {
+        if (_uiState.value.conflitEnResolution != null || conflit.id.isBlank()) return
+        _uiState.update { it.copy(conflitEnResolution = conflit.id, erreur = null) }
+        viewModelScope.launch {
+            try {
+                repository.resolveConflict(conflit.id, resolution)
+                val conflits = repository.conflicts()
+                repository.refreshPending()
+                _uiState.update {
+                    it.copy(
+                        conflits = conflits,
+                        dialogueConflits = conflits.isNotEmpty(),
+                        conflitEnResolution = null,
+                    )
+                }
+                if (resolution == "local") syncScheduler.syncAfterLocalChange()
+            } catch (e: OpenNoteException) {
+                _uiState.update { it.copy(conflitEnResolution = null, erreur = e.texte()) }
+            }
+        }
+    }
 
     companion object {
 

@@ -178,6 +178,15 @@ fun SettingsScreen(
                 }
             }
 
+            if (etat.conflits.isNotEmpty()) {
+                OutlinedButton(
+                    onClick = viewModel::ouvrirConflits,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.reglages_conflits_ouvrir, etat.conflits.size))
+                }
+            }
+
             etat.resume?.let { texte ->
                 Bandeau(
                     texte = texte.resoudre(),
@@ -323,24 +332,54 @@ fun SettingsScreen(
     // Un conflit est le seul événement de synchronisation qui mérite qu'on
     // interrompe l'utilisateur : sa version a été mise de côté, il doit savoir
     // où la retrouver.
-    if (etat.conflits.isNotEmpty()) {
+    if (etat.dialogueConflits && etat.conflits.isNotEmpty()) {
+        val conflit = etat.conflits.first()
+        val resolutionEnCours = etat.conflitEnResolution == conflit.id
         AlertDialog(
-            onDismissRequest = viewModel::conflitsConsommes,
+            onDismissRequest = viewModel::fermerConflits,
             title = { Text(stringResource(R.string.reglages_conflits_titre)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.reglages_conflits_explication))
-                    etat.conflits.forEach { conflit ->
+                    Text(
+                        text = ligneConflit(conflit),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (etat.conflits.size > 1) {
                         Text(
-                            text = ligneConflit(conflit),
+                            text = stringResource(R.string.reglages_conflits_reste, etat.conflits.size - 1),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = viewModel::conflitsConsommes) {
-                    Text(stringResource(R.string.reglages_compris))
+                TextButton(
+                    onClick = { viewModel.resoudreConflit(conflit, "server") },
+                    enabled = !resolutionEnCours,
+                ) {
+                    Text(stringResource(R.string.reglages_conflits_garder_serveur))
+                }
+            },
+            dismissButton = {
+                Column {
+                    if (conflit.copyPath.isNotBlank()) {
+                        TextButton(
+                            onClick = { viewModel.resoudreConflit(conflit, "local") },
+                            enabled = !resolutionEnCours,
+                        ) {
+                            Text(stringResource(R.string.reglages_conflits_garder_local))
+                        }
+                    }
+                    TextButton(
+                        onClick = { viewModel.resoudreConflit(conflit, "both") },
+                        enabled = !resolutionEnCours,
+                    ) {
+                        Text(stringResource(R.string.reglages_conflits_garder_deux))
+                    }
+                    TextButton(onClick = viewModel::fermerConflits, enabled = !resolutionEnCours) {
+                        Text(stringResource(R.string.action_annuler))
+                    }
                 }
             },
         )

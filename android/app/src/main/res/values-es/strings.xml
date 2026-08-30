@@ -281,6 +281,11 @@
          version de l'utilisateur a été mise de côté, il doit savoir où la
          retrouver. -->
     <string name="reglages_conflits_titre">Modificada en dos dispositivos</string>
+    <string name="reglages_conflits_ouvrir">Resolver conflictos (%1$d)</string>
+    <string name="reglages_conflits_reste">Queda(n) %1$d conflicto(s) por resolver.</string>
+    <string name="reglages_conflits_garder_serveur">Conservar el servidor</string>
+    <string name="reglages_conflits_garder_local">Conservar la versión local</string>
+    <string name="reglages_conflits_garder_deux">Conservar ambas</string>
     <string name="reglages_conflits_explication">La versión del servidor era más reciente. Su versión se ha conservado aparte, con un nuevo nombre: no se ha perdido nada:</string>
     <string name="reglages_conflits_ligne">• %1$s</string>
     <string name="reglages_compris">Entendido</string>

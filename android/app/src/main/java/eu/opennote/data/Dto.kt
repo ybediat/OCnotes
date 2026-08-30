@@ -98,9 +98,23 @@ data class NoteRefDto(
 /** Une note dont la version locale a été mise de côté. */
 @Serializable
 data class ConflictDto(
+    val id: String = "",
     val operation: String = "write",
     val path: String = "",
     val copyPath: String = "",
+    val createdAt: String = "",
+)
+
+@Serializable
+data class ResolveConflictRequestDto(
+    val id: String,
+    val resolution: String,
+)
+
+/** Réponse de `App.resolveConflictJSON(...)`. */
+@Serializable
+data class ResolveConflictResultDto(
+    val conflict: ConflictDto? = null,
 )
 
 /** Réponse de `App.syncJSON()`. */

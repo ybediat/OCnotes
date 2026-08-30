@@ -46,19 +46,6 @@ type Remote interface {
 	EnsureFolder(ctx context.Context, dir string) error
 }
 
-// Conflict décrit une écriture refusée parce que le serveur avait une version
-// plus récente.
-type Conflict struct {
-	// Operation identifie le geste local qui a rencontré une divergence.
-	Operation OpKind
-
-	// Path est la note concernée : elle porte désormais la version du serveur.
-	Path string
-
-	// CopyPath est la copie de la version locale, conservée à côté.
-	CopyPath string
-}
-
 // Report résume une passe de synchronisation.
 type Report struct {
 	Pushed    int
@@ -248,7 +235,11 @@ func (s *Store) resolveDeleteConflict(ctx context.Context, remote Remote, notePa
 	if err := s.Accept(notePath, server, etag); err != nil {
 		return nil, err
 	}
-	return &Conflict{Operation: OpDelete, Path: notePath}, nil
+	conflict, err := s.recordConflict(OpDelete, notePath, "", etag)
+	if err != nil {
+		return nil, err
+	}
+	return &conflict, nil
 }
 
 func (s *Store) resolveMoveConflict(ctx context.Context, remote Remote, op Operation) (*Conflict, error) {
@@ -280,7 +271,11 @@ func (s *Store) resolveMoveConflict(ctx context.Context, remote Remote, op Opera
 	if err := s.Forget(op.Target); err != nil {
 		return nil, err
 	}
-	return &Conflict{Operation: OpMove, Path: op.Path, CopyPath: copyPath}, nil
+	conflict, err := s.recordConflict(OpMove, op.Path, copyPath, etag)
+	if err != nil {
+		return nil, err
+	}
+	return &conflict, nil
 }
 
 // pushWrite envoie le contenu en cache, en protégeant la version du serveur
@@ -406,21 +401,26 @@ func (s *Store) resolveConflict(ctx context.Context, remote Remote, notePath str
 	}
 
 	copyPath := conflictPath(notePath, time.Now())
-	if _, err := remote.Save(ctx, copyPath, local, ""); err != nil {
+	copyETag, err := remote.Save(ctx, copyPath, local, "")
+	if err != nil {
 		return nil, fmt.Errorf("store: [%s] sauvegarde de la version locale de %s: %w", CodeStorageIO, notePath, err)
 	}
 
 	if err := s.Accept(notePath, serverContent, serverETag); err != nil {
 		return nil, err
 	}
-	if err := s.Accept(copyPath, local, ""); err != nil {
+	if err := s.Accept(copyPath, local, copyETag); err != nil {
 		return nil, err
 	}
 	if err := s.MarkConflict(copyPath); err != nil {
 		return nil, err
 	}
 
-	return &Conflict{Operation: OpWrite, Path: notePath, CopyPath: copyPath}, nil
+	conflict, err := s.recordConflict(OpWrite, notePath, copyPath, serverETag)
+	if err != nil {
+		return nil, err
+	}
+	return &conflict, nil
 }
 
 // conflictPath construit le nom de la copie de secours.

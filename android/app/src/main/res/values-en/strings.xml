@@ -300,6 +300,11 @@
          version de l'utilisateur a été mise de côté, il doit savoir où la
          retrouver. -->
     <string name="reglages_conflits_titre">Modified on two devices</string>
+    <string name="reglages_conflits_ouvrir">Resolve conflicts (%1$d)</string>
+    <string name="reglages_conflits_reste">%1$d more conflict(s) to resolve next.</string>
+    <string name="reglages_conflits_garder_serveur">Keep server version</string>
+    <string name="reglages_conflits_garder_local">Keep local version</string>
+    <string name="reglages_conflits_garder_deux">Keep both</string>
     <string name="reglages_conflits_explication">The server version was newer. Your version was kept alongside it, under a new name — nothing was lost:</string>
     <string name="reglages_conflits_ligne">• %1$s</string>
     <string name="reglages_compris">Got it</string>

@@ -296,6 +296,11 @@
          version de l'utilisateur a été mise de côté, il doit savoir où la
          retrouver. -->
     <string name="reglages_conflits_titre">Modifiée sur deux appareils</string>
+    <string name="reglages_conflits_ouvrir">Résoudre les conflits (%1$d)</string>
+    <string name="reglages_conflits_reste">%1$d autre(s) conflit(s) à traiter ensuite.</string>
+    <string name="reglages_conflits_garder_serveur">Garder le serveur</string>
+    <string name="reglages_conflits_garder_local">Garder le local</string>
+    <string name="reglages_conflits_garder_deux">Garder les deux</string>
     <string name="reglages_conflits_explication">La version du serveur était plus récente. Votre version a été conservée à côté, sous un nouveau nom — rien n\'est perdu :</string>
     <string name="reglages_conflits_ligne">• %1$s</string>
     <string name="reglages_compris">Compris</string>

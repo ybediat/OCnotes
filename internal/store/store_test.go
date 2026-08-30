@@ -435,6 +435,109 @@ func TestConflitConserveLesDeuxVersions(t *testing.T) {
 	}
 }
 
+// Un conflit ne doit pas vivre seulement dans le rapport de la passe : la
+// notification peut être lue après un arrêt brutal de l'application.
+func TestConflitResteOuvertApresRedemarrage(t *testing.T) {
+	s, remote := newStore(t), newFakeRemote()
+	if err := s.Put("a.md", []byte("version 1")); err != nil {
+		t.Fatalf("Put initial: %v", err)
+	}
+	if _, err := s.Push(context.Background(), remote); err != nil {
+		t.Fatalf("Push initial: %v", err)
+	}
+	if err := s.Put("a.md", []byte("version locale")); err != nil {
+		t.Fatalf("Put local: %v", err)
+	}
+	if _, err := remote.Save(context.Background(), "a.md", []byte("version distante"), remote.etags["a.md"]); err != nil {
+		t.Fatalf("modification distante: %v", err)
+	}
+	if _, err := s.Push(context.Background(), remote); err != nil {
+		t.Fatalf("Push conflictuel: %v", err)
+	}
+
+	before := s.Conflicts()
+	if len(before) != 1 || before[0].ID == "" || before[0].ServerETag == "" {
+		t.Fatalf("conflits avant redémarrage = %+v", before)
+	}
+	again, err := Open(s.dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	after := again.Conflicts()
+	if len(after) != 1 || after[0] != before[0] {
+		t.Errorf("conflits après redémarrage = %+v, attendu %+v", after, before)
+	}
+}
+
+func TestGarderLesDeuxClotLeConflitSansToucherAuxFichiers(t *testing.T) {
+	s, remote := newStore(t), newFakeRemote()
+	if err := s.Accept("a.md", []byte("serveur"), `"e1"`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Accept("a (conflit).md", []byte("local"), `"e2"`); err != nil {
+		t.Fatal(err)
+	}
+	remote.files["a.md"], remote.etags["a.md"] = "serveur", `"e1"`
+	remote.files["a (conflit).md"], remote.etags["a (conflit).md"] = "local", `"e2"`
+	conflict, err := s.recordConflict(OpWrite, "a.md", "a (conflit).md", `"e1"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ResolveConflict(context.Background(), remote, conflict.ID, KeepBoth); err != nil {
+		t.Fatalf("ResolveConflict: %v", err)
+	}
+	if len(s.Conflicts()) != 0 || remote.files["a (conflit).md"] != "local" {
+		t.Errorf("résolution a modifié les fichiers ou laissé le conflit: %+v", s.Conflicts())
+	}
+}
+
+func TestGarderLeLocalRemplaceLaReferenceAvecETag(t *testing.T) {
+	s, remote := newStore(t), newFakeRemote()
+	_ = s.Accept("a.md", []byte("serveur"), `"e1"`)
+	_ = s.Accept("a (conflit).md", []byte("local"), `"e2"`)
+	remote.files["a.md"], remote.etags["a.md"] = "serveur", `"e1"`
+	remote.files["a (conflit).md"], remote.etags["a (conflit).md"] = "local", `"e2"`
+	conflict, _ := s.recordConflict(OpWrite, "a.md", "a (conflit).md", `"e1"`)
+	if next, err := s.ResolveConflict(context.Background(), remote, conflict.ID, KeepLocal); err != nil || next != nil {
+		t.Fatalf("ResolveConflict = %+v, %v", next, err)
+	}
+	if remote.files["a.md"] != "local" || len(s.Conflicts()) != 0 {
+		t.Errorf("résolution locale incomplète : fichiers=%+v conflits=%+v", remote.files, s.Conflicts())
+	}
+}
+
+func TestGarderLeLocalRefuseUneCopieModifieeADistance(t *testing.T) {
+	s, remote := newStore(t), newFakeRemote()
+	_ = s.Accept("a.md", []byte("serveur"), `"e1"`)
+	_ = s.Accept("a (conflit).md", []byte("local initial"), `"e2"`)
+	remote.files["a.md"], remote.etags["a.md"] = "serveur", `"e1"`
+	remote.files["a (conflit).md"], remote.etags["a (conflit).md"] = "local modifié ailleurs", `"e3"`
+	conflict, _ := s.recordConflict(OpWrite, "a.md", "a (conflit).md", `"e1"`)
+
+	if _, err := s.ResolveConflict(context.Background(), remote, conflict.ID, KeepLocal); !errors.Is(err, opencloud.ErrConflict) {
+		t.Fatalf("ResolveConflict = %v, conflit attendu", err)
+	}
+	if remote.files["a.md"] != "serveur" || len(s.Conflicts()) != 1 {
+		t.Errorf("rÃ©fÃ©rence ou conflit modifiÃ© : fichiers=%+v conflits=%+v", remote.files, s.Conflicts())
+	}
+}
+
+func TestGarderLeLocalCreeUnNouveauConflitSiLeServeurChange(t *testing.T) {
+	s, remote := newStore(t), newFakeRemote()
+	_ = s.Accept("a.md", []byte("serveur"), `"e1"`)
+	_ = s.Accept("a (conflit).md", []byte("local"), `"e2"`)
+	remote.files["a.md"], remote.etags["a.md"] = "troisième version", `"e3"`
+	remote.files["a (conflit).md"], remote.etags["a (conflit).md"] = "local", `"e2"`
+	conflict, _ := s.recordConflict(OpWrite, "a.md", "a (conflit).md", `"e1"`)
+	next, err := s.ResolveConflict(context.Background(), remote, conflict.ID, KeepLocal)
+	if err != nil || next == nil || next.ServerETag != `"e3"` {
+		t.Fatalf("nouveau conflit = %+v, err=%v", next, err)
+	}
+	if remote.files["a.md"] != "troisième version" {
+		t.Errorf("serveur écrasé : %q", remote.files["a.md"])
+	}
+}
+
 // Un ETag périmé alors que les contenus sont identiques n'est pas un vrai
 // conflit : inutile de polluer le dossier d'une copie.
 func TestConflitSansDivergenceNeCreePasDeCopie(t *testing.T) {

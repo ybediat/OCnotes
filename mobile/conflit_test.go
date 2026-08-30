@@ -1,6 +1,7 @@
 package mobile
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -203,6 +204,59 @@ func TestVraiConflitToujoursDetecte(t *testing.T) {
 	copie := "Notes/" + sync.Conflicts[0].CopyPath
 	if got := string(server.files[copie]); got != "écrit sur le téléphone" {
 		t.Errorf("la copie %q = %q, la version du téléphone devait y être conservée", copie, got)
+	}
+}
+
+// La faÃ§ade doit exposer les conflits au-delÃ  du seul rapport de la passe et
+// transmettre la dÃ©cision locale au Store, sans que Kotlin ait Ã  manipuler un
+// ETag ni une structure Go.
+func TestResolveConflictJSONGardeLeLocal(t *testing.T) {
+	app, server, _ := prepare(t)
+
+	if _, err := app.CreateNoteJSON("", "partagee", "version initiale"); err != nil {
+		t.Fatalf("CreateNoteJSON: %v", err)
+	}
+	if _, err := app.SyncJSON(); err != nil {
+		t.Fatalf("SyncJSON initial: %v", err)
+	}
+	if err := app.WriteNote("partagee.md", "version locale"); err != nil {
+		t.Fatalf("WriteNote: %v", err)
+	}
+	server.modifierDepuisLeNavigateur("Notes/partagee.md", "version serveur")
+	if _, err := app.SyncJSON(); err != nil {
+		t.Fatalf("SyncJSON conflit: %v", err)
+	}
+
+	raw, err := app.ConflictsJSON()
+	if err != nil {
+		t.Fatalf("ConflictsJSON: %v", err)
+	}
+	var conflicts []conflictInfo
+	decodeJSON(t, raw, &conflicts)
+	if len(conflicts) != 1 || conflicts[0].ID == "" {
+		t.Fatalf("conflits ouverts = %+v", conflicts)
+	}
+
+	request, err := json.Marshal(conflictResolutionRequest{ID: conflicts[0].ID, Resolution: "local"})
+	if err != nil {
+		t.Fatalf("requÃªte: %v", err)
+	}
+	if _, err := app.ResolveConflictJSON(string(request)); err != nil {
+		t.Fatalf("ResolveConflictJSON: %v", err)
+	}
+
+	raw, err = app.ConflictsJSON()
+	if err != nil {
+		t.Fatalf("ConflictsJSON aprÃ¨s rÃ©solution: %v", err)
+	}
+	decodeJSON(t, raw, &conflicts)
+	if len(conflicts) != 0 {
+		t.Fatalf("conflits encore ouverts = %+v", conflicts)
+	}
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	if got := string(server.files["Notes/partagee.md"]); got != "version locale" {
+		t.Errorf("contenu serveur = %q, version locale attendue", got)
 	}
 }
 

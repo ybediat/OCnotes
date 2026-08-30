@@ -32,7 +32,7 @@ const CodeStorageIO = "STORAGE_IO"
 // indexVersion permet de reconnaître un index écrit par une version
 // antérieure du format. Un index d'une version inconnue est ignoré plutôt que
 // mal interprété : le cache se reconstruit depuis le serveur.
-const indexVersion = 2
+const indexVersion = 3
 
 // DefaultQuotaBytes est la limite appliquée tant que l'interface n'a pas
 // chargé la préférence de l'appareil.
@@ -86,10 +86,11 @@ type Entry struct {
 type Store struct {
 	dir string
 
-	mu      sync.Mutex
-	entries map[string]*Entry
-	queue   []Operation
-	quota   int64
+	mu        sync.Mutex
+	entries   map[string]*Entry
+	queue     []Operation
+	quota     int64
+	conflicts map[string]Conflict
 
 	// known est l'inventaire : toutes les notes de l'espace, y compris celles
 	// dont le contenu n'a jamais été téléchargé. Voir index.go — c'est ce qui
@@ -109,12 +110,13 @@ type Store struct {
 
 // persisted est la forme sérialisée de l'état du cache.
 type persisted struct {
-	Version int               `json:"version"`
-	Entries map[string]*Entry `json:"entries"`
-	Queue   []Operation       `json:"queue"`
-	Folders map[string]bool   `json:"folders,omitempty"`
-	Known   map[string]*Known `json:"known,omitempty"`
-	Indexed bool              `json:"indexed,omitempty"`
+	Version   int                 `json:"version"`
+	Entries   map[string]*Entry   `json:"entries"`
+	Queue     []Operation         `json:"queue"`
+	Folders   map[string]bool     `json:"folders,omitempty"`
+	Known     map[string]*Known   `json:"known,omitempty"`
+	Indexed   bool                `json:"indexed,omitempty"`
+	Conflicts map[string]Conflict `json:"conflicts,omitempty"`
 }
 
 // Open ouvre — ou crée — un cache dans le dossier indiqué.
@@ -128,11 +130,12 @@ func Open(dir string) (*Store, error) {
 	}
 
 	s := &Store{
-		dir:     dir,
-		entries: map[string]*Entry{},
-		folders: map[string]bool{},
-		known:   map[string]*Known{},
-		quota:   DefaultQuotaBytes,
+		dir:       dir,
+		entries:   map[string]*Entry{},
+		folders:   map[string]bool{},
+		known:     map[string]*Known{},
+		quota:     DefaultQuotaBytes,
+		conflicts: map[string]Conflict{},
 	}
 
 	data, err := os.ReadFile(s.indexPath())
@@ -144,7 +147,7 @@ func Open(dir string) (*Store, error) {
 	}
 
 	var state persisted
-	if err := json.Unmarshal(data, &state); err != nil || (state.Version != 1 && state.Version != indexVersion) {
+	if err := json.Unmarshal(data, &state); err != nil || (state.Version != 1 && state.Version != 2 && state.Version != indexVersion) {
 		return s, nil
 	}
 	if state.Entries != nil {
@@ -155,6 +158,9 @@ func Open(dir string) (*Store, error) {
 	}
 	if state.Known != nil {
 		s.known = state.Known
+	}
+	if state.Conflicts != nil {
+		s.conflicts = state.Conflicts
 	}
 	s.indexed = state.Indexed
 	s.queue = state.Queue
@@ -247,12 +253,13 @@ func contentHash(content []byte) string {
 // au mauvais moment laisserait sinon un index tronqué, donc un cache perdu.
 func (s *Store) save() error {
 	state := persisted{
-		Version: indexVersion,
-		Entries: s.entries,
-		Queue:   s.queue,
-		Folders: s.folders,
-		Known:   s.known,
-		Indexed: s.indexed,
+		Version:   indexVersion,
+		Entries:   s.entries,
+		Queue:     s.queue,
+		Folders:   s.folders,
+		Known:     s.known,
+		Indexed:   s.indexed,
+		Conflicts: s.conflicts,
 	}
 	data, err := json.Marshal(state)
 	if err != nil {
