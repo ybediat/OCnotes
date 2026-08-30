@@ -37,11 +37,12 @@ const (
 type Style string
 
 const (
-	StyleBold   Style = "bold"
-	StyleItalic Style = "italic"
-	StyleStrike Style = "strike"
-	StyleCode   Style = "code"
-	StyleLink   Style = "link"
+	StyleBold      Style = "bold"
+	StyleItalic    Style = "italic"
+	StyleStrike    Style = "strike"
+	StyleCode      Style = "code"
+	StyleLink      Style = "link"
+	StyleUnderline Style = "underline"
 )
 
 // Span est une portion mise en forme du texte d'un bloc.
@@ -283,6 +284,14 @@ func protegerLaMiseEnPage(b Block) Block {
 	}
 	return b
 }
+
+// ProtectLayout applique cette protection à un bloc construit ailleurs.
+//
+// internal/documents produit ses blocs sans passer par Render, donc sans
+// l'entonnoir de push. Sans cette porte, chaque analyseur réécrirait la même
+// règle — dont l'abandon des spans, qui n'est pas évident — et la première
+// divergence se paierait en appareil tué par un document.
+func ProtectLayout(b Block) Block { return protegerLaMiseEnPage(b) }
 
 // --- Parcours en ligne ------------------------------------------------------
 

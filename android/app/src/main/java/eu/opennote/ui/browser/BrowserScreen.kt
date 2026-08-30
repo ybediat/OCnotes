@@ -340,7 +340,7 @@ private fun ListeEntrees(
                     afficherDossier = afficherDossier,
                     onClick = { onOuvrir(entree) },
                     onRenommer = { onRenommer(entree) },
-                    onDeplacer = if (entree.isDir) null else { onDeplacer(entree) },
+                    onDeplacer = if (entree.isDir) null else ({ onDeplacer(entree) }),
                     onSupprimer = { onSupprimer(entree) },
                 )
             }
@@ -354,7 +354,7 @@ private fun SeparateurMois(mois: YearMonth) {
     val couleur = if (isSystemInDarkTheme()) CouleurSignatureSombre else CouleurSignatureClaire
     val libelle = remember(mois, locale) {
         mois.atDay(1)
-            .format(DateTimeFormatter.ofPattern("LLLL yyyy", locale))
+            .format(DateTimeFormatter.ofPattern("LLLL yyyy", locale)) // i18n-ok
             .replaceFirstChar { it.titlecase(locale) }
     }
 

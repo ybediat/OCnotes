@@ -225,6 +225,16 @@ object SpanStyleId {
     const val BARRE = "strike"
     const val CODE = "code"
     const val LIEN = "link"
+
+    /**
+     * Souligné.
+     *
+     * Absent du Markdown, courant dans un traitement de texte : il ne vient
+     * que des `.docx` et `.odt`, jamais d'une note. Une note ne peut donc pas
+     * en produire, et le supprimer ici ne casserait rien de visible — jusqu'au
+     * premier document ouvert.
+     */
+    const val SOULIGNE = "underline"
 }
 
 /**

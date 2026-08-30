@@ -391,8 +391,13 @@ Les champs à zéro sont omis.
 | `image` | `text` — le texte alternatif, **jamais la source** |
 | `plain` | `text` — le fichier entier, non interprété |
 
-`style` d'un span vaut `bold`, `italic`, `strike`, `code` ou `link` ; seul
-`link` porte un `href`.
+`style` d'un span vaut `bold`, `italic`, `strike`, `code`, `link` ou
+`underline` ; seul `link` porte un `href`.
+
+`underline` ne peut pas venir d'une note : le Markdown n'a pas de souligné.
+Il ne sort que d'un `.docx` ou d'un `.odt`, où il est courant. Une interface
+qui l'ignore n'affiche donc rien de faux tant qu'aucun document n'est ouvert —
+c'est précisément pourquoi l'oubli se remarque tard.
 
 > **`start` et `end` sont en unités de code UTF-16**, comme pour
 > `ApplyFormatJSON` : posez-les tels quels dans un `AnnotatedString`. En

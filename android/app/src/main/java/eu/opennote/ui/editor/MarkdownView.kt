@@ -334,6 +334,7 @@ private fun enrichi(bloc: NoteBlockDto): AnnotatedString {
                 SpanStyleId.GRAS -> SpanStyle(fontWeight = FontWeight.Bold)
                 SpanStyleId.ITALIQUE -> SpanStyle(fontStyle = FontStyle.Italic)
                 SpanStyleId.BARRE -> SpanStyle(textDecoration = TextDecoration.LineThrough)
+                SpanStyleId.SOULIGNE -> SpanStyle(textDecoration = TextDecoration.Underline)
                 SpanStyleId.CODE -> SpanStyle(
                     fontFamily = FontFamily.Monospace,
                     background = fondCode,

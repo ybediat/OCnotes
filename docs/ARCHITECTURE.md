@@ -499,11 +499,13 @@ Des notes de tailles graduées, taillées dans une vraie note pour garder une
 structure de prose réaliste, injectées dans le cache local ; chacune ouverte
 puis balayée par six `input swipe` identiques.
 
-```bash
-adb shell dumpsys gfxinfo eu.opennote.debug reset
-# ... le geste ...
-adb shell dumpsys gfxinfo eu.opennote.debug framestats
+```powershell
+./scripts/banc-editeur.ps1 -Note "scolarisation des enfants rrom"
 ```
+
+Le script coupe le réseau, ouvre la note par la recherche, mesure l'ouverture
+puis six balayages, et rétablit le réseau même en cas d'échec. Il vérifie l'état
+de l'écran à chaque étape — sans quoi les chiffres sont faux sans le dire.
 
 `framestats` donne une ligne par image. Les deux colonnes qui décident sont
 `PerformTraversalsStart → DrawStart` — mesure et layout — et
@@ -570,6 +572,22 @@ désagréable à faire défiler : il est inutilisable en saisie bien avant la ta
 qui avait motivé l'enquête. La frappe coûte environ 1,75 fois le défilement, ce
 qui est cohérent — elle invalide la mise en page du texte, là où le défilement se
 contente de la repeindre.
+
+### Ce que coûte l'inaction
+
+L'éditeur ouvert sur la note de 295 ko, le champ focalisé, **personne ne
+touchant à rien** : 16 images en 8 secondes, 100 % en retard, 550 ms de dessin
+chacune.
+
+C'est le curseur qui clignote. Il invalide le nœud de dessin deux fois par
+seconde, et chaque invalidation coûte un ré-enregistrement complet du document.
+Le coût n'est donc pas payé pendant l'interaction : il est payé **en
+permanence**, dès que le curseur est dans le texte — 550 ms de travail toutes
+les 500 ms. Le thread UI ne redescend jamais.
+
+C'est ce qui explique les appuis perdus, et ça se constate d'une seconde façon :
+`uiautomator dump` ne rend plus aucun arbre sur cet écran, faute de voir la
+fenêtre au repos une seule fois.
 
 ### Le second plafond, celui qui ne se négocie pas
 

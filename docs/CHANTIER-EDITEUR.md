@@ -19,6 +19,7 @@ ligne, y compris pour les lignes hors écran.
 | | mesuré |
 |---|---|
 | budget d'une image | 16 ms |
+| dessin **au repos**, curseur clignotant (295 ko) | 550 ms, deux fois par seconde |
 | dessin à 76 lignes (9 ko) | 18,2 ms — **déjà dépassé** |
 | frappe à 1 633 lignes (205 ko) | **750 ms par caractère** |
 
@@ -134,10 +135,13 @@ Les règles, chacune avec son test :
    80 lignes pour 16 ms ; visez la moitié pour laisser de la marge au reste de
    l'image.
 3. **On coupe sur une ligne vide**, jamais au milieu d'un paragraphe.
-4. **On ne coupe jamais dans une clôture de code ni entre deux éléments d'une
-   même liste. ou d'un même marqueur de mise en page** Chaque section est rendue *seule* par `markdown.Render` :
-   couper une liste en deux la ferait redémarrer à 1, et couper une clôture
-   ferait interpréter du code comme du Markdown.
+4. **On ne coupe jamais à l'intérieur d'une construction multiligne** —
+   clôture de code, liste, tableau, citation, et tout marqueur de mise en page
+   qui s'étend sur plusieurs lignes. Chaque section est rendue *seule* par
+   `markdown.Render` : couper une liste la ferait redémarrer à 1, couper une
+   clôture ferait interpréter du code comme du Markdown, couper un tableau lui
+   ferait perdre son en-tête. La formulation générale est celle du test :
+   **une coupure est licite si elle ne change aucun bloc rendu.**
 5. **La règle 4 gagne contre la règle 2.** Une liste de 500 lignes donne une
    section de 500 lignes. Elle sera lente — c'est correct et documenté, et c'est
    mieux qu'un rendu faux.
@@ -150,6 +154,27 @@ func TestSectionsAllerRetour(t *testing.T)
 ```
 
 Faites-le échouer une fois avant de le croire — voir §7.
+
+**État : fait et vérifié.** `internal/markdown/sections.go` porte
+l'implémentation, `sections_test.go` neuf tests. Sur la vraie note de 295 ko :
+**67 sections, la plus grande de 40 lignes, découpage et rendu de toutes les
+sections en 107 ms**, rendu identique au document entier, recollage exact.
+
+Deux choses ont été apprises en l'écrivant, et elles sont dans le code :
+
+- la validité d'une coupure se vérifie sur une **fenêtre bornée**, pas sur tout
+  le reste du document. La version globale était quadratique : 1 174 ms sur la
+  vraie note, sur desktop — on aurait échangé le coût de dessin contre pire ;
+- les **définitions de lien en référence** sont collectées une fois et mises en
+  préambule du texte *rendu*, jamais du texte édité. Sans ça, une seule ligne
+  `[ref]: url` en bas d'une note ramenait le découpage à une section unique, en
+  silence, et l'éditeur restait lent.
+
+D'où deux fonctions, et il faut appeler la bonne : `RenderSection(doc, s)` rend
+**une** section — après un commit d'édition — et réanalyse le document pour ses
+définitions ; `RenderSections(doc)` les rend **toutes** en une passe, en ne
+payant cette analyse qu'une fois. La boucle naïve sur la première coûte 495 ms
+là où la seconde en coûte 107.
 
 ### Étape 2 — la façade
 
@@ -196,15 +221,14 @@ d'acceptation, sur la note de 295 ko et le même geste qu'en section 7 bis :
 
 Le banc, réseau coupé pour que la synchronisation n'entre pas dans la mesure :
 
-```bash
-adb shell dumpsys gfxinfo eu.opennote.debug reset
-for i in 1 2 3 4 5 6; do adb shell input swipe 540 700 540 1700 250; done
-adb shell dumpsys gfxinfo eu.opennote.debug framestats
+```powershell
+./scripts/banc-editeur.ps1 -Note "scolarisation des enfants rrom"
+./scripts/banc-editeur.ps1 -Note "une note jetable" -Frappe
 ```
 
 Les colonnes qui décident sont `PerformTraversalsStart → DrawStart`
 (mesure + layout) et `DrawStart → SyncQueued` (enregistrement de la display
-list). **Vérifiez l'écran avant et après chaque mesure** — voir le piège n° 8.
+list). **Vérifiez l'écran avant et après chaque mesure** — voir les pièges n° 8 et 9.
 
 ---
 
@@ -266,7 +290,18 @@ $env:ANDROID_HOME = "$env:LOCALAPPDATA/Android/Sdk"
 $env:ANDROID_NDK_HOME = "$env:ANDROID_HOME/ndk/30.0.16138531"
 ```
 
-### 8. Au banc, un tap perdu ne se voit pas
+### 8. Un curseur qui clignote rend `uiautomator` aveugle
+
+La fenêtre n'est alors jamais « au repos » et le dump échoue sur
+`null root node returned by UiTestAutomationBridge` — au moment précis où le
+banc a besoin de savoir où il est. `scripts/banc-editeur.ps1` masque donc le
+clavier avant d'ouvrir la note, pour que le champ ne prenne pas le focus.
+
+Et le fichier de dump précédent restant en place, `cat` rendait l'écran d'AVANT :
+le banc concluait « tap avalé » sur une note pourtant ouverte. Effacer avant de
+capturer.
+
+### 9. Au banc, un tap perdu ne se voit pas
 
 Le thread UI reste bloqué assez longtemps pour que l'appui soit avalé. On mesure
 alors le défilement de la **liste** au lieu de celui de l'éditeur, et le chiffre
@@ -275,18 +310,37 @@ mesures était fausse. Vérifiez l'écran par `uiautomator dump` et un marqueur
 exclusif avant et après chaque mesure. Se fier au processus ne suffit pas : MIUI
 le garde en vie alors que l'application est en arrière-plan.
 
-### 9. Écrire les fichiers en LF
+### 10. Écrire les fichiers en LF
 
 Le dépôt est en LF alors que `core.autocrlf` est à `true`. Un outil qui traduit
 les fins de ligne produit du CRLF, et `gofmt -l` signale alors le fichier
 **entier** comme mal formaté.
 
-### 10. `ChainesEnDurTest`
+### 11. `ChainesEnDurTest`
 
 Le nouvel écran doit passer par `stringResource`, et **ne doit jamais être
 ajouté à `ECRANS_A_MIGRER`** : cette liste ne décrit qu'une dette existante. Pas
 de `Context` dans un ViewModel ; un texte émis par un ViewModel est un
 `ui.common.Texte`, rédigé par le composable.
+
+### 12. Le texte brut n'a pas de structure, et `RenderPlain` n'a qu'un bloc
+
+Deux conséquences, à traiter à l'étape 2, et aucune n'est couverte par les tests
+de l'étape 1.
+
+**Le découpage d'un `.txt` ne se vérifie pas par le rendu.** `RenderPlain`
+renvoie un bloc unique portant tout le texte : la concaténation des rendus de N
+sections donnerait N blocs, jamais un. La propriété « le rendu par sections
+égale le rendu entier » ne s'applique donc pas ici — et n'a pas à s'appliquer,
+puisqu'un texte brut n'a aucune construction multiligne à couper en deux. Toute
+frontière de ligne y est licite.
+
+**Et l'aperçu d'un gros `.txt` n'est pas protégé.** Un seul bloc, c'est un seul
+`Text` dans la `LazyColumn` : elle n'a qu'un élément, donc elle ne virtualise
+rien. La prémisse « l'aperçu est déjà fluide », vraie et mesurée pour le
+Markdown — 1,77 ms sur 295 ko — **est fausse pour le texte brut**, et le dossier
+de test en contient à 52 ko. Ça n'a pas été mesuré ; ça devrait l'être avant de
+concevoir l'étape 3, parce que l'écran s'appuie sur cet aperçu.
 
 ---
 
