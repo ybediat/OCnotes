@@ -12,7 +12,6 @@ import eu.opennote.data.FormatAction
 import eu.opennote.data.NoteBlockDto
 import eu.opennote.data.OpenNoteException
 import eu.opennote.data.OpenNoteRepository
-import eu.opennote.data.SectionDto
 import eu.opennote.ui.common.Texte
 import eu.opennote.ui.common.texte
 import eu.opennote.sync.SyncScheduler
@@ -55,13 +54,8 @@ data class EditorUiState(
      */
     val valeur: TextFieldValue = TextFieldValue(),
 
-    /**
-     * Les tranches éditables du document, avec leurs blocs d'affichage.
-     *
-     * Une seule est un champ de saisie à la fois — voir [focus]. Les autres
-     * sont rendues en lecture, par le même chemin que l'aperçu.
-     */
-    val sections: List<SectionDto> = emptyList(),
+    /** Vues exactes de [document]. Une seule devient mutable — voir [focus]. */
+    val tranches: List<TrancheEditeur> = emptyList(),
 
     /**
      * Indice de la section en saisie, ou -1 quand aucune ne l'est.
@@ -72,6 +66,12 @@ data class EditorUiState(
      * porte, à 0,14–0,24 ms la ligne, et le budget d'une image est de 16 ms.
      */
     val focus: Int = -1,
+
+    /** Change à chaque demande de focus, même si l'indice reste identique. */
+    val activation: Long = 0,
+
+    /** Version du contenu, utilisée pour écarter un résultat asynchrone périmé. */
+    val revision: Long = 0,
     val titre: String = "",
     val actions: List<FormatAction> = emptyList(),
     val chargement: Boolean = true,
@@ -129,6 +129,87 @@ data class EditorUiState(
      * n'est pas reproductible à la main.
      */
     val enregistrable: Boolean get() = charge && modifiable
+}
+
+/** Le seul contenu autorisé à partir vers l'aperçu, le cache ou le serveur. */
+internal fun materialiser(etat: EditorUiState): String = materialiserDocument(
+    document = etat.document,
+    active = etat.tranches.getOrNull(etat.focus),
+    brouillon = etat.valeur.text,
+)
+
+/** Transition pure : committe l'ancien brouillon puis ouvre l'offset touché. */
+internal fun activerFenetre(etat: EditorUiState, offsetAvantCommit: Int): EditorUiState {
+    val ancienne = etat.tranches.getOrNull(etat.focus)
+    val delta = if (ancienne == null) {
+        0
+    } else {
+        etat.valeur.text.length - (ancienne.fin - ancienne.debut)
+    }
+    val offsetApresCommit = when {
+        ancienne == null -> offsetAvantCommit
+        offsetAvantCommit >= ancienne.fin -> offsetAvantCommit + delta
+        else -> offsetAvantCommit
+    }
+
+    val document = materialiser(etat)
+    val montage = monterFenetre(document, offsetApresCommit)
+    val active = montage.tranches[montage.focus]
+
+    return etat.copy(
+        document = document,
+        tranches = montage.tranches,
+        focus = montage.focus,
+        valeur = TextFieldValue(
+            text = active.texteDe(document),
+            selection = TextRange(montage.selectionDebut, montage.selectionFin),
+        ),
+        activation = etat.activation + 1,
+    )
+}
+
+/** Transition pure : change le brouillon et remonte rarement la fenêtre. */
+internal fun modifierFenetre(etat: EditorUiState, nouvelle: TextFieldValue): EditorUiState {
+    if (etat.focus !in etat.tranches.indices) return etat
+    if (nouvelle.text == etat.valeur.text) {
+        val selectionSeulement = etat.copy(valeur = nouvelle)
+        return if (nouvelle.composition == null && doitReequilibrer(nouvelle.text)) {
+            reequilibrerFenetre(selectionSeulement)
+        } else {
+            selectionSeulement
+        }
+    }
+
+    val modifie = etat.copy(
+        valeur = nouvelle,
+        modifie = true,
+        revision = etat.revision + 1,
+    )
+    return if (nouvelle.composition == null && doitReequilibrer(nouvelle.text)) {
+        reequilibrerFenetre(modifie)
+    } else {
+        modifie
+    }
+}
+
+private fun reequilibrerFenetre(etat: EditorUiState): EditorUiState {
+    val active = etat.tranches.getOrNull(etat.focus) ?: return etat
+    val document = materialiser(etat)
+    val debutGlobal = active.debut + etat.valeur.selection.start
+    val finGlobal = active.debut + etat.valeur.selection.end
+    val montage = monterFenetre(document, debutGlobal, finGlobal)
+    val nouvelleActive = montage.tranches[montage.focus]
+
+    return etat.copy(
+        document = document,
+        tranches = montage.tranches,
+        focus = montage.focus,
+        valeur = TextFieldValue(
+            text = nouvelleActive.texteDe(document),
+            selection = TextRange(montage.selectionDebut, montage.selectionFin),
+        ),
+        activation = etat.activation + 1,
+    )
 }
 
 /**
@@ -217,12 +298,21 @@ class EditorViewModel(
                     } else {
                         repository.renderNote(nom, prepare.text)
                     }
+                    val tranches = if (prepare.editable) {
+                        decouperDocument(prepare.text)
+                    } else {
+                        emptyList()
+                    }
+                    val focus = if (prepare.editable && prepare.text.isEmpty()) 0 else -1
 
                     _uiState.update {
                         it.copy(
                             chargement = false,
                             charge = true,
-                            valeur = TextFieldValue(prepare.text, TextRange(prepare.text.length)),
+                            document = prepare.text,
+                            tranches = tranches,
+                            focus = focus,
+                            valeur = TextFieldValue(),
                             titre = titre,
                             modifiable = prepare.editable,
                             // Une note inaffichable en saisie s'ouvre directement
@@ -245,17 +335,23 @@ class EditorViewModel(
         }
     }
 
+    /** Active une fenêtre glissante à l'offset touché dans l'instantané. */
+    fun activer(offsetAvantCommit: Int) {
+        _uiState.value = activerFenetre(_uiState.value, offsetAvantCommit)
+    }
+
     /**
      * Saisie de l'utilisateur.
      *
-     * Un simple déplacement du curseur passe aussi par ici : on ne
-     * réenregistre que si le texte a réellement changé, sinon chaque toucher
-     * dans le texte relancerait le minuteur.
+     * Un déplacement du curseur ne relance pas l'enregistrement. La fenêtre
+     * n'est remontée qu'après dépassement de sa borne dure, jamais à chaque
+     * caractère. Une composition IME en cours n'est pas interrompue.
      */
     fun onValeurChangee(nouvelle: TextFieldValue) {
-        val ancienne = _uiState.value.valeur
-        _uiState.update { it.copy(valeur = nouvelle) }
-        if (nouvelle.text != ancienne.text) planifierEnregistrement()
+        val etat = _uiState.value
+        val texteChange = etat.focus in etat.tranches.indices && nouvelle.text != etat.valeur.text
+        _uiState.value = modifierFenetre(etat, nouvelle)
+        if (texteChange) planifierEnregistrement()
     }
 
     /**
@@ -266,7 +362,9 @@ class EditorViewModel(
      * conversion, dans aucun sens.
      */
     fun appliquer(action: FormatAction) {
-        val avant = _uiState.value.valeur
+        val etatAvant = _uiState.value
+        if (etatAvant.focus !in etatAvant.tranches.indices) return
+        val avant = etatAvant.valeur
 
         viewModelScope.launch {
             try {
@@ -276,15 +374,22 @@ class EditorViewModel(
                     end = avant.selection.end,
                     action = action,
                 )
-                _uiState.update {
-                    it.copy(
-                        valeur = TextFieldValue(
-                            text = apres.text,
-                            selection = TextRange(apres.start, apres.end),
-                        ),
-                    )
+                val courant = _uiState.value
+                if (
+                    courant.revision != etatAvant.revision ||
+                    courant.activation != etatAvant.activation ||
+                    courant.focus != etatAvant.focus ||
+                    courant.valeur != avant
+                ) {
+                    return@launch
                 }
-                planifierEnregistrement()
+
+                onValeurChangee(
+                    TextFieldValue(
+                        text = apres.text,
+                        selection = TextRange(apres.start, apres.end),
+                    ),
+                )
             } catch (e: OpenNoteException) {
                 // Une action inconnue est un bug de version, pas une panne :
                 // on le dit sans dramatiser et sans toucher au texte.
@@ -314,11 +419,25 @@ class EditorViewModel(
             return
         }
 
+        val etatAvant = _uiState.value
+        val texte = materialiser(etatAvant)
         viewModelScope.launch {
-            val texte = _uiState.value.valeur.text
             try {
                 val blocs = repository.renderNote(nom, texte)
-                _uiState.update { it.copy(apercu = true, blocs = blocs) }
+                _uiState.update { courant ->
+                    if (courant.revision != etatAvant.revision) {
+                        courant
+                    } else {
+                        courant.copy(
+                            document = texte,
+                            tranches = decouperDocument(texte),
+                            focus = -1,
+                            valeur = TextFieldValue(),
+                            apercu = true,
+                            blocs = blocs,
+                        )
+                    }
+                }
             } catch (e: OpenNoteException) {
                 _uiState.update { it.copy(erreur = e.texte()) }
             }
@@ -339,7 +458,8 @@ class EditorViewModel(
         enregistrement?.cancel()
         enregistrement = viewModelScope.launch {
             delay(DELAI_ENREGISTREMENT_MS)
-            enregistrer()
+            val etat = _uiState.value
+            ecrire(materialiser(etat), etat.revision)
             syncScheduler.syncAfterLocalChange()
         }
     }
@@ -359,21 +479,18 @@ class EditorViewModel(
         val etat = _uiState.value
         if (!etat.modifie) return
 
-        val contenu = etat.valeur.text
+        val contenu = materialiser(etat)
+        val revision = etat.revision
 
         // La portée applicative, pas `viewModelScope` : au retour arrière, le
         // ViewModel est détruit avant que la coroutine ait pu écrire.
         applicationScope.launch {
-            ecrire(contenu)
+            ecrire(contenu, revision)
             syncScheduler.syncAfterLocalChange()
         }
     }
 
-    private suspend fun enregistrer() {
-        ecrire(_uiState.value.valeur.text)
-    }
-
-    private suspend fun ecrire(contenu: String) {
+    private suspend fun ecrire(contenu: String, revision: Long) {
         // Dernière garde avant le cache, et la seule qui compte : on n'écrit
         // que ce qu'on a su lire. Une note en lecture seule serait écrasée par
         // sa version allégée ; une note pas encore — ou jamais — chargée le
@@ -385,7 +502,9 @@ class EditorViewModel(
             // texte à jetons qui partirait sur le serveur, et l'image serait
             // perdue dans la vraie note, en silence.
             repository.writeNote(chemin, repository.restoreImages(contenu, images))
-            _uiState.update { it.copy(modifie = false) }
+            _uiState.update {
+                if (it.revision == revision) it.copy(modifie = false) else it
+            }
         } catch (e: OpenNoteException) {
             // Le réseau n'entre pas en jeu ici. Ce qui reste — un cache
             // illisible, un disque plein — mérite d'être dit.

@@ -1,12 +1,20 @@
 package eu.opennote.ui.editor
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -21,17 +29,25 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
@@ -47,9 +63,8 @@ import eu.opennote.ui.theme.StyleEditeur
 /**
  * Éditeur plein écran.
  *
- * Un seul champ de texte, sans décoration, qui occupe tout ce que le clavier
- * lui laisse : c'est la fonction principale de l'application, elle mérite
- * l'écran entier. La barre d'outils se pose au-dessus du clavier.
+ * Une liste virtualisée de source brute. Une seule fenêtre autour du curseur
+ * devient un champ de saisie ; le reste demeure du texte léger.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -179,46 +194,17 @@ fun EditorScreen(
                 .padding(paddings)
                 .imePadding(),
         ) {
-            TextField(
-                value = etat.valeur,
-                onValueChange = viewModel::onValeurChangee,
-                textStyle = StyleEditeur,
-                placeholder = {
-                    Text(stringResource(R.string.editeur_saisie_vide), style = StyleEditeur)
-                },
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                ),
-                // Pas de `verticalScroll` autour : un TextField borné fait
-                // défiler son propre contenu et garde le curseur visible, ce
-                // qu'un conteneur scrollable externe lui retirerait.
-                //
-                // Ce n'est plus la seule raison, et la seconde est
-                // rédhibitoire. Sortir le défilement du champ pour le poser
-                // dans une couche translatable — la piste évidente contre les
-                // 505 ms de dessin par image mesurés sur une note de 285 ko —
-                // a été essayé et **fait planter l'application** :
-                //
-                //   IllegalArgumentException: Can't represent a width of 1058
-                //   and height of 531251 in Constraints
-                //   at androidx.compose.material3.TextFieldMeasurePolicy.measure
-                //
-                // Compose empaquette largeur et hauteur dans un seul Long ; à
-                // cette largeur, la hauteur plafonne à 262 143 px. Ce document
-                // en demande 531 251. Un champ de saisie non borné est donc
-                // **impossible** au-delà d'environ 1300 lignes affichées, quel
-                // que soit son coût de dessin. La LazyColumn de l'aperçu y
-                // échappe parce qu'elle ne mesure jamais la hauteur totale.
-                //
-                // Conclusion : la virtualisation n'est pas une optimisation
-                // ici, c'est la seule chose qui tienne.
+            EditeurVirtualise(
+                document = etat.document,
+                tranches = etat.tranches,
+                focus = etat.focus,
+                activation = etat.activation,
+                valeur = etat.valeur,
+                onActiver = viewModel::activer,
+                onValeurChangee = viewModel::onValeurChangee,
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp),
+                    .fillMaxWidth(),
             )
 
             // Rien à mettre en forme dans un .txt : les marqueurs y
@@ -231,6 +217,116 @@ fun EditorScreen(
             }
         }
     }
+}
+
+/** Une liste verticale unique ; jamais plus d'un champ de saisie composé. */
+@Composable
+private fun EditeurVirtualise(
+    document: String,
+    tranches: List<TrancheEditeur>,
+    focus: Int,
+    activation: Long,
+    valeur: TextFieldValue,
+    onActiver: (Int) -> Unit,
+    onValeurChangee: (TextFieldValue) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        contentPadding = PaddingValues(vertical = 8.dp),
+        modifier = modifier,
+    ) {
+        itemsIndexed(
+            items = tranches,
+            key = { _, tranche -> tranche.debut },
+        ) { index, tranche ->
+            if (index == focus) {
+                FenetreActive(
+                    valeur = valeur,
+                    activation = activation,
+                    onValeurChangee = onValeurChangee,
+                )
+            } else {
+                TrancheInactive(
+                    texte = tranche.texteDe(document),
+                    onOffsetTouche = { offsetLocal ->
+                        onActiver(tranche.debut + offsetLocal)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** Traduit le premier toucher en offset source avant de remplacer le `Text`. */
+@Composable
+private fun TrancheInactive(
+    texte: String,
+    onOffsetTouche: (Int) -> Unit,
+) {
+    var resultat by remember(texte) { mutableStateOf<TextLayoutResult?>(null) }
+    val resultatCourant by rememberUpdatedState(resultat)
+    val onOffsetCourant by rememberUpdatedState(onOffsetTouche)
+    val style = StyleEditeur.copy(color = MaterialTheme.colorScheme.onSurface)
+
+    Text(
+        text = texte,
+        style = style,
+        onTextLayout = { resultat = it },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 2.dp)
+            .pointerInput(texte) {
+                detectTapGestures { position: Offset ->
+                    val offset = resultatCourant?.getOffsetForPosition(position) ?: 0
+                    onOffsetCourant(offset.coerceIn(0, texte.length))
+                }
+            },
+    )
+}
+
+/** Champ borné, recentré automatiquement par le ViewModel quand il déborde. */
+@Composable
+private fun FenetreActive(
+    valeur: TextFieldValue,
+    activation: Long,
+    onValeurChangee: (TextFieldValue) -> Unit,
+) {
+    val focusRequester = remember { FocusRequester() }
+    val clavier = LocalSoftwareKeyboardController.current
+    val style = StyleEditeur.copy(color = MaterialTheme.colorScheme.onSurface)
+    val fond = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.20f)
+
+    LaunchedEffect(activation) {
+        if (activation > 0) {
+            focusRequester.requestFocus()
+            clavier?.show()
+        }
+    }
+
+    BasicTextField(
+        value = valeur,
+        onValueChange = onValeurChangee,
+        textStyle = style,
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+        decorationBox = { champ ->
+            Box {
+                if (valeur.text.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.editeur_saisie_vide),
+                        style = style,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                champ()
+            }
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = if (valeur.text.isEmpty()) 180.dp else 24.dp)
+            .background(fond)
+            .focusRequester(focusRequester)
+            .padding(horizontal = 20.dp, vertical = 2.dp),
+    )
 }
 
 /**

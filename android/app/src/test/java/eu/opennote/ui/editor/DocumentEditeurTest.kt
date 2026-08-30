@@ -1,0 +1,269 @@
+package eu.opennote.ui.editor
+
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class DocumentEditeurTest {
+
+    @Test
+    fun documentVideResteEditable() {
+        val tranches = decouperDocument("")
+        val montage = monterFenetre("", 0)
+
+        assertEquals(listOf(TrancheEditeur(0, 0)), tranches)
+        assertEquals(0, montage.focus)
+        assertEquals(0, montage.selectionDebut)
+        assertEquals(0, montage.selectionFin)
+    }
+
+    @Test
+    fun tranchesPaventLeDocumentExactement() {
+        val document = buildString {
+            repeat(80) { index ->
+                append("paragraphe ").append(index).append(" avec un emoji 😀\n\n")
+            }
+        }
+        val tranches = decouperDocument(document, maxRetours = 7, maxUtf16 = 80)
+
+        assertPavage(document, tranches)
+    }
+
+    @Test
+    fun chaqueTrancheRespecteLesDeuxBudgets() {
+        val document = buildString {
+            repeat(120) { append("ligne courte\n") }
+            append("mot ".repeat(1_000))
+        }
+        val tranches = decouperDocument(document, maxRetours = 5, maxUtf16 = 70)
+
+        tranches.forEach { tranche ->
+            val texte = tranche.texteDe(document)
+            assertTrue(texte.length <= 70)
+            assertTrue(texte.count { it == '\n' } <= 5)
+        }
+        assertPavage(document, tranches)
+    }
+
+    @Test
+    fun paragrapheSansRetourEstDecoupe() {
+        val document = "mot ".repeat(2_000)
+        val tranches = decouperDocument(document, maxUtf16 = 200)
+
+        assertTrue(tranches.size > 1)
+        assertTrue(tranches.all { it.fin - it.debut <= 200 })
+        assertPavage(document, tranches)
+    }
+
+    @Test
+    fun paireUtf16JamaisCoupee() {
+        val document = "a".repeat(9) + "😀" + "b".repeat(20)
+        val tranches = decouperDocument(document, maxUtf16 = 10)
+
+        tranches.dropLast(1).forEach { tranche ->
+            assertFalse(document[tranche.fin - 1].isHighSurrogate())
+            assertFalse(document[tranche.fin].isLowSurrogate())
+        }
+        assertPavage(document, tranches)
+    }
+
+    @Test
+    fun coupureNaturellePrefereePresDeLaBorne() {
+        val document = "a".repeat(50) + " " + "b".repeat(100)
+        val premiere = decouperDocument(document, maxUtf16 = 80).first()
+
+        assertEquals(51, premiere.fin)
+    }
+
+    @Test
+    fun materialisationRemplaceSeulementLaFenetre() {
+        val document = "avant MILIEU après"
+        val active = TrancheEditeur(6, 12)
+
+        assertEquals("avant centre après", materialiserDocument(document, active, "centre"))
+        assertEquals(document, materialiserDocument(document, null, "ignoré"))
+    }
+
+    @Test
+    fun fenetreEstCentreeAvecDeLaMarge() {
+        val document = "x".repeat(2_000)
+        val montage = monterFenetre(document, 1_000)
+        val active = montage.tranches[montage.focus]
+
+        assertEquals(384, active.fin - active.debut)
+        assertEquals(192, montage.selectionDebut)
+        assertEquals(192, montage.selectionFin)
+        assertPavage(document, montage.tranches)
+    }
+
+    @Test
+    fun fenetreEnFinDeDocumentGardeUneMargeDeFrappe() {
+        val document = "x".repeat(2_000)
+        val montage = monterFenetre(document, document.length)
+        val active = montage.tranches[montage.focus]
+
+        assertEquals(document.length, active.fin)
+        assertTrue(active.fin - active.debut < MAX_UTF16_EDITEUR)
+        assertEquals(active.fin - active.debut, montage.selectionDebut)
+    }
+
+    @Test
+    fun reequilibrageApresLongueInsertionNePerdRien() {
+        val document = "avant\n" + "x".repeat(1_000) + "\naprès"
+        val premierMontage = monterFenetre(document, 500)
+        val active = premierMontage.tranches[premierMontage.focus]
+        val insertion = "NOUVEAU ".repeat(100)
+        val positionRelative = premierMontage.selectionFin
+        val brouillon = active.texteDe(document).let {
+            it.substring(0, positionRelative) + insertion + it.substring(positionRelative)
+        }
+        val documentModifie = materialiserDocument(document, active, brouillon)
+        val curseurGlobal = active.debut + positionRelative + insertion.length
+        val secondMontage = monterFenetre(documentModifie, curseurGlobal)
+
+        assertTrue(doitReequilibrer(brouillon))
+        assertEquals(
+            insertion,
+            documentModifie.substring(curseurGlobal - insertion.length, curseurGlobal),
+        )
+        assertPavage(documentModifie, secondMontage.tranches)
+    }
+
+    @Test
+    fun seuilDeReequilibrageCombineLongueurEtRetours() {
+        assertFalse(doitReequilibrer("x".repeat(MAX_UTF16_EDITEUR)))
+        assertTrue(doitReequilibrer("x".repeat(MAX_UTF16_EDITEUR + 1)))
+        assertFalse(doitReequilibrer("ligne\n".repeat(MAX_RETOURS_EDITEUR)))
+        assertTrue(doitReequilibrer("ligne\n".repeat(MAX_RETOURS_EDITEUR + 1)))
+    }
+
+    @Test
+    fun materialiserEtatUtiliseLeBrouillonActif() {
+        val etat = EditorUiState(
+            document = "avant MILIEU après",
+            tranches = listOf(TrancheEditeur(6, 12)),
+            focus = 0,
+            valeur = TextFieldValue("centre", TextRange(6)),
+        )
+
+        assertEquals("avant centre après", materialiser(etat))
+    }
+
+    @Test
+    fun sensDeSelectionEstConserve() {
+        val document = "0123456789".repeat(100)
+        val montage = monterFenetre(document, selectionDebut = 520, selectionFin = 500)
+
+        assertTrue(montage.selectionDebut > montage.selectionFin)
+        val active = montage.tranches[montage.focus]
+        assertEquals(520, active.debut + montage.selectionDebut)
+        assertEquals(500, active.debut + montage.selectionFin)
+    }
+
+    @Test
+    fun changementDeFenetreCommitteEtAjusteLOffsetSuivant() {
+        val document = "0123456789".repeat(200)
+        val montage = monterFenetre(document, 300)
+        val active = montage.tranches[montage.focus]
+        val etat = EditorUiState(
+            document = document,
+            tranches = montage.tranches,
+            focus = montage.focus,
+            valeur = TextFieldValue(
+                active.texteDe(document),
+                TextRange(montage.selectionFin),
+            ),
+        )
+        val insertion = "AJOUT"
+        val texteActif = etat.valeur.text
+        val curseur = etat.valeur.selection.end
+        val modifie = modifierFenetre(
+            etat,
+            TextFieldValue(
+                texteActif.substring(0, curseur) + insertion + texteActif.substring(curseur),
+                TextRange(curseur + insertion.length),
+            ),
+        )
+        val suivant = activerFenetre(modifie, document.length)
+        val nouvelleActive = suivant.tranches[suivant.focus]
+
+        assertEquals(document.length + insertion.length, suivant.document.length)
+        assertEquals(document.length + insertion.length, nouvelleActive.debut + suivant.valeur.selection.end)
+        assertTrue(suivant.document.contains(insertion))
+        assertPavage(suivant.document, suivant.tranches)
+    }
+
+    @Test
+    fun depassementRecentreAutomatiquementLeChamp() {
+        val document = "x".repeat(2_000)
+        val montage = monterFenetre(document, 1_000)
+        val active = montage.tranches[montage.focus]
+        val etat = EditorUiState(
+            document = document,
+            tranches = montage.tranches,
+            focus = montage.focus,
+            valeur = TextFieldValue(active.texteDe(document), TextRange(montage.selectionFin)),
+        )
+        val insertion = "y".repeat(400)
+        val texte = etat.valeur.text
+        val curseur = etat.valeur.selection.end
+        val apres = modifierFenetre(
+            etat,
+            TextFieldValue(
+                texte.substring(0, curseur) + insertion + texte.substring(curseur),
+                TextRange(curseur + insertion.length),
+            ),
+        )
+
+        assertEquals(1, apres.revision)
+        assertEquals(1, apres.activation)
+        assertTrue(apres.valeur.text.length <= 384)
+        assertEquals(document.length + insertion.length, materialiser(apres).length)
+        assertPavage(apres.document, apres.tranches)
+    }
+
+    @Test
+    fun finDeCompositionDeclencheLeReequilibrageDiffere() {
+        val document = "x".repeat(1_000)
+        val montage = monterFenetre(document, 500)
+        val active = montage.tranches[montage.focus]
+        val etat = EditorUiState(
+            document = document,
+            tranches = montage.tranches,
+            focus = montage.focus,
+            valeur = TextFieldValue(active.texteDe(document), TextRange(montage.selectionFin)),
+        )
+        val tropLong = etat.valeur.text + "z".repeat(400)
+        val enComposition = modifierFenetre(
+            etat,
+            TextFieldValue(
+                text = tropLong,
+                selection = TextRange(tropLong.length),
+                composition = TextRange(tropLong.length - 1, tropLong.length),
+            ),
+        )
+        val compositionTerminee = modifierFenetre(
+            enComposition,
+            enComposition.valeur.copy(composition = null),
+        )
+
+        assertTrue(enComposition.valeur.text.length > MAX_UTF16_EDITEUR)
+        assertTrue(compositionTerminee.valeur.text.length <= 384)
+        assertEquals(enComposition.revision, compositionTerminee.revision)
+        assertEquals(1, compositionTerminee.activation)
+        assertEquals(document.length + 400, materialiser(compositionTerminee).length)
+    }
+
+    private fun assertPavage(document: String, tranches: List<TrancheEditeur>) {
+        assertTrue(tranches.isNotEmpty())
+        assertEquals(0, tranches.first().debut)
+        assertEquals(document.length, tranches.last().fin)
+        tranches.zipWithNext().forEach { (gauche, droite) ->
+            assertEquals(gauche.fin, droite.debut)
+        }
+        assertEquals(document, tranches.joinToString("") { it.texteDe(document) })
+    }
+}

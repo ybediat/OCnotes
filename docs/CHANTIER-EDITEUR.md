@@ -1,408 +1,483 @@
 # Chantier — l'éditeur virtualisé
 
-Ordre de travail pour un agent qui reprend le sujet à froid. Lire d'abord
-`CLAUDE.md`, puis **la section 7 bis de `docs/ARCHITECTURE.md`** — elle porte
-les mesures qui justifient tout ce document — et `docs/FACADE.md` pour le
-contrat gelé.
+Ordre de travail pour reprendre le sujet à froid. Lire d'abord `CLAUDE.md`, puis
+**la section 7 bis de `docs/ARCHITECTURE.md`**, qui porte les mesures, et
+`docs/FACADE.md`, qui décrit la frontière Go ↔ Kotlin.
 
-Rien de ce chantier n'a été écrit. Les mesures, elles, ont été prises sur
-appareil : ne les refaites pas, servez-vous-en.
+**État au 30 août 2026 :** le diagnostic, le découpage Go et la façade existent
+et sont testés. Le modèle d'état Kotlin est amorcé, mais l'écran utilise encore
+le `TextField` monolithique : aucun gain de performance n'est livré à ce stade.
 
----
-
-## 1. Le problème, en trois chiffres
-
-L'éditeur pose **tout** le document dans un seul `TextField`. Compose
-ré-enregistre alors la display list entière à chaque image, à 0,14–0,24 ms par
-ligne, y compris pour les lignes hors écran.
-
-| | mesuré |
-|---|---|
-| budget d'une image | 16 ms |
-| dessin **au repos**, curseur clignotant (295 ko) | 550 ms, deux fois par seconde |
-| dessin à 76 lignes (9 ko) | 18,2 ms — **déjà dépassé** |
-| frappe à 1 633 lignes (205 ko) | **750 ms par caractère** |
-
-Ce n'est ni la mise en page — 0,11 ms dans toutes les conditions — ni la
-mémoire. C'est la phase de dessin, et elle est proportionnelle à la taille du
-document au lieu de l'être à ce qui est visible.
-
-**Objectif du chantier :** qu'aucun champ de saisie ne contienne plus d'un
-écran de texte, quel que soit le document.
+Ce document a été révisé avant le prototype Compose. Le premier montage rendait
+les sections inactives comme l'aperçu Markdown. La révision retient du **texte
+source brut** dans l'éditeur et garde l'aperçu rendu comme mode séparé.
 
 ---
 
-## 2. Ce qu'on veut, et ce qu'on ne veut pas
+## 1. Le problème, mesuré
 
-**On veut** que l'éditeur reste un écran de saisie continu qu'on fait défiler,
-mais dont le coût de dessin ne dépende plus de la taille de la note.
+L'éditeur pose tout le document dans un seul `TextField`. Compose ré-enregistre
+alors sa display list entière à chaque image, y compris pour les lignes hors
+écran.
 
-**On ne veut pas**, et ce n'est pas négociable :
+| Grandeur | Mesure |
+|---|---:|
+| Budget d'une image | 16 ms |
+| Dessin au repos, curseur clignotant, note de 295 ko | 550 ms, deux fois par seconde |
+| Dessin à 76 lignes, note de 9 ko | 18,2 ms — budget déjà dépassé |
+| Frappe à 1 633 lignes, note de 205 ko | 750 ms par caractère |
+
+La phase mesure + layout reste à 0,11 ms. Le coût vient de l'enregistrement de
+la display list et suit la quantité de texte portée par le champ. Changer
+simplement d'API de saisie ne traite donc pas le défaut.
+
+**Objectif :** le coût de dessin d'un champ de saisie ne doit plus dépendre de
+la taille du document. Un seul champ est composé, et son contenu reste sous une
+borne mesurée, même pour une note faite d'un unique paragraphe.
+
+---
+
+## 2. Décision révisée
+
+### 2.1 L'éditeur affiche la source, l'aperçu affiche le rendu
+
+L'éditeur devient une `LazyColumn` de tranches de **texte Markdown brut**. Les
+tranches inactives sont des `Text`, avec la même typographie et les mêmes
+retraits que le champ actuel. Une seule fenêtre autour du curseur devient un
+`TextField`.
+
+```
+document allégé — une String Kotlin
+   │
+   ├── tranches d'affichage, bornes UTF-16
+   │
+   └── LazyColumn
+         ├── source inactive  → Text
+         ├── fenêtre active   → TextField  ← le seul composé
+         ├── source inactive  → Text
+         └── …
+
+mode aperçu séparé → RenderNoteJSON(document matérialisé) → VueMarkdown
+```
+
+Le rendu Markdown dans les tranches inactives a été écarté pour quatre raisons :
+
+1. toucher un titre, une liste ou un lien ferait changer son apparence au
+   moment précis où l'utilisateur veut y placer le curseur ;
+2. un offset dans le texte rendu ne correspond pas à un offset dans sa source,
+   ce qui rend le premier toucher imprécis ;
+3. `VueMarkdown` contient déjà une `LazyColumn` et ne doit pas être imbriquée
+   verticalement dans celle de l'éditeur ;
+4. préserver le rendu de chaque tranche interdit de couper une liste, un bloc
+   ou un paragraphe démesuré. La borne de performance ne serait donc pas dure.
+
+Afficher la source retire la contrainte n° 4 : une tranche est une vue, jamais
+un document Markdown autonome. Elle peut se terminer dans un paragraphe sans
+changer un seul caractère de la note ni le rendu de l'aperçu complet.
+
+### 2.2 Ce que « source de vérité » signifie pendant la frappe
+
+Il existe une seule exception contrôlée au document complet : le brouillon de
+la fenêtre active.
+
+- `document` est l'instantané complet auquel les bornes courantes se rapportent ;
+- `valeur` est le `TextFieldValue` de la fenêtre active ;
+- `materialiser()` remplace dans `document` l'ancienne fenêtre par `valeur.text`.
+
+Le contenu courant est donc toujours calculable par une seule opération :
+
+```kotlin
+document.substring(0, active.start) +
+    valeur.text +
+    document.substring(active.end)
+```
+
+Les tranches ne gardent jamais leur propre copie mutable. Le brouillon actif est
+la seule surcouche et toute écriture, tout aperçu et toute sortie passent par
+`materialiser()`.
+
+### 2.3 Les invariants non négociables
+
+1. **Au plus un `TextField` est composé.** Les autres tranches sont des `Text`.
+2. **Le champ actif est borné.** La borne porte sur les retours à la ligne et
+   sur la longueur UTF-16, afin qu'un paragraphe sans `\n` ne contourne pas la
+   protection.
+3. **Aucun redécoupage ni appel Go à chaque caractère.** La frappe ne modifie
+   que `valeur`, la sélection et le drapeau `modifie`.
+4. **Les bornes et `document` forment un même instantané.** Après matérialisation,
+   elles sont recalculées avant d'activer une autre fenêtre.
+5. **L'enregistrement conserve le chemin existant.** Texte matérialisé,
+   `restoreImages`, puis `writeNote` ; `enregistrable` n'est jamais affaibli.
+6. **L'aperçu rend le document entier matérialisé.** Les tranches d'édition ne
+   deviennent jamais une nouvelle sémantique Markdown.
+
+### 2.4 Ce qui reste hors périmètre
 
 | Hors périmètre | Pourquoi |
 |---|---|
-| `BasicTextField` + `TextFieldState` comme remède | **Mesuré inutile.** La fenêtre mesure+layout tient 0,11 ms de 445 octets à 295 ko. L'aller-retour du `TextFieldValue` par le `StateFlow` n'est pas le coût. Peut se faire un jour pour la latence de frappe, jamais au titre de ce chantier. |
-| Un champ de saisie en hauteur libre | **Essayé, plante.** `Can't represent a width of 1058 and height of 531251 in Constraints`. Compose plafonne la hauteur à 262 143 px, soit ~1 300 lignes. Le commentaire de `EditorScreen.kt` le rappelle sur place. |
-| Un découpage aux titres | La note de test ne contient **aucun** titre ATX. Le repli par paragraphes serait le cas nominal, pas le cas limite : autant le prendre comme règle unique. |
-| Un WebView, CodeMirror, ProseMirror | Virtualiserait gratuitement, et sortirait tout le modèle d'édition de Go pour le mettre en JavaScript. `CLAUDE.md` argumente déjà contre le WebView pour l'aperçu ; l'argument vaut double ici. |
-| Un éditeur par blocs complet | Fusion au retour arrière en tête de bloc, scission à l'entrée, sélection inter-blocs, annulation transverse. Ce sont des règles qui méritent des tests, et elles vivraient en Compose, la seule couche du dépôt sans test de comportement. **Version 2, si le besoin se confirme.** |
-| Recherche/remplacement sur tout le document | N'existe pas aujourd'hui. Ne l'inventez pas ici. |
-| Un seuil, deux éditeurs | Voir §3 : le montage proposé **dégénère de lui-même** vers l'éditeur actuel quand la note est courte. Deux chemins de code seraient une dette pour rien. |
+| `BasicTextField` ou `TextFieldState` comme remède | Le coût mesuré est le dessin de tout le texte, pas l'aller-retour de `TextFieldValue`. Une autre API peut servir l'interaction du prototype, jamais tenir lieu de virtualisation. |
+| Un champ de saisie en hauteur libre | Essayé : Compose refuse les contraintes au-delà de 262 143 px sur l'appareil de test. |
+| Un découpage aux titres | La note réelle ne contient aucun titre ATX et un paragraphe unique doit rester borné. |
+| WebView, CodeMirror ou ProseMirror | Ils déplaceraient le modèle d'édition hors de Go et Compose, dans une troisième pile JavaScript. |
+| Recherche/remplacement global | Cette fonction n'existe pas aujourd'hui ; le chantier ne l'invente pas. |
+| Plusieurs documents mutables cachés dans les tranches | Une tranche est une vue du document, jamais une unité persistée séparément. |
+
+Le prototype doit cependant éprouver les comportements qui ressemblent à ceux
+d'un éditeur par blocs — frontière, sélection transverse et annulation. Les
+déclarer « hors périmètre » sans les essayer ferait seulement déplacer le défaut
+dans l'usage.
 
 ---
 
-## 3. Le montage retenu
+## 3. Ce qui existe déjà
 
-Une `LazyColumn` de **sections**. Chaque section est rendue en lecture seule par
-le chemin de l'aperçu, qui existe et dessine en 1,77 ms sur la note de 295 ko.
-La section touchée — **et elle seule** — devient un `TextField`.
+### 3.1 Découpage sémantique Go — fait et vérifié
 
-```
-document (une String Kotlin, source unique de vérité)
-   │
-   ├── markdown.Sections → [ (début, fin), (début, fin), … ]   unités UTF-16
-   │
-   └── LazyColumn
-         ├── section 0   → blocs rendus, en lecture seule
-         ├── section 1   → TextField  ← la seule qui a le focus
-         ├── section 2   → blocs rendus
-         └── …
-```
+`internal/markdown/sections.go` fournit `Sections`, `RenderSection`,
+`RenderSections`, `SectionsPlain` et `Slice`. Les tests vérifient notamment :
 
-Trois propriétés en découlent, et ce sont elles qui rendent le montage bon
-marché :
+- le pavage exact du document en unités UTF-16 ;
+- le recollage sans perte ;
+- l'identité du rendu Markdown section par section ;
+- les définitions de lien en référence ;
+- le découpage borné du texte brut.
 
-**Le document reste une seule `String` Kotlin.** Les sections ne sont que des
-couples de bornes. Le chemin d'enregistrement ne change donc **pas du tout** :
-`restoreImages` puis `writeNote` sur le texte entier, comme aujourd'hui. Tout ce
-qui protège déjà les données — `enregistrable`, la restitution des images, la
-détection de conflit — continue de s'appliquer sans qu'on y touche.
+Sur la note réelle de 295 ko, le chemin mesuré produit 67 sections. Cette
+brique est correcte, mais elle répond au premier montage — rendre chaque
+section comme du Markdown autonome — et n'est plus la condition du prototype
+source brute.
 
-**Les bornes sont en unités UTF-16, donc `substring` est exact des deux côtés.**
-Une `String` Kotlin est indexée en UTF-16 ; `Doc.Start` / `Doc.End` en Go aussi.
-Le texte d'une section ne traverse jamais la frontière : Kotlin le découpe
-lui-même. Le recollage est `texte.substring(0, début) + nouveau + texte.substring(fin)`.
+**Ne pas la supprimer avant le prototype.** À sa sortie, décider explicitement
+si elle reste utile ailleurs, si elle est simplifiée, ou si elle doit être
+retirée avec ses appels. Ne pas conserver silencieusement un second découpage
+inutilisé.
 
-**Une note courte donne une seule section.** La `LazyColumn` contient alors un
-unique `TextField` portant tout le document : exactement l'éditeur
-d'aujourd'hui. Pas de seuil à choisir, pas de bascule, pas de second chemin.
+### 3.2 Façade et DTO — faits et vérifiés
 
----
+`App.SectionsJSON`, `notes.Sections`, `SectionDto` et
+`OpenNoteRepository.sections()` existent. La façade ne transporte pas le texte
+des sections, seulement leurs bornes UTF-16 et leurs blocs.
 
-## 4. Ce qui existe déjà et qu'il faut réutiliser
+Quatre tests de façade vérifient le format et le recollage exact. Là encore, la
+charge `blocks` appartient au premier montage. Le prototype ne doit pas
+l'utiliser juste parce qu'elle existe.
 
-**Ne réinventez rien de cette liste.**
+### 3.3 Écran — seulement amorcé
 
-| Brique | Où | Ce qu'elle vous donne |
-|---|---|---|
-| Rendu d'un texte en blocs | `markdown.Render` (`internal/markdown/render.go`) | Appelé sur le texte d'une section, il rend cette section. Rien à écrire. |
-| Dessin des blocs | `VueMarkdown` (`ui/editor/MarkdownView.kt`) | Titres, listes, tâches, citations, tableaux, code. Déjà en `LazyColumn`. |
-| Allègement des images | `PrepareEditJSON` / `RestoreImages` (`mobile/app.go`) | Le découpage se fait sur le texte **allégé**. Voir le piège n° 2. |
-| Mise en forme | `ApplyFormatJSON`, `markdown.Doc` | Opère sur `(texte, début, fin)`. Passez-lui le texte de la **section**, pas le document. Aucune modification côté Go. |
-| Garde d'enregistrement | `EditorUiState.enregistrable` | `charge && modifiable`. Le raisonnement qui l'a produit vaut toujours : ne l'affaiblissez pas. |
-| Lecture seule | `preparedEdit.Editable`, `BandeauLectureSeule` | Une note au mot démesuré s'ouvre en aperçu. Ce chemin ne bouge pas. |
-| Troncature d'affichage | `markdown.ShortenLongWords` | Appliquée à tous les blocs rendus. Elle protège aussi vos sections en lecture. |
+`EditorUiState` déclare déjà `document`, `sections` et `focus`, mais :
+
+- le chargement ne remplit ni `document` ni `sections` ;
+- `valeur` porte encore le document entier ;
+- `EditorScreen` compose toujours un unique `TextField` monolithique ;
+- l'aperçu et l'enregistrement lisent encore `valeur.text` comme document entier.
+
+Le code compile, mais l'étape 3 n'est pas fonctionnelle et aucune mesure « après »
+n'existe.
 
 ---
 
-## 5. Les quatre étapes, dans cet ordre
+## 4. Prochaine étape — prototype Compose isolé
 
-Les deux premières sont **entièrement testables sur desktop**, sans NDK ni
-appareil. Ne commencez pas par la troisième.
+Le prototype vient **avant** le branchement de l'enregistrement, des images, de
+la mise en forme et de l'aperçu. Il doit répondre aux questions d'interaction
+sur un appareil, sans pouvoir écrire une note réelle.
 
-### Étape 1 — `markdown.Sections` et le recollage, en Go
+**État : prototype écrit, compilé et lancé sur le Redmi Note 12.** Il vit
+entièrement dans `android/app/src/debug/` et tourne dans le processus
+`:prototype`. `OpenNoteDebugApplication` n'y initialise ni `AppContainer`, ni
+repository, ni synchronisation ; `ps` confirme que le processus principal
+`eu.opennote.debug` n'est pas démarré avec lui.
 
-Nouveau fichier `internal/markdown/sections.go`.
-
-```go
-// Section est une tranche éditable du document, en unités de code UTF-16.
-type Section struct {
-    Start int
-    End   int
-}
-
-// Sections découpe un texte en tranches qu'un champ de saisie peut porter.
-func Sections(text string) []Section
+```powershell
+cd android
+./gradlew assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb shell am start -n `
+  eu.opennote.debug/eu.opennote.ui.editor.prototype.EditeurPrototypeActivity
 ```
 
-Les règles, chacune avec son test :
+Trois jeux en mémoire sont accessibles en haut de l'écran : note Markdown de
+295 333 unités UTF-16, paragraphe unique de 40 ko et document vide. Le premier
+toucher active le champ et ouvre le clavier ; le document vide accepte la
+saisie et le bouton de validation la rematérialise sans disque ni réseau.
 
-1. **Les sections pavent le document exactement** : la première commence à 0, la
-   fin de chacune est le début de la suivante, la dernière finit à la longueur
-   du texte. Aucun trou, aucun recouvrement. Un texte vide donne une section
-   vide, pas zéro section.
-2. **Une section vise ~40 lignes et ne dépasse pas 80.** Le budget mesuré est de
-   80 lignes pour 16 ms ; visez la moitié pour laisser de la marge au reste de
-   l'image.
-3. **On coupe sur une ligne vide**, jamais au milieu d'un paragraphe.
-4. **On ne coupe jamais à l'intérieur d'une construction multiligne** —
-   clôture de code, liste, tableau, citation, et tout marqueur de mise en page
-   qui s'étend sur plusieurs lignes. Chaque section est rendue *seule* par
-   `markdown.Render` : couper une liste la ferait redémarrer à 1, couper une
-   clôture ferait interpréter du code comme du Markdown, couper un tableau lui
-   ferait perdre son en-tête. La formulation générale est celle du test :
-   **une coupure est licite si elle ne change aucun bloc rendu.**
-5. **La règle 4 gagne contre la règle 2.** Une liste de 500 lignes donne une
-   section de 500 lignes. Elle sera lente — c'est correct et documenté, et c'est
-   mieux qu'un rendu faux.
+### 4.1 Montage minimal
 
-Le test qui compte, celui qui doit exister avant tout le reste :
+Construire un composable expérimental alimenté par une chaîne en mémoire :
 
-```go
-// Remplacer chaque section par son propre contenu rend le document identique.
-func TestSectionsAllerRetour(t *testing.T)
+1. une `LazyColumn` unique ;
+2. des tranches inactives en `Text`, style `StyleEditeur` ;
+3. une seule fenêtre active en `TextField` ;
+4. `TextLayoutResult.getOffsetForPosition` pour traduire le premier toucher en
+   offset UTF-16 dans la source affichée ;
+5. un `FocusRequester` pour poser le curseur et ouvrir le clavier après ce même
+   toucher ;
+6. un cas explicite pour le document vide, dont la zone de saisie doit rester
+   visible et touchable.
+
+Ne pas utiliser `VueMarkdown` dans ce prototype. Ne pas ajouter un second
+conteneur à défilement vertical.
+
+### 4.2 Taille de fenêtre
+
+Le prototype commence avec une borne conservatrice, définie en un seul endroit :
+
+- au plus **12 retours à la ligne** ;
+- au plus **640 unités UTF-16** ;
+- la première borne atteinte gagne.
+
+La coupure préfère, dans cet ordre, un retour à la ligne, une espace, puis la
+borne dure. Elle ne sépare jamais les deux unités d'une paire de substitution.
+
+Ces valeurs sont des paramètres de prototype, pas une nouvelle vérité. Elles
+doivent être confrontées au banc. Le double critère est, lui, définitif : une
+borne limitée aux `\n` laisserait un paragraphe replié visuellement produire des
+centaines de lignes dans un seul champ.
+
+Le premier essai à 32 retours / 2 000 unités a bien supprimé le coût
+proportionnel aux 295 ko, mais la frappe restait à environ 42 ms de médiane sur
+le Redmi Note 12. La borne ci-dessus est le second réglage, choisi pour ramener
+le dessin sous le budget sans changer le montage. Ce chiffre reste indicatif
+tant que le banc complet n'a pas été rejoué.
+
+Avec 12 retours / 640 unités, la note synthétique donne 527 tranches. Six
+balayages produisent 284 images : médiane 10 ms, 90e percentile 17 ms. Sur les
+120 lignes `framestats` conservées, `DrawStart → SyncQueued` vaut 1,335 ms en
+moyenne et 1,317 ms en médiane ; mesure + layout vaut 0,122 ms en moyenne.
+
+Sur cinq caractères injectés par ADB, le dessin vaut 1,29 ms en moyenne et
+1,401 ms en médiane, mesure + layout 0,388 ms. Le temps d'image global de ce
+micro-échantillon reste pollué par `adb input` et ses délais d'entrée : il ne
+remplace pas le geste manuel du banc. Le résultat utile à ce stade est que la
+display list n'est plus proportionnelle aux 295 ko.
+
+### 4.3 La question des frontières
+
+Tester d'abord une fenêtre égale à la tranche touchée. Vérifier sur le clavier
+logiciel réel :
+
+- Retour arrière au début ;
+- Suppr à la fin, si le clavier l'expose ;
+- flèches et déplacement des poignées ;
+- insertion ou suppression du séparateur entre deux paragraphes.
+- sélection et copie sur une frontière ;
+- annulation après avoir quitté puis retrouvé une fenêtre.
+
+Si l'IME ne permet pas de franchir naturellement une frontière, ne pas empiler
+des traitements de touches spécifiques au clavier. Le second montage à essayer
+est une **fenêtre glissante centrée sur l'offset global du curseur**, toujours
+bornée par le même budget total. Elle peut couvrir des portions de plusieurs
+tranches inactives ; elle reste un seul `TextField`.
+
+La variante retenue doit être décidée par le comportement observé, pas par la
+facilité de son premier code.
+
+### 4.4 Critères de sortie du prototype
+
+Le prototype est concluant seulement si :
+
+- un seul toucher active la saisie au caractère attendu ;
+- l'apparence et la hauteur ne sautent pas sensiblement entre `Text` et
+  `TextField` ;
+- le clavier ne masque pas ou ne perd pas le curseur ;
+- le défilement ne change pas brutalement de position à l'activation ;
+- une note de 295 ko se parcourt sans champ portant tout le document ;
+- un paragraphe de plusieurs dizaines de ko reste découpé ;
+- le cas de frontière est soit naturel, soit résolu par la fenêtre glissante ;
+- la sélection et l'annulation ont un comportement explicite et acceptable ;
+- l'appareil confirme que la fenêtre choisie tient le budget de dessin.
+
+Si franchir les frontières, sélectionner ou annuler exige finalement de bâtir
+un éditeur par blocs complet dans Compose, le prototype doit conclure **arrêt et
+réévaluation**, pas maquiller ce résultat pour passer à l'intégration.
+
+À ce stade, rapporter séparément : « écrit », « compile », « essayé sur
+appareil » et « mesuré ».
+
+---
+
+## 5. Après validation du prototype — intégration de production
+
+### 5.1 Extraire une machine d'état pure
+
+Les transitions ne doivent pas être enfouies dans les callbacks Compose. Les
+représenter par des fonctions Kotlin sans Android, testables sur la JVM :
+
+```kotlin
+fun materialiser(etat: EditorUiState): String
+fun activer(etat: EditorUiState, offsetGlobal: Int): EditorUiState
+fun modifier(etat: EditorUiState, valeur: TextFieldValue): EditorUiState
+fun committer(etat: EditorUiState): EditorUiState
 ```
 
-Faites-le échouer une fois avant de le croire — voir §7.
+Les noms finaux peuvent changer ; les responsabilités, non.
 
-**État : fait et vérifié.** `internal/markdown/sections.go` porte
-l'implémentation, `sections_test.go` neuf tests. Sur la vraie note de 295 ko :
-**67 sections, la plus grande de 40 lignes, découpage et rendu de toutes les
-sections en 107 ms**, rendu identique au document entier, recollage exact.
+Tests minimaux :
 
-Deux choses ont été apprises en l'écrivant, et elles sont dans le code :
+1. remplacement plus court, plus long et vide ;
+2. bornes avant, dans et après un emoji ;
+3. activation au début et à la fin du document ;
+4. changement de fenêtre après modification ;
+5. document vide ;
+6. paragraphe sans retour à la ligne au-delà de la borne ;
+7. matérialisation utilisée pour sauvegarde, aperçu et sortie ;
+8. sélection relative envoyée à `ApplyFormatJSON`, puis restaurée ;
+9. résultat obsolète d'une opération asynchrone qui ne doit pas écraser un
+   brouillon plus récent.
 
-- la validité d'une coupure se vérifie sur une **fenêtre bornée**, pas sur tout
-  le reste du document. La version globale était quadratique : 1 174 ms sur la
-  vraie note, sur desktop — on aurait échangé le coût de dessin contre pire ;
-- les **définitions de lien en référence** sont collectées une fois et mises en
-  préambule du texte *rendu*, jamais du texte édité. Sans ça, une seule ligne
-  `[ref]: url` en bas d'une note ramenait le découpage à une section unique, en
-  silence, et l'éditeur restait lent.
+Voir un test de recollage échouer avant de lui faire confiance.
 
-D'où deux fonctions, et il faut appeler la bonne : `RenderSection(doc, s)` rend
-**une** section — après un commit d'édition — et réanalyse le document pour ses
-définitions ; `RenderSections(doc)` les rend **toutes** en une passe, en ne
-payant cette analyse qu'une fois. La boucle naïve sur la première coûte 495 ms
-là où la seconde en coûte 107.
+### 5.2 Brancher `EditorViewModel`
 
-### Étape 2 — la façade
+À l'ouverture d'une note modifiable :
 
-Une seule fonction à ajouter, et **le texte ne la traverse pas** :
+1. `readNote` ;
+2. `prepareEdit` et conservation des images hors de l'état ;
+3. `document = prepare.text` ;
+4. calcul des tranches d'affichage ;
+5. `focus = -1`, sauf document vide où une fenêtre vide peut être activée ;
+6. `valeur` ne reçoit du texte qu'à l'activation.
 
-```go
-// SectionsJSON renvoie le découpage éditable et les blocs de chaque section.
-func (a *App) SectionsJSON(name, content string) (string, error)
-```
+Pendant la frappe, `onValeurChangee` ne redécoupe rien. L'enregistrement
+différé écrit `materialiser()`, puis restitue les images. Un simple mouvement de
+curseur ne relance pas le minuteur.
 
-Elle rend `[{"start":…, "end":…, "blocks":[…]}]`, où `blocks` est le format déjà
-décrit dans `docs/FACADE.md` pour `RenderNoteJSON`. Kotlin découpe le texte
-lui-même à partir des bornes.
+Le commit et le recalcul des bornes ont lieu uniquement quand une représentation
+cohérente du document est requise : changement de fenêtre, bascule vers
+l'aperçu, opération structurelle sur les tranches ou fermeture. Une sauvegarde
+différée peut matérialiser sans forcer une recomposition complète.
 
-Deux gestes obligatoires : une ligne dans `docs/FACADE.md`, et **relancer
-`gomobile bind`** — Gradle ne régénère pas le `.aar`.
+### 5.3 Brancher l'écran
 
-`mobile/gomobile_test.go` vérifie les contraintes de types : la structure JSON
-doit rester **non exportée**.
+- une seule `LazyColumn` verticale ;
+- clés stables tant que l'instantané ne change pas ;
+- `Text` et `TextField` avec largeur, style et padding identiques ;
+- la barre de mise en forme opère sur `valeur.text` et des bornes relatives ;
+- le mode aperçu continue d'utiliser `VueMarkdown` sur le document entier ;
+- aucune chaîne utilisateur en dur, aucune entrée dans `ECRANS_A_MIGRER`.
 
-**État : fait et vérifié.** Ce qui a été écrit, et qui n'était pas tout à fait
-prévu :
+### 5.4 Nettoyer le premier montage
 
-- `notes.Sections(name, content)` porte la **répartition**, comme `notes.Render`
-  — la question « ce nom désigne-t-il du Markdown ? » ne devait pas remonter
-  dans `mobile/`, qui sérialise et rien d'autre ;
-- `markdown.SectionsPlain` découpe le texte brut **sans vérification par le
-  rendu**. Valider un `.txt` contre l'analyseur Markdown aurait coûté une
-  analyse pour rien, et un fichier qui *ressemble* à une liste aurait refusé
-  d'être coupé — soit exactement la tranche démesurée qu'on cherche à éviter.
-  `TestSectionsPlainIgnorentLaStructureMarkdown` distingue les deux fonctions ;
-- `markdown.Slice(doc, s)` est le pendant Go de `String.substring` ;
-- côté Kotlin, `SectionDto` et `OpenNoteRepository.sections()`. `texteDe` est
-  volontairement **strict** : des bornes qui ne collent pas au document lèvent
-  plutôt que de rendre une tranche tronquée, qui serait recollée puis écrite sur
-  le serveur.
+Après validation et seulement après :
 
-Quatre tests de façade dans `mobile/app_test.go`, dont celui qui compte : les
-bornes reçues permettent de reconstruire le document **exactement**. Il a été vu
-échouer, en décalant `Start` d'une unité.
+- relever les usages réels de `SectionsJSON`, `RenderSection`,
+  `RenderSections`, `SectionDto.blocks` et `OpenNoteRepository.sections()` ;
+- conserver ce qui sert avec un rôle documenté ;
+- retirer ce qui n'a plus d'appel plutôt que de maintenir deux architectures ;
+- si la façade change, mettre `docs/FACADE.md` et le `.aar` à jour dans le même
+  geste.
 
-Une ligne de `docs/FACADE.md` était devenue fausse et a été corrigée : un `.txt`
-n'y revient plus « en un seul bloc ».
+---
 
-### Étape 3 — l'écran
+## 6. Vérification finale au banc
 
-`EditorScreen` passe d'un `TextField` à une `LazyColumn` de sections. L'état
-gagne la liste des sections et l'indice de celle qui a le focus ; le texte
-complet reste dans `EditorUiState.valeur`.
+Le chantier n'est pas fini tant que l'écran intégré a été mesuré sur le même
+appareil, avec la même note, le même geste et le réseau coupé.
 
-**L'invariant du chantier :** au plus un `TextField` composé à la fois. Si vous
-vous surprenez à laisser la section précédente en champ de saisie « pour éviter
-un clignotement », vous venez de reconstruire la chose lente.
-
-Au commit d'une section : recoller, redemander `SectionsJSON`, replanifier
-l'enregistrement différé existant. Rien d'autre.
-
-### Étape 4 — vérifier au banc
-
-Le chantier n'est pas fini tant que la mesure n'est pas refaite. Critère
-d'acceptation, sur la note de 295 ko et le même geste qu'en section 7 bis :
-
-| grandeur | avant | attendu après |
-|---|---|---|
-| dessin moyen par image | 360,8 ms | ≤ 16 ms |
-| médiane par image | 500 ms | ≤ 20 ms |
-| frappe, médiane par image (205 ko) | 750 ms | ≤ 20 ms |
-
-Le banc, réseau coupé pour que la synchronisation n'entre pas dans la mesure :
+| Grandeur | Avant | Attendu après |
+|---|---:|---:|
+| Dessin moyen par image, note de 295 ko | 360,8 ms | ≤ 16 ms |
+| Médiane par image | 500 ms | ≤ 20 ms |
+| Frappe, médiane par image, note de 205 ko | 750 ms | ≤ 20 ms |
 
 ```powershell
 ./scripts/banc-editeur.ps1 -Note "scolarisation des enfants rrom"
 ./scripts/banc-editeur.ps1 -Note "une note jetable" -Frappe
 ```
 
-Les colonnes qui décident sont `PerformTraversalsStart → DrawStart`
-(mesure + layout) et `DrawStart → SyncQueued` (enregistrement de la display
-list). **Vérifiez l'écran avant et après chaque mesure** — voir les pièges n° 8 et 9.
+Les colonnes décisives sont `PerformTraversalsStart → DrawStart` et
+`DrawStart → SyncQueued`. Vérifier l'écran avant et après chaque mesure : un tap
+perdu peut produire un chiffre plausible sur le mauvais écran.
+
+Ajouter quatre cas de sûreté au corpus :
+
+- Markdown d'un seul paragraphe très long ;
+- liste ou bloc de code de plus de 500 lignes ;
+- texte avec accents, emoji et images en ligne allégées ;
+- gros fichier `.txt`.
+
+La mesure de performance ne remplace pas la preuve de données : après chaque
+cas modifié, relire le fichier écrit et vérifier l'aller-retour exact, images
+comprises.
 
 ---
 
-## 6. Les pièges, chacun payé une fois
+## 7. Pièges à ne pas rouvrir
 
-### 1. Les bornes sont en unités UTF-16
+### UTF-16 partout
 
-Ni octets, ni runes. `é` : 2 octets, 1 rune, 1 unité. `😀` : 4, 1, 2. C'est
-l'unité de `TextRange` dans Compose et celle de `markdown.Doc` ; c'est ce qui
-permet à Kotlin de découper avec `substring` sans conversion. Un découpage
-calculé en octets se décalerait dès la première lettre accentuée.
+Compose, `String.substring`, `TextRange` et les bornes Go utilisent les unités
+UTF-16. `é` en vaut une, `😀` deux. Une coupure dure doit reconnaître les paires
+de substitution.
 
-### 2. Découper le texte **allégé**, jamais le texte brut
+### Découper le texte allégé
 
-`PrepareEdit` sort les données en ligne `data:` et les remplace par des jetons.
-Découper avant cette étape mettrait un pavé de plusieurs mégaoctets sans une
-seule espace dans une section — et ferait tuer l'application par le système,
-exactement le défaut que `ExtractInlineData` a été écrit pour corriger.
+`PrepareEdit` retire les données `data:` avant toute fenêtre de saisie. Écrire
+sans `restoreImages` détruirait silencieusement les images de la note.
 
-Et **ne jamais écrire sans restituer** : c'est le seul chemin du dépôt qui peut
-détruire des données en silence. Le chemin d'enregistrement ne change pas, donc
-`restoreImages` reste où il est — vérifiez seulement que vous ne l'avez pas
-contourné.
+### Instantané et brouillon ne se mélangent pas
 
-### 3. Le document est la source de vérité, pas les sections
+Les bornes découpent `document`, jamais une chaîne déjà matérialisée avec des
+bornes anciennes. Soit on garde le brouillon en surcouche, soit on committe et
+on recalcule ; aucun état intermédiaire n'est licite.
 
-Gardez le texte complet dans l'état et recollez dedans. Ne reconstruisez jamais
-le document en concaténant des sections gardées séparément : la première
-divergence entre les deux représentations serait invisible et partirait sur le
-serveur.
+### Une tranche inactive n'est pas du Markdown autonome
 
-### 4. Les bornes périment dès qu'on écrit
+Ne pas appeler `markdown.Render` ou `VueMarkdown` pour l'afficher. Elle montre
+la source exacte. Le rendu sémantique reste celui du document entier en aperçu.
 
-Après un recollage, toutes les sections suivantes sont décalées. Redemandez le
-découpage. Décaler les bornes à la main par la différence de longueur est une
-optimisation ; mesurez d'abord qu'elle est nécessaire.
+### La mise en forme travaille dans la fenêtre
 
-### 5. Une section se rend seule
+`ApplyFormatJSON` reçoit `valeur.text` et la sélection relative. Lui passer le
+document entier réintroduirait une copie de centaines de ko à chaque action.
 
-`markdown.Render` sera appelé sur le texte d'une section, sans le contexte
-autour. D'où la règle 4 de l'étape 1. Le test à écrire : la concaténation des
-blocs de toutes les sections doit être égale aux blocs du document entier.
+### Le premier toucher doit porter le curseur
 
-### 6. La barre d'outils opère sur la section
+Remplacer un `Text` par un `TextField` sans exploiter son `TextLayoutResult`
+imposerait deux touchers : un pour activer, un pour placer le curseur. Ce n'est
+pas un détail à repousser après le prototype.
 
-`ApplyFormatJSON` reçoit `(texte de la section, début, fin)` avec des bornes
-relatives à la section. Lui passer le document entier annulerait tout le
-chantier : il recopierait 295 ko à chaque appui sur « gras ».
+### Les retours à la ligne ne suffisent pas
 
-### 7. Le `.aar` n'est pas régénéré par Gradle
+Une seule ligne source peut produire des centaines de lignes visuelles. Toute
+borne d'édition porte donc aussi sur la longueur UTF-16 et autorise une coupure
+de vue dans un paragraphe.
 
-Toute fonction exportée ajoutée dans `mobile/` exige `gomobile bind` à la main.
-Sinon Kotlin compile contre l'ancien binding et se plaint d'une référence
-introuvable sur un symbole que vous venez d'écrire — le symptôme ne désigne pas
-sa cause.
+### Ne pas imbriquer deux listes verticales
 
-```powershell
-$env:ANDROID_HOME = "$env:LOCALAPPDATA/Android/Sdk"
-$env:ANDROID_NDK_HOME = "$env:ANDROID_HOME/ndk/30.0.16138531"
-```
+`VueMarkdown` possède sa propre `LazyColumn`. L'éditeur en possède une autre ;
+elles ne se composent jamais l'une dans l'autre.
 
-### 8. Un curseur qui clignote rend `uiautomator` aveugle
+### Le `.aar` n'est pas régénéré par Gradle
 
-La fenêtre n'est alors jamais « au repos » et le dump échoue sur
-`null root node returned by UiTestAutomationBridge` — au moment précis où le
-banc a besoin de savoir où il est. `scripts/banc-editeur.ps1` masque donc le
-clavier avant d'ouvrir la note, pour que le champ ne prenne pas le focus.
+Toute modification de la façade exportée impose `gomobile bind` avant le build
+Kotlin.
 
-Et le fichier de dump précédent restant en place, `cat` rendait l'écran d'AVANT :
-le banc concluait « tap avalé » sur une note pourtant ouverte. Effacer avant de
-capturer.
+### Localisation et fins de ligne
 
-### 9. Au banc, un tap perdu ne se voit pas
-
-Le thread UI reste bloqué assez longtemps pour que l'appui soit avalé. On mesure
-alors le défilement de la **liste** au lieu de celui de l'éditeur, et le chiffre
-obtenu est parfaitement plausible — c'est arrivé, et la première série de
-mesures était fausse. Vérifiez l'écran par `uiautomator dump` et un marqueur
-exclusif avant et après chaque mesure. Se fier au processus ne suffit pas : MIUI
-le garde en vie alors que l'application est en arrière-plan.
-
-### 10. Écrire les fichiers en LF
-
-Le dépôt est en LF alors que `core.autocrlf` est à `true`. Un outil qui traduit
-les fins de ligne produit du CRLF, et `gofmt -l` signale alors le fichier
-**entier** comme mal formaté.
-
-### 11. `ChainesEnDurTest`
-
-Le nouvel écran doit passer par `stringResource`, et **ne doit jamais être
-ajouté à `ECRANS_A_MIGRER`** : cette liste ne décrit qu'une dette existante. Pas
-de `Context` dans un ViewModel ; un texte émis par un ViewModel est un
-`ui.common.Texte`, rédigé par le composable.
-
-### 12. Le texte brut n'a pas de structure, et `RenderPlain` n'a qu'un bloc
-
-Deux conséquences, à traiter à l'étape 2, et aucune n'est couverte par les tests
-de l'étape 1.
-
-**Le découpage d'un `.txt` ne se vérifie pas par le rendu.** `RenderPlain`
-renvoie un bloc unique portant tout le texte : la concaténation des rendus de N
-sections donnerait N blocs, jamais un. La propriété « le rendu par sections
-égale le rendu entier » ne s'applique donc pas ici — et n'a pas à s'appliquer,
-puisqu'un texte brut n'a aucune construction multiligne à couper en deux. Toute
-frontière de ligne y est licite.
-
-**Et l'aperçu d'un gros `.txt` ne ralentit pas : il plante.** Mesuré depuis, sur
-une copie `.txt` de la note de test, reproduit deux fois sur deux :
-
-```
-java.lang.IllegalArgumentException: Can't represent a width of 0
-and height of 444403 in Constraints
-  at androidx.compose.foundation.layout.IntrinsicHeightNode.calculateContentConstraints
-```
-
-Un seul bloc, c'est un seul `Text` dans la `LazyColumn` : elle n'a qu'un
-élément, donc elle ne virtualise rien — et le `Modifier.height(IntrinsicSize.Min)`
-de `MarkdownView.kt`, qui sert à donner leur hauteur aux barres de citation,
-force le calcul d'une hauteur de 444 403 px. C'est le même plafond de 262 143 px
-que pour un champ de saisie en hauteur libre, atteint par un autre chemin.
-
-La prémisse « l'aperçu est déjà fluide, on peut s'appuyer dessus » — vraie et
-mesurée pour le Markdown, 1,77 ms sur 295 ko — **est donc fausse pour le texte
-brut**, et OpenCloud crée ses fichiers en `.txt`.
-
-**Corrigé.** `RenderPlain` découpe en blocs d'au plus `maxPlainLines` lignes,
-sur une ligne vide quand il y en a une, sans perdre un caractère. Vérifié sur
-l'appareil : le plantage a disparu et l'aperçu du `.txt` dessine en **1,27 ms**,
-contre 1,77 ms pour l'aperçu Markdown équivalent. Quatre tests dans
-`render_test.go`.
-
-La prémisse de l'étape 3 tient donc de nouveau — mais elle tenait à un fil, et
-il reste un cas de même nature, non mesuré : un fichier **Markdown** d'un seul
-paragraphe démesuré donnerait aussi un bloc unique. `ShortenLongWords` borne la
-longueur d'un mot, pas celle d'un bloc.
+Tout texte UI passe par `stringResource` ou `Texte`. Les trois `strings.xml`
+restent synchronisés. Les sources sont écrites en LF ; les scripts PowerShell
+accentués gardent leur BOM UTF-8.
 
 ---
 
-## 7. Discipline attendue
+## 8. Discipline de sortie
 
-Celle de `CLAUDE.md`, intégralement. Les trois points qui comptent ici :
+- Un test vert n'est crédible qu'après avoir été vu échouer avec le symptôme
+  attendu.
+- Un prototype fluide n'est pas une intégration sûre : distinguer interface,
+  sauvegarde, restitution des images et synchronisation.
+- Un chiffre sans protocole comparable n'est pas une mesure.
+- Une brique devenue sans usage après la révision est supprimée ou reçoit un
+  rôle explicite ; elle ne reste pas « au cas où ».
 
-- **Un test qui passe ne prouve rien tant qu'on ne l'a pas vu échouer.** Vaut
-  aussi pour une mesure : avant de conclure que le chantier a marché, remettez
-  le montage d'avant et vérifiez que le banc redonne 360 ms.
-- **Distinguer « écrit », « compile » et « testé ».** Le découpage Go se teste ;
-  l'écran Compose n'a aucun test instrumenté, et ce qui n'a pas tourné sur un
-  appareil doit être annoncé comme tel.
-- **Un chiffre de performance sans protocole ne vaut rien.** Même appareil, même
-  geste, même note, réseau coupé. Sinon vous comparez deux choses différentes.
+Avant de conclure l'intégration :
 
-Avant de conclure : `go vet ./... && gofmt -l .`, `go test ./... -short`, puis
-`gomobile bind` et `cd android && ./gradlew assembleDebug testDebugUnitTest`.
+```text
+go vet ./...
+gofmt -l .
+go test ./... -short
+gomobile bind
+cd android
+./gradlew assembleDebug testDebugUnitTest lintDebug
+```
