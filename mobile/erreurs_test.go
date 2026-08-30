@@ -3,10 +3,10 @@ package mobile
 import (
 	"testing"
 
-	"opennote/internal/config"
-	"opennote/internal/notes"
-	"opennote/internal/opencloud"
-	"opennote/internal/store"
+	"github.com/ybediat/OpenNote/internal/config"
+	"github.com/ybediat/OpenNote/internal/notes"
+	"github.com/ybediat/OpenNote/internal/opencloud"
+	"github.com/ybediat/OpenNote/internal/store"
 )
 
 // TestErrorCodePrioriteTransport est le test qui protège le repli local.

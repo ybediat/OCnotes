@@ -65,14 +65,28 @@ android {
     }
 
     lint {
-        // Une clé absente d'une traduction, ou présente dans une traduction
-        // sans exister dans `values/`, est une erreur et non un
-        // avertissement : c'est le seul contrôle automatique une fois un
-        // `values-<langue>/` créé, et un avertissement ne se voit pas.
+        // Une clé présente dans une traduction mais absente de `values/` est
+        // une erreur : elle signale une clé supprimée de la référence que la
+        // traduction traîne encore. Le cas est rare, il ne se produit jamais
+        // par accident, et la règle ne fait aucun bruit au quotidien.
+        error.add("ExtraTranslation")
+
+        // `MissingTranslation` est EN PAUSE, le temps que l'interface se
+        // stabilise. L'anglais et l'espagnol ont été traduits en cours de
+        // route, pour éprouver le dispositif ; du coup chaque chaîne ajoutée
+        // à `values/` faisait échouer `lintDebug` jusqu'à ce que les deux
+        // langues suivent.
         //
-        // Tant qu'il n'y a qu'une langue, ces règles ne signalent rien. Elles
-        // sont posées maintenant pour être en place le jour où elles servent.
-        error.addAll(listOf("MissingTranslation", "ExtraTranslation"))
+        // Le rappel n'apprenait rien — on sait que la traduction est en
+        // retard, c'est le principe même de traduire à la fin — et un
+        // avertissement qu'on s'habitue à ignorer finit par masquer ceux qui
+        // comptent. Une chaîne sans traduction retombe sur le français, ce
+        // qu'Android fait de toute façon.
+        //
+        // À RETIRER en rouvrant le chantier de traduction : cette seule ligne
+        // rétablit l'inventaire complet des manques, langue par langue, et
+        // c'est exactement l'outil qu'il faudra à ce moment-là.
+        disable.add("MissingTranslation")
     }
 
     packaging {

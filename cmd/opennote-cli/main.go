@@ -21,7 +21,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"opennote/internal/opencloud"
+	"github.com/ybediat/OpenNote/internal/opencloud"
 )
 
 func main() {

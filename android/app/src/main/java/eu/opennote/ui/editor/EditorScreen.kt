@@ -195,6 +195,26 @@ fun EditorScreen(
                 // Pas de `verticalScroll` autour : un TextField borné fait
                 // défiler son propre contenu et garde le curseur visible, ce
                 // qu'un conteneur scrollable externe lui retirerait.
+                //
+                // Ce n'est plus la seule raison, et la seconde est
+                // rédhibitoire. Sortir le défilement du champ pour le poser
+                // dans une couche translatable — la piste évidente contre les
+                // 505 ms de dessin par image mesurés sur une note de 285 ko —
+                // a été essayé et **fait planter l'application** :
+                //
+                //   IllegalArgumentException: Can't represent a width of 1058
+                //   and height of 531251 in Constraints
+                //   at androidx.compose.material3.TextFieldMeasurePolicy.measure
+                //
+                // Compose empaquette largeur et hauteur dans un seul Long ; à
+                // cette largeur, la hauteur plafonne à 262 143 px. Ce document
+                // en demande 531 251. Un champ de saisie non borné est donc
+                // **impossible** au-delà d'environ 1300 lignes affichées, quel
+                // que soit son coût de dessin. La LazyColumn de l'aperçu y
+                // échappe parce qu'elle ne mesure jamais la hauteur totale.
+                //
+                // Conclusion : la virtualisation n'est pas une optimisation
+                // ici, c'est la seule chose qui tienne.
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()

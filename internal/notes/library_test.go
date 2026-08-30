@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"opennote/internal/opencloud"
+	"github.com/ybediat/OpenNote/internal/opencloud"
 )
 
 func newLibrary(t *testing.T, root string, seed ...string) (*Library, *fakeBackend) {

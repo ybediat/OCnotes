@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"opennote/internal/opencloud"
+	"github.com/ybediat/OpenNote/internal/opencloud"
 )
 
 // Test vertical de la façade contre un vrai serveur : configuration, client

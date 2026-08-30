@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"opennote/internal/opencloud"
+	"github.com/ybediat/OpenNote/internal/opencloud"
 )
 
 // OpKind désigne le type d'une opération en attente.

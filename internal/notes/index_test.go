@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"opennote/internal/opencloud"
+	"github.com/ybediat/OpenNote/internal/opencloud"
 )
 
 // chercheur enveloppe le backend en mémoire pour lui ajouter la capacité de

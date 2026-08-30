@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"opennote/internal/markdown"
-	"opennote/internal/opencloud"
+	"github.com/ybediat/OpenNote/internal/markdown"
+	"github.com/ybediat/OpenNote/internal/opencloud"
 )
 
 // Codes d'erreur d'arborescence, dans le même esprit que ceux du nommage.

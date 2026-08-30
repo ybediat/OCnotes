@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"opennote/internal/opencloud"
+	"github.com/ybediat/OpenNote/internal/opencloud"
 )
 
 // fakeRemote simule le serveur : il applique la même règle d'If-Match, et sait

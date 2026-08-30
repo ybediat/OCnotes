@@ -33,11 +33,11 @@ import (
 	"sync"
 	"time"
 
-	"opennote/internal/config"
-	"opennote/internal/markdown"
-	"opennote/internal/notes"
-	"opennote/internal/opencloud"
-	"opennote/internal/store"
+	"github.com/ybediat/OpenNote/internal/config"
+	"github.com/ybediat/OpenNote/internal/markdown"
+	"github.com/ybediat/OpenNote/internal/notes"
+	"github.com/ybediat/OpenNote/internal/opencloud"
+	"github.com/ybediat/OpenNote/internal/store"
 )
 
 // requestTimeout borne chaque appel réseau. gomobile ne sait pas transmettre

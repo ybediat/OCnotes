@@ -4,9 +4,9 @@ import (
 	"errors"
 	"time"
 
-	"opennote/internal/notes"
-	"opennote/internal/opencloud"
-	"opennote/internal/store"
+	"github.com/ybediat/OpenNote/internal/notes"
+	"github.com/ybediat/OpenNote/internal/opencloud"
+	"github.com/ybediat/OpenNote/internal/store"
 )
 
 // folderRef décrit un dossier pour le sélecteur de destination.

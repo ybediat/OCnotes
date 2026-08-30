@@ -147,5 +147,5 @@ documentées dans [ARCHITECTURE.md](docs/ARCHITECTURE.md#2-bis-pièges-confirmé
 
 ## Note sur le chemin de module
 
-`go.mod` déclare `module opennote`, un chemin local. À remplacer par l'URL du
-dépôt (`github.com/…/opennote`) le jour où le projet est publié.
+`go.mod` déclare `module github.com/ybediat/OpenNote`, aligné sur l'URL du
+dépôt. Les imports internes suivent (`github.com/ybediat/OpenNote/internal/…`).

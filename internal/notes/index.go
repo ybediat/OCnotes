@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"opennote/internal/opencloud"
+	"github.com/ybediat/OpenNote/internal/opencloud"
 )
 
 // Searcher est la partie facultative d'un Backend qui sait énumérer tout

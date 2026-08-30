@@ -484,6 +484,144 @@ en Kotlin.
 
 ---
 
+## 7 bis. L'éditeur sur une grande note — ce qui a été mesuré
+
+Le défilement d'une grande note était décrit comme « poussif ». La mesure dit
+autre chose, et de plus loin : **l'éditeur cesse d'être fluide vers 80 lignes**,
+soit une dizaine de ko de prose. Il ne s'agit ni de la mise en page, ni de la
+quantité de texte tenue en mémoire.
+
+### Le banc
+
+Redmi Note 12 (`topaz`), 1080×2400 à 440 dpi, Compose BOM 2024.12.01, build
+`debug`. Réseau coupé, pour que la synchronisation n'entre pas dans la mesure.
+Des notes de tailles graduées, taillées dans une vraie note pour garder une
+structure de prose réaliste, injectées dans le cache local ; chacune ouverte
+puis balayée par six `input swipe` identiques.
+
+```bash
+adb shell dumpsys gfxinfo eu.opennote.debug reset
+# ... le geste ...
+adb shell dumpsys gfxinfo eu.opennote.debug framestats
+```
+
+`framestats` donne une ligne par image. Les deux colonnes qui décident sont
+`PerformTraversalsStart → DrawStart` — mesure et layout — et
+`DrawStart → SyncQueued` — l'enregistrement de la display list.
+
+**Un piège du banc lui-même, qui a produit une première série de chiffres
+fausse :** un tap perdu ne se voit pas dans les résultats. Le thread UI reste
+bloqué assez longtemps pour que l'appui soit avalé ; on mesure alors le
+défilement de la *liste* au lieu de celui de l'éditeur, et le chiffre obtenu est
+parfaitement plausible. Tout état d'écran doit être vérifié — `uiautomator dump`
+et un marqueur exclusif — avant et après chaque mesure. Se fier au processus ne
+suffit pas non plus : MIUI le garde en vie alors que l'application est passée en
+arrière-plan.
+
+### Ce que coûte le défilement
+
+| note | octets | lignes | images rendues | en retard | médiane/image | dessin moyen | dessin à l'ouverture |
+|---|---|---|---|---|---|---|---|
+| bench-010k | 9 422 | 76 | 118 | 90 % | 48 ms | 18,2 ms | 148 ms |
+| bench-025k | 25 197 | 196 | 40 | 85 % | 101 ms | 39,7 ms | 204 ms |
+| bench-050k | 51 160 | 376 | 30 | 80 % | 150 ms | 70,7 ms | 233 ms |
+| bench-100k | 102 377 | 838 | 23 | 78 % | 200 ms | 129,8 ms | 436 ms |
+| bench-200k | 204 698 | 1 633 | 18 | 67 % | 350 ms | 243,4 ms | 866 ms |
+| note réelle | 294 576 | 2 655 | 18 | 67 % | 500 ms | 360,8 ms | 1 366 ms |
+
+Deux points de comparaison, même appareil, même geste :
+
+- une note de 445 octets — une vingtaine de lignes — dans le même éditeur :
+  **4,08 ms** de dessin, 3 % d'images en retard ;
+- **la même note de 294 576 octets dans l'aperçu** : **1,77 ms** de dessin,
+  212 images rendues là où l'éditeur en rend 18.
+
+### Tout est dans la phase de dessin
+
+`PerformTraversalsStart → DrawStart` mesure **0,11 ms dans toutes les
+conditions** — 445 octets comme 295 ko, au repos comme pendant la frappe, et
+jusqu'à la toute première ouverture. Le GPU tient 7 à 9 ms, le RenderThread 1,3
+à 6,7 ms. Tout le temps est dans `DrawStart → SyncQueued`.
+
+Ce n'est donc pas la mise en page qui coûte, et la conséquence est immédiate :
+**passer à `BasicTextField` + `TextFieldState` ne changerait rien au
+défilement.** C'était la piste évidente — supprimer l'aller-retour du
+`TextFieldValue` par le `StateFlow` du ViewModel — et la mesure l'a écartée
+avant qu'elle ne coûte une journée de travail.
+
+Le coût suit le nombre de lignes, à **0,14 à 0,24 ms par ligne**, et il se paie
+sur deux images sur trois pendant le défilement : la troisième réutilise la
+display list. Autrement dit, chaque changement d'offset fait **ré-enregistrer
+tout le document**, y compris les 99 % hors écran. C'est du repeint et non une
+reconstruction : à l'ouverture, où les `StaticLayout` sont réellement
+construits, la même note coûte 1 366 ms contre 361 en défilement.
+
+### Ce que coûte la frappe
+
+Cinq caractères tapés au milieu du texte, champ déjà en saisie.
+
+| note | lignes | médiane/image | dessin moyen | dessin max |
+|---|---|---|---|---|
+| bench-025k | 196 | 105 ms | 59,0 ms | 97,6 ms |
+| bench-200k | 1 633 | **750 ms** | 424,7 ms | 678,6 ms |
+
+**750 ms par caractère sur 200 ko.** L'éditeur n'est donc pas seulement
+désagréable à faire défiler : il est inutilisable en saisie bien avant la taille
+qui avait motivé l'enquête. La frappe coûte environ 1,75 fois le défilement, ce
+qui est cohérent — elle invalide la mise en page du texte, là où le défilement se
+contente de la repeindre.
+
+### Le second plafond, celui qui ne se négocie pas
+
+La piste évidente contre un dessin proportionnel au document est de ne plus
+repeindre du tout : sortir le défilement du champ, laisser le `TextField`
+prendre sa hauteur naturelle dans un `verticalScroll` à nous, et le promouvoir
+en `graphicsLayer` pour que le défilement translate une `RenderNode` au lieu de
+la ré-enregistrer.
+
+Essayé. **L'application plante à l'ouverture :**
+
+```
+java.lang.IllegalArgumentException: Can't represent a width of 1058
+and height of 531251 in Constraints
+  at androidx.compose.material3.TextFieldMeasurePolicy.measure(TextField.kt:703)
+```
+
+Compose empaquette largeur et hauteur dans un seul `Long` ; à cette largeur, la
+hauteur dispose de 18 bits, soit 262 143 px. Ce document en réclame 531 251.
+**Un champ de saisie en hauteur libre est donc impossible au-delà d'environ
+1 300 lignes affichées**, quel que soit son coût de dessin. L'aperçu y échappe
+pour la raison même qui le rend rapide : une `LazyColumn` ne mesure jamais la
+hauteur totale de son contenu.
+
+Le plafond de 262 143 px vient du schéma d'empaquetage de Compose ; le fait
+mesuré, lui, est le refus de 531 251.
+
+### Ce que ça impose
+
+Deux bornes indépendantes sur ce qu'un champ de saisie peut contenir :
+
+| borne | valeur | nature |
+|---|---|---|
+| budget de 16 ms par image | ~80 lignes | performance |
+| `Constraints` de Compose | ~1 300 lignes | plantage |
+
+La première est de loin la plus serrée : **80 lignes, c'est deux à trois
+écrans.** L'unité éditable doit donc avoir la taille d'un écran, pas celle d'un
+chapitre. Cela écarte le découpage « une section = un titre » et rapproche la
+réponse d'une `LazyColumn` de petits champs — le seul montage où *aucun* champ
+ne grandit avec le document.
+
+Deux faits relevés sur la note réelle achèvent d'écarter le découpage aux
+titres : elle ne contient **aucun titre ATX**, et aucune donnée `data:`. Un
+repli par groupes de paragraphes n'y serait pas un cas limite, mais le cas
+nominal.
+
+**La virtualisation n'est pas une optimisation de l'éditeur : c'est la seule
+chose qui tienne.**
+
+---
+
 ## 8. Risques identifiés
 
 | Risque | Impact | Mitigation |
@@ -495,3 +633,4 @@ en Kotlin.
 | `gomobile bind` : friction sur les types | ralentit l'intégration | frontière JSON, façade mince, décidé dès le départ |
 | Sync bidirectionnelle plus complexe que prévu | dérapage planning | conflit non destructif, aucune fusion auto en v1 |
 | Poids de l'APK (runtime Go + Compose) | critère « légère » | mesurer tôt ; `-ldflags="-s -w"`, ABI `arm64-v8a` seule |
+| Éditeur non virtualisé sur une grande note | inutilisable en saisie dès ~200 lignes ; plantage `Constraints` au-delà de ~1 300 | mesuré, section 7 bis ; aucun correctif local — demande des champs bornés à un écran |

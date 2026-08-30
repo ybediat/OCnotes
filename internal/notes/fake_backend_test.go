@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"opennote/internal/opencloud"
+	"github.com/ybediat/OpenNote/internal/opencloud"
 )
 
 // fakeBackend est une implémentation en mémoire de Backend.

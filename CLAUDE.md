@@ -124,6 +124,12 @@ l'itération sur un écran.
 racine du dépôt. `ChainesEnDurTest` remonte l'arborescence plutôt que de le
 supposer.
 
+**Un script PowerShell accentué doit porter un BOM UTF-8.** PowerShell 5.1,
+celui de cette machine, lit un `.ps1` sans BOM dans la codepage ANSI :
+« référence » devient « rÃ©fÃ©rence » — et le script écrit ce mojibake dans
+les fichiers qu'il produit. Le défaut ne se voit qu'à l'exécution, jamais à
+l'écriture, et il survit à une relecture attentive du source.
+
 **`./gradlew lintDebug` passe** : zéro erreur, 39 avertissements. Il échouait
 sur un `MissingPermission` dans `SyncNotifier.kt`, que ce document décrivait
 comme « la notification postée sans vérifier `POST_NOTIFICATIONS`, défaut réel
@@ -168,6 +174,8 @@ formats JSON, codes d'erreur. Le modifier, c'est casser l'UI.
 `docs/ARCHITECTURE.md` porte les décisions et les pièges confirmés.
 `docs/CHANTIER-DOCUMENTS.md` est un ordre de travail autonome : lecture seule
 des `.docx` et `.odt`, à prendre à froid.
+`docs/CHANTIER-EDITEUR.md` en est un second : virtualiser l'éditeur, dont la
+section 7 bis de `docs/ARCHITECTURE.md` porte les mesures.
 
 ## Pièges du serveur OpenCloud
 
@@ -486,16 +494,83 @@ et la commande ne change rien visiblement ; et le paquet porte le suffixe
 et échoue sans un mot. `ar-XB` est générée en même temps, pour l'écriture de
 droite à gauche.
 
-`MissingTranslation` et `ExtraTranslation` sont réglés en erreurs dans
-`build.gradle.kts`. Ils ne signalent rien tant qu'il n'y a qu'une langue, et
-**ne tournent que sur `./gradlew lintDebug`** : `assembleDebug` ne lance aucune
-tâche lint. La traduction ne bloquera donc jamais le travail au quotidien.
+`ExtraTranslation` est réglé en erreur dans `build.gradle.kts` : une clé
+présente dans une traduction mais absente de `values/` signale une clé
+supprimée de la référence que la traduction traîne encore. Le cas ne se
+produit jamais par accident, et la règle ne fait aucun bruit au quotidien.
+
+**`MissingTranslation` est en pause** — `disable`, pas `warning`. Voir « Ce
+qui reste » pour le motif et pour la ligne à retirer le jour venu.
+
+Les deux **ne tournent que sur `./gradlew lintDebug`** : `assembleDebug` ne
+lance aucune tâche lint, et `testDebugUnitTest` non plus. Quand quelqu'un dit
+« les tests ne passent pas » à propos de traduction, il parle de lint.
+
+### Intégrer une traduction rendue
+
+Un traducteur part d'une copie de `values/strings.xml` et n'y remplace que les
+valeurs — c'est ce qu'on lui demande. Sa copie porte alors quatre défauts que
+l'œil ne voit pas, les quatre constatés sur les deux premières langues :
+
+1. **les entrées `translatable="false"` sont recopiées.** Une clé en trop est
+   une erreur (`ExtraTranslation`) au même titre qu'une clé manquante ;
+2. **les guillemets protecteurs sautent.** Le séparateur de sous-titre rendu
+   sans eux, aapt supprime ses espaces de bord et la ligne d'une note devient
+   « 30 August 2026·1.2 kB » ;
+3. **une apostrophe n'est pas échappée.** Un « Don't » anglais fait échouer la
+   compilation sur « Invalid unicode escape sequence », qui ne désigne pas sa
+   cause ;
+4. **l'en-tête se présente encore comme la langue de référence.**
+
+`scripts/normalise-traduction.ps1` corrige les quatre, rend compte de ce qu'il
+a touché, signale les clés manquantes ou en trop, et **refuse de s'exécuter
+sur `values-en/`** — qui porte l'en-tête long servant de modèle. Il est
+idempotent.
+
+```powershell
+.\scripts\normalise-traduction.ps1 -Fichier android/app/src/main/res/values-de/strings.xml -Langue allemande
+```
+
+**Le fichier va dans `values-<langue>/strings.xml`, jamais dans `values/`.**
+Déposé dans `values/` sous un nom comme `strings-en.xml`, il est lu comme une
+seconde langue par défaut : la compilation échoue sur autant de doublons qu'il
+y a de clés, et rien dans le message ne dit que c'est une affaire de dossier.
+
+Ce que le script ne sait pas voir et que lint attrape : les formes de pluriel
+propres à la langue. L'espagnol demande une forme `many` que ni le français ni
+l'anglais n'ont — le traducteur avait recopié `one` et `other`.
 
 ### Ce qui reste
 
-**La traduction elle-même**, et rien d'autre côté code : un
-`values-<langue>/` à remplir, une ligne dans `locales_config.xml`. Les deux
-gestes de la section « Décisions prises » ci-dessous.
+**Deux langues sont en place**, `values-en/` et `values-es/`. L'anglais sert
+de modèle : son en-tête porte les règles de traduction, dans l'ordre où l'on
+s'y trompe. Les langues suivantes reçoivent un en-tête court qui y renvoie —
+recopier la consigne dans chaque fichier garantirait qu'elle devienne fausse
+quelque part.
+
+**`MissingTranslation` est en pause, et c'est une décision.** Traduire deux
+langues pendant que l'interface bouge encore faisait échouer `lintDebug` à
+chaque chaîne ajoutée à `values/`. Le rappel n'apprenait rien — on sait que la
+traduction est en retard, c'est le principe même de traduire à la fin — et un
+avertissement qu'on s'habitue à ignorer finit par masquer ceux qui comptent.
+La règle est donc `disable` et non `warning` : ne pas laisser derrière soi un
+signal qu'il faut réapprendre à trier à chaque passage.
+
+Une chaîne sans traduction retombe sur le français, ce qu'Android fait de
+toute façon. Rien n'est cassé à l'écran, seulement pas encore traduit.
+
+**Une seule ligne à retirer** de `build.gradle.kts` pour rouvrir le chantier :
+`disable.add("MissingTranslation")`. Elle rétablit d'un coup l'inventaire des
+manques, langue par langue — c'est exactement l'outil qu'il faudra à ce
+moment-là, et c'est pourquoi il n'y a rien d'autre à construire pour suivre
+la dette entre-temps.
+
+**Ce qui ne marche pas, et qu'il est tentant d'essayer** : retirer les langues
+de `locales_config.xml`. Vérifié, non supposé — une chaîne non traduite
+ajoutée à `values/`, puis le fichier ramené à `fr` seul, et l'erreur reste.
+Lint regarde les dossiers `values-<langue>/` présents, pas ce que
+l'application déclare au système. On perdrait l'annonce de la langue, donc la
+possibilité de la tester, en gardant l'erreur : le pire des deux.
 
 **Les quatre chaînes de `SyncWorker`** restent en dur, volontairement : elles
 partent dans `Log.w`, pas à l'écran. `HORS_INTERFACE` les couvre, et cette
@@ -503,12 +578,17 @@ liste-là n'a pas vocation à se vider.
 
 ### Décisions prises
 
-**La traduction se fait à la fin, en une passe, après l'extraction.** Les
-langues cibles ne sont pas arrêtées. Traduire plus tôt reviendrait à traduire
-un tiers de l'application, puis à rouvrir chaque `values-<langue>/` huit fois
-de plus ; et un écran en cours de conception change de formulation trois ou
-quatre fois. Le français est la langue de référence : `values/` est la seule
-que le code touche au moment d'écrire.
+**La traduction se fait à la fin, en une passe, après l'extraction.** Elle a
+été enfreinte sciemment : l'anglais puis l'espagnol ont été traduits pendant
+que l'interface bougeait encore, pour éprouver le dispositif en grandeur
+nature plutôt que sur parole. L'essai a rapporté ce qu'il a coûté — il a mis
+au jour les quatre défauts d'une traduction rendue, et la friction de
+`MissingTranslation` décrite ci-dessus. La décision reste valable pour les
+langues suivantes : les ouvrir maintenant, c'est rouvrir chaque
+`values-<langue>/` à chaque écran retouché.
+
+Le français est la langue de référence : `values/` est la seule que le code
+touche au moment d'écrire.
 
 **Une langue s'ajoute par deux gestes solidaires** : un `values-<langue>/` et
 une ligne dans `res/xml/locales_config.xml`. L'un sans l'autre donne soit un
@@ -516,6 +596,14 @@ choix qui ne change rien, soit des ressources qu'Android n'annonce pas.
 Android 13+ propose alors « Langue de l'application » dans les réglages
 système — **pas de sélecteur à construire dans l'application**, ce qui
 éviterait d'ajouter `androidx.appcompat` pour son rétroportage.
+
+**Un garde-fou qu'on doit apprendre à ignorer est un garde-fou en trop.**
+`MissingTranslation` a été mis en pause plutôt qu'en avertissement pour cette
+raison, et la même règle vaut ailleurs : entre un signal bruyant qu'on
+n'écoute plus et un silence assumé jusqu'à la date où le contrôle sert, le
+silence est plus honnête. Ce qui l'assume ici : une ligne commentée dans
+`build.gradle.kts` qui dit quand la retirer, et un paragraphe dans « Ce qui
+reste » qui dit pourquoi elle est là.
 
 **« Sans titre » et « (conflit <horodatage>) » restent en français,
 invariants**, et ne passent pas par la façade. Ce ne sont pas des textes
@@ -536,22 +624,40 @@ protège une règle de projet, il ne dit rien de ce que l'application fait.
 
 Distinguer « écrit », « compile » et « testé » dans tout rapport d'avancement.
 
-Restent ouverts, par ordre de priorité décidé : la **traduction** proprement
-dite — l'extraction, elle, est faite —, OIDC en alternative à l'App Token, et
-la signature de l'APK pour distribution.
+Restent ouverts, par ordre de priorité décidé : les **langues au-delà de
+l'anglais et de l'espagnol**, OIDC en alternative à l'App Token, et la
+signature de l'APK pour distribution.
 
-**Le défilement d'une très grande note est poussif dans l'éditeur** — constaté
-sur un fichier de 285 ko. Ce n'est pas le piège du mot sans espace, qui est
-traité : c'est que `BasicTextField` met en page tout son texte, sans rien
-virtualiser, là où l'aperçu s'appuie sur une `LazyColumn` et reste fluide.
-Compose n'offre pas d'éditeur virtualisé ; il n'y a donc pas de correctif
-local, seulement des contournements. Peu urgent : une note de cette taille est
-une anomalie, et elle reste lisible.
+**Les deux traductions n'ont pas été relues par un locuteur sur l'appareil.**
+L'anglais a été vu à l'écran d'accueil, rien de plus ; l'espagnol n'a pas été
+lancé du tout. Elles compilent, lint les accepte, leurs clés sont complètes —
+c'est tout ce qui est établi.
+
+**L'éditeur décroche vers 80 lignes**, et ce n'était pas le diagnostic qu'on
+en avait. Mesuré au `framestats` sur appareil, relevés complets en section
+7 bis de `docs/ARCHITECTURE.md` :
+
+- ce n'est **pas** la mise en page. `PerformTraversalsStart → DrawStart` tient
+  0,11 ms de 445 octets à 295 ko, frappe comprise. Tout le temps est dans
+  l'enregistrement de la display list, à 0,14–0,24 ms par ligne, **refait
+  intégralement à chaque changement d'offset**. Corollaire : passer à
+  `TextFieldState` ne changerait rien au défilement ;
+- ce n'est **pas** peu urgent. La frappe coûte 105 ms par caractère à 196
+  lignes et **750 ms à 1633 lignes** : l'éditeur est inutilisable en saisie
+  bien avant la taille qui avait motivé l'enquête ;
+- sortir le défilement du champ pour le poser dans une couche translatable —
+  la piste évidente — **fait planter l'application** : Compose ne sait pas
+  représenter une hauteur de 531 251 px dans un `Constraints`, le plafond étant
+  à 262 143 px, soit environ 1300 lignes.
+
+Deux bornes en découlent pour un champ de saisie : ~80 lignes pour tenir dans
+une image de 16 ms, ~1300 avant le plantage. La première commande. L'unité
+éditable doit donc faire la taille d'un écran, pas celle d'un chapitre — et la
+note de test ne contient **aucun titre ATX**, ce qui condamne le découpage aux
+titres avant même de l'écrire. La virtualisation n'est pas une optimisation de
+l'éditeur, c'est la seule chose qui tienne.
 
 **La traduction vient après l'extraction, pas avant** — décision prise, motifs
 dans la section Localisation. L'extraction étant faite, il ne reste qu'à
 remplir un `values-<langue>/` et à déclarer la langue dans
 `locales_config.xml`. Ce n'est pas un chantier d'architecture.
-
-Le chemin de module est `opennote` alors que le dépôt existe
-(`github.com/ybediat/OpenNote`) — renommage mécanique jamais fait.

@@ -1,4 +1,4 @@
-module opennote
+module github.com/ybediat/OpenNote
 
 go 1.26.0
 
