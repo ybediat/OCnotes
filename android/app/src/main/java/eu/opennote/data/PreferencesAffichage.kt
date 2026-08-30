@@ -42,6 +42,7 @@ class PreferencesAffichage(context: Context) {
     private val _tri = MutableStateFlow(prefs.getString(CLE_TRI, null))
     private val _mode = MutableStateFlow(prefs.getString(CLE_MODE, null))
     private val _dernierDossier = MutableStateFlow(prefs.getString(CLE_DOSSIER, null))
+    private val _quotaCache = MutableStateFlow(prefs.getLong(CLE_QUOTA_CACHE, QUOTA_CACHE_DEFAUT))
 
     /**
      * Ordre de tri retenu, sous sa forme brute.
@@ -63,11 +64,19 @@ class PreferencesAffichage(context: Context) {
      */
     val dernierDossier: StateFlow<String?> = _dernierDossier.asStateFlow()
 
+    /** Limite locale des blobs de notes, en octets ; zéro signifie illimité. */
+    val quotaCache: StateFlow<Long> = _quotaCache.asStateFlow()
+
     fun definirTri(valeur: String) = ecrire(CLE_TRI, valeur, _tri)
 
     fun definirMode(valeur: String) = ecrire(CLE_MODE, valeur, _mode)
 
     fun definirDernierDossier(valeur: String) = ecrire(CLE_DOSSIER, valeur, _dernierDossier)
+
+    fun definirQuotaCache(valeur: Long) {
+        _quotaCache.value = valeur
+        prefs.edit().putLong(CLE_QUOTA_CACHE, valeur).apply()
+    }
 
     /**
      * Le flux est mis à jour avant l'écriture disque, et `apply()` diffère
@@ -84,5 +93,7 @@ class PreferencesAffichage(context: Context) {
         const val CLE_TRI = "tri_notes"
         const val CLE_MODE = "mode_liste"
         const val CLE_DOSSIER = "dernier_dossier"
+        const val CLE_QUOTA_CACHE = "quota_cache_octets"
+        const val QUOTA_CACHE_DEFAUT = 250L * 1024 * 1024
     }
 }

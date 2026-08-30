@@ -70,7 +70,8 @@
     <string name="err_deplacement_dans_soi">Un dossier ne peut pas être déplacé dans lui-même.</string>
     <string name="err_chemin_vide">Aucun élément désigné.</string>
     <string name="err_dossier_hors_ligne">Un dossier ne peut pas être renommé, déplacé ou supprimé hors connexion. Reconnectez-vous d\'abord.</string>
-    <string name="err_stockage">Impossible d\'écrire sur le stockage de l\'appareil. Vérifiez l\'espace disponible.</string>
+    <string name="err_stockage">Impossible d\'écrire sur le stockage de l\'appareil. Vérifiez l\'espace disponible ou synchronisez d\'abord vos modifications locales.</string>
+    <string name="err_contenu_a_telecharger">Le contenu de cette note n\'est pas disponible hors connexion. Téléchargez-la une fois le réseau revenu.</string>
     <string name="err_url_serveur_manquante">Indiquez l\'adresse du serveur.</string>
     <string name="err_url_serveur_invalide">Adresse de serveur invalide. Elle doit commencer par http:// ou https://</string>
     <string name="err_utilisateur_manquant">Indiquez votre nom d\'utilisateur.</string>
@@ -265,6 +266,20 @@
     <string name="reglages_sync_explication">Une passe automatique a lieu au retour dans l\'application, peu après chaque modification, et toutes les heures si le réseau est disponible.</string>
     <string name="reglages_sync_en_cours">Synchronisation…</string>
     <string name="reglages_sync_maintenant">Synchroniser maintenant</string>
+
+    <string name="reglages_cache_titre">Cache hors ligne</string>
+    <string name="reglages_cache_quota">Limite d\'espace</string>
+    <string name="reglages_cache_utilisation">Utilisation</string>
+    <string name="reglages_cache_usage">%1$s utilisés sur %2$s</string>
+    <string name="reglages_cache_explication">Les brouillons locaux, les copies de conflit et les opérations en attente ne sont jamais supprimés automatiquement.</string>
+    <string name="reglages_cache_modifier_quota">Modifier la limite</string>
+    <string name="reglages_cache_liberer">Libérer l\'espace</string>
+    <string name="reglages_cache_choix_titre">Limite du cache hors ligne</string>
+    <string name="reglages_cache_50_mo">50 Mo</string>
+    <string name="reglages_cache_250_mo">250 Mo</string>
+    <string name="reglages_cache_1_go">1 Go</string>
+    <string name="reglages_cache_5_go">5 Go</string>
+    <string name="reglages_cache_illimite">Illimité</string>
 
     <string name="reglages_deconnexion">Se déconnecter</string>
     <string name="reglages_deconnexion_explication">La déconnexion efface le token, la configuration et le cache local de cet appareil. Les notes restent sur le serveur.</string>

@@ -27,6 +27,15 @@ data class AppStateDto(
     val pending: Int = 0,
 )
 
+/** Occupation des seuls contenus récupérables du cache local. */
+@Serializable
+data class CacheStateDto(
+    /** Zéro désigne le réglage « illimité ». */
+    val quota: Long = 0,
+    /** Mesuré depuis les fichiers réellement présents. */
+    val usage: Long = 0,
+)
+
 /** Un élément de `App.listDrivesJSON()`. */
 @Serializable
 data class DriveDto(

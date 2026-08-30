@@ -274,6 +274,9 @@ func (s *Store) resolveMoveConflict(ctx context.Context, remote Remote, op Opera
 	if err := s.Accept(copyPath, local, copyETag); err != nil {
 		return nil, err
 	}
+	if err := s.MarkConflict(copyPath); err != nil {
+		return nil, err
+	}
 	if err := s.Forget(op.Target); err != nil {
 		return nil, err
 	}
@@ -411,6 +414,9 @@ func (s *Store) resolveConflict(ctx context.Context, remote Remote, notePath str
 		return nil, err
 	}
 	if err := s.Accept(copyPath, local, ""); err != nil {
+		return nil, err
+	}
+	if err := s.MarkConflict(copyPath); err != nil {
 		return nil, err
 	}
 

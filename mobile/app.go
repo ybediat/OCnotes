@@ -109,6 +109,14 @@ type appState struct {
 	Pending      int    `json:"pending"`
 }
 
+// cacheState est l'état d'espace présenté dans les réglages. Quota vaut zéro
+// pour « illimité » ; usage ne compte que les blobs de contenu réellement
+// présents, jamais l'inventaire ni la file persistante.
+type cacheState struct {
+	Quota int64 `json:"quota"`
+	Usage int64 `json:"usage"`
+}
+
 // StateJSON renvoie l'état courant.
 //
 // Connected indique qu'un serveur et un compte sont enregistrés, mais pas que
@@ -129,6 +137,24 @@ func (a *App) StateJSON() (string, error) {
 		LastPath:     a.cfg.LastPath,
 		Pending:      len(a.cache.Pending()),
 	})
+}
+
+// CacheStateJSON renvoie le quota local et l'occupation réelle du cache.
+func (a *App) CacheStateJSON() (string, error) {
+	return toJSON(cacheState{Quota: a.cache.Quota(), Usage: a.cache.Usage()})
+}
+
+// SetCacheQuota applique le quota choisi par l'utilisateur. La préférence
+// elle-même appartient à Android ; cette méthode n'en conserve que l'effet sur
+// le cache ouvert.
+func (a *App) SetCacheQuota(quota int64) error {
+	return a.cache.SetQuota(quota)
+}
+
+// PruneCache libère l'espace récupérable sans toucher aux brouillons, conflits
+// ou opérations en attente.
+func (a *App) PruneCache() error {
+	return a.cache.Prune()
 }
 
 // --- Connexion --------------------------------------------------------------
@@ -435,7 +461,7 @@ func (a *App) ListFolderJSON(dir string) (string, error) {
 		})
 	}
 	for _, n := range listing.Notes {
-		_, entry, cached := a.cache.Get(n.Path)
+		entry, cached := a.cache.CachedEntry(n.Path)
 		out.Entries = append(out.Entries, folderEntry{
 			Path:    n.Path,
 			Name:    n.Name,
@@ -546,6 +572,9 @@ func (a *App) ReadNote(notePath string) (string, error) {
 	if cached && (entry.Dirty || a.recentlyOffline()) {
 		return string(content), nil
 	}
+	if !cached && a.recentlyOffline() {
+		return "", contentNotCachedError(notePath)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
 	defer cancel()
@@ -557,6 +586,9 @@ func (a *App) ReadNote(notePath string) (string, error) {
 			// qu'on la connaît plutôt que d'échouer.
 			return string(content), nil
 		}
+		if errors.Is(err, opencloud.ErrOffline) {
+			return "", contentNotCachedError(notePath)
+		}
 		return "", err
 	}
 	a.noteNetworkResult(nil)
@@ -567,6 +599,10 @@ func (a *App) ReadNote(notePath string) (string, error) {
 		return "", fmt.Errorf("mobile: %s: %w", notePath, opencloud.ErrNotFound)
 	}
 	return string(fresh), nil
+}
+
+func contentNotCachedError(notePath string) error {
+	return fmt.Errorf("mobile: [CONTENT_NOT_CACHED] le contenu de %s doit être téléchargé avant son ouverture hors connexion", notePath)
 }
 
 // noteNetworkResult retient qu'un appel réseau vient d'échouer faute de

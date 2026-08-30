@@ -58,6 +58,7 @@ enum class ValidationSession {
 class OpenNoteRepository(
     private val dataDir: String,
     private val tokenStore: TokenStore,
+    private val preferences: PreferencesAffichage,
 ) {
 
     private val json = Json {
@@ -144,7 +145,15 @@ class OpenNoteRepository(
                 } catch (t: Throwable) {
                     throw OpenNoteException.from(t)
                 }
-            }.also { goApp = it }
+            }.also {
+                // Le réglage appartient aux préférences Android, jamais au
+                // compte. Il est appliqué dès l'ouverture du cache.
+                // Un cache déjà rempli de brouillons peut rester au-dessus
+                // d'un quota abaissé : l'application doit tout de même
+                // démarrer pour laisser l'utilisateur synchroniser ce travail.
+                runCatching { it.setCacheQuota(preferences.quotaCache.value) }
+                goApp = it
+            }
         }
     }
 
@@ -166,6 +175,17 @@ class OpenNoteRepository(
 
     suspend fun state(): AppStateDto =
         json.decodeFromString(call { it.stateJSON() })
+
+    suspend fun cacheState(): CacheStateDto =
+        json.decodeFromString(call { it.cacheStateJSON() })
+
+    suspend fun setCacheQuota(quota: Long) {
+        call { it.setCacheQuota(quota) }
+    }
+
+    suspend fun pruneCache() {
+        call { it.pruneCache() }
+    }
 
     /**
      * Ouvre une session et enregistre le token.

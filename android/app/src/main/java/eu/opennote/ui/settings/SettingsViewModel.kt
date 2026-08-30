@@ -8,9 +8,11 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import eu.opennote.AppContainer
 import eu.opennote.R
 import eu.opennote.data.AppStateDto
+import eu.opennote.data.CacheStateDto
 import eu.opennote.data.ConflictDto
 import eu.opennote.data.OpenNoteException
 import eu.opennote.data.OpenNoteRepository
+import eu.opennote.data.PreferencesAffichage
 import eu.opennote.data.SyncResultDto
 import eu.opennote.ui.common.Texte
 import eu.opennote.ui.common.texte
@@ -25,6 +27,7 @@ import kotlinx.coroutines.launch
 data class SettingsUiState(
     val etat: AppStateDto = AppStateDto(),
     val enAttente: Int = 0,
+    val cache: CacheStateDto = CacheStateDto(),
     /**
      * Faux tant que le serveur n'a pas confirmé le token depuis le lancement.
      * `Restore` ouvre une session utilisable hors connexion : l'application
@@ -43,6 +46,7 @@ data class SettingsUiState(
 
 class SettingsViewModel(
     private val repository: OpenNoteRepository,
+    private val preferences: PreferencesAffichage,
     private val syncScheduler: SyncScheduler,
     private val syncNotifier: SyncNotifier,
 ) : ViewModel() {
@@ -64,7 +68,8 @@ class SettingsViewModel(
         viewModelScope.launch {
             try {
                 val etat = repository.state()
-                _uiState.update { it.copy(etat = etat) }
+                val cache = repository.cacheState()
+                _uiState.update { it.copy(etat = etat, cache = cache) }
                 repository.refreshPending()
             } catch (e: OpenNoteException) {
                 _uiState.update { it.copy(erreur = e.texte()) }
@@ -115,6 +120,44 @@ class SettingsViewModel(
                 _uiState.update { it.copy(deconnecte = true) }
             } catch (e: OpenNoteException) {
                 _uiState.update { it.copy(erreur = e.texte()) }
+            }
+        }
+    }
+
+    fun definirQuotaCache(quota: Long) {
+        preferences.definirQuotaCache(quota)
+        viewModelScope.launch {
+            try {
+                repository.setCacheQuota(quota)
+                val cache = repository.cacheState()
+                _uiState.update { it.copy(cache = cache, erreur = null) }
+            } catch (e: OpenNoteException) {
+                // Le quota est appliqué même si des brouillons protégés le
+                // dépassent. Afficher alors l'occupation réelle, sans annuler
+                // le choix de l'utilisateur ni toucher à son travail.
+                val cache = try {
+                    repository.cacheState()
+                } catch (_: OpenNoteException) {
+                    null
+                }
+                _uiState.update { it.copy(cache = cache ?: it.cache, erreur = e.texte()) }
+            }
+        }
+    }
+
+    fun libererEspace() {
+        viewModelScope.launch {
+            try {
+                repository.pruneCache()
+                val cache = repository.cacheState()
+                _uiState.update { it.copy(cache = cache, erreur = null) }
+            } catch (e: OpenNoteException) {
+                val cache = try {
+                    repository.cacheState()
+                } catch (_: OpenNoteException) {
+                    null
+                }
+                _uiState.update { it.copy(cache = cache ?: it.cache, erreur = e.texte()) }
             }
         }
     }
@@ -171,6 +214,7 @@ class SettingsViewModel(
             initializer {
                 SettingsViewModel(
                     container.repository,
+                    container.preferencesAffichage,
                     container.syncScheduler,
                     container.syncNotifier,
                 )

@@ -19,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -42,6 +43,15 @@ import eu.opennote.R
 import eu.opennote.appContainer
 import eu.opennote.ui.common.Bandeau
 import eu.opennote.ui.common.resoudre
+import android.text.format.Formatter
+
+private object QuotaCache {
+    const val MO_50 = 50L * 1024 * 1024
+    const val MO_250 = 250L * 1024 * 1024
+    const val GO_1 = 1024L * 1024 * 1024
+    const val GO_5 = 5L * 1024 * 1024 * 1024
+    val choix = listOf(MO_50, MO_250, GO_1, GO_5, 0L)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +65,8 @@ fun SettingsScreen(
 ) {
     val etat by viewModel.uiState.collectAsStateWithLifecycle()
     var confirmation by remember { mutableStateOf(false) }
+    var choixQuota by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     LaunchedEffect(etat.deconnecte) {
         if (etat.deconnecte) onDeconnecte()
@@ -188,6 +200,42 @@ fun SettingsScreen(
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
+            Text(
+                text = stringResource(R.string.reglages_cache_titre),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Ligne(
+                libelle = stringResource(R.string.reglages_cache_quota),
+                valeur = libelleQuota(etat.cache.quota),
+            )
+            Ligne(
+                libelle = stringResource(R.string.reglages_cache_utilisation),
+                valeur = stringResource(
+                    R.string.reglages_cache_usage,
+                    Formatter.formatShortFileSize(context, etat.cache.usage),
+                    libelleQuota(etat.cache.quota),
+                ),
+            )
+            Text(
+                text = stringResource(R.string.reglages_cache_explication),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = { choixQuota = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.reglages_cache_modifier_quota))
+            }
+            OutlinedButton(
+                onClick = viewModel::libererEspace,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.reglages_cache_liberer))
+            }
+
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+
             OutlinedButton(
                 onClick = { confirmation = true },
                 modifier = Modifier.fillMaxWidth(),
@@ -204,6 +252,34 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+
+    if (choixQuota) {
+        AlertDialog(
+            onDismissRequest = { choixQuota = false },
+            title = { Text(stringResource(R.string.reglages_cache_choix_titre)) },
+            text = {
+                Column {
+                    QuotaCache.choix.forEach { quota ->
+                        TextButton(
+                            onClick = {
+                                choixQuota = false
+                                viewModel.definirQuotaCache(quota)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            RadioButton(selected = etat.cache.quota == quota, onClick = null)
+                            Text(libelleQuota(quota), modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { choixQuota = false }) {
+                    Text(stringResource(R.string.action_annuler))
+                }
+            },
+        )
     }
 
     if (confirmation) {
@@ -269,6 +345,15 @@ fun SettingsScreen(
             },
         )
     }
+}
+
+@Composable
+private fun libelleQuota(quota: Long): String = when (quota) {
+    QuotaCache.MO_50 -> stringResource(R.string.reglages_cache_50_mo)
+    QuotaCache.MO_250 -> stringResource(R.string.reglages_cache_250_mo)
+    QuotaCache.GO_1 -> stringResource(R.string.reglages_cache_1_go)
+    QuotaCache.GO_5 -> stringResource(R.string.reglages_cache_5_go)
+    else -> stringResource(R.string.reglages_cache_illimite)
 }
 
 @Composable

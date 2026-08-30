@@ -32,7 +32,15 @@ const CodeStorageIO = "STORAGE_IO"
 // indexVersion permet de reconnaître un index écrit par une version
 // antérieure du format. Un index d'une version inconnue est ignoré plutôt que
 // mal interprété : le cache se reconstruit depuis le serveur.
-const indexVersion = 1
+const indexVersion = 2
+
+// DefaultQuotaBytes est la limite appliquée tant que l'interface n'a pas
+// chargé la préférence de l'appareil.
+const DefaultQuotaBytes int64 = 250 * 1024 * 1024
+
+// UnlimitedQuota désactive l'éviction liée au quota. Le disque peut toujours
+// refuser une écriture : cette erreur reste une STORAGE_IO normale.
+const UnlimitedQuota int64 = 0
 
 // Entry est ce que le cache sait d'une note.
 type Entry struct {
@@ -60,8 +68,14 @@ type Entry struct {
 	// donc sur l'ancien comportement quand l'empreinte manque.
 	BaseHash string `json:"baseHash,omitempty"`
 
-	Size     int64     `json:"size"`
-	LocalMod time.Time `json:"localMod"`
+	// Conflict protège une copie créée lors d'un conflit. Elle reste locale tant
+	// que l'utilisateur ne l'a pas supprimée : être déjà synchronisée ne la rend
+	// pas moins importante.
+	Conflict bool `json:"conflict,omitempty"`
+
+	Size       int64     `json:"size"`
+	LocalMod   time.Time `json:"localMod"`
+	LastAccess time.Time `json:"lastAccess,omitempty"`
 }
 
 // Store est le cache local.
@@ -75,6 +89,7 @@ type Store struct {
 	mu      sync.Mutex
 	entries map[string]*Entry
 	queue   []Operation
+	quota   int64
 
 	// known est l'inventaire : toutes les notes de l'espace, y compris celles
 	// dont le contenu n'a jamais été téléchargé. Voir index.go — c'est ce qui
@@ -117,6 +132,7 @@ func Open(dir string) (*Store, error) {
 		entries: map[string]*Entry{},
 		folders: map[string]bool{},
 		known:   map[string]*Known{},
+		quota:   DefaultQuotaBytes,
 	}
 
 	data, err := os.ReadFile(s.indexPath())
@@ -128,7 +144,7 @@ func Open(dir string) (*Store, error) {
 	}
 
 	var state persisted
-	if err := json.Unmarshal(data, &state); err != nil || state.Version != indexVersion {
+	if err := json.Unmarshal(data, &state); err != nil || (state.Version != 1 && state.Version != indexVersion) {
 		return s, nil
 	}
 	if state.Entries != nil {
@@ -142,12 +158,65 @@ func Open(dir string) (*Store, error) {
 	}
 	s.indexed = state.Indexed
 	s.queue = state.Queue
+	migrated := state.Version != indexVersion
+	for _, entry := range s.entries {
+		// Les index de la version 1 ne portaient pas LastAccess. LocalMod est
+		// une valeur de repli stable : aucune note n'est soudain considérée
+		// comme plus ancienne parce que l'application a été mise à jour.
+		if entry.LastAccess.IsZero() {
+			entry.LastAccess = entry.LocalMod
+			migrated = true
+		}
+	}
+	if s.repairBlobsLocked() {
+		migrated = true
+	}
+	if migrated {
+		if err := s.save(); err != nil {
+			return nil, err
+		}
+	}
 	return s, nil
 }
 
 func (s *Store) indexPath() string        { return filepath.Join(s.dir, "index.json") }
 func (s *Store) notesDir() string         { return filepath.Join(s.dir, "notes") }
 func (s *Store) blobPath(n string) string { return filepath.Join(s.notesDir(), n) }
+
+// repairBlobsLocked remet l'index en accord avec le dossier de blobs au
+// démarrage. Un contenu propre manquant redevient un simple Known, tandis que
+// tout blob orphelin est supprimé seulement après avoir vérifié qu'aucune
+// entrée ne le référence. Une entrée protégée et illisible est conservée : la
+// supprimer ferait perdre la trace d'un travail local à récupérer.
+func (s *Store) repairBlobsLocked() bool {
+	changed := false
+	referenced := make(map[string]bool, len(s.entries))
+	for notePath, entry := range s.entries {
+		referenced[entry.Cache] = true
+		if _, err := os.Stat(s.blobPath(entry.Cache)); err == nil || !os.IsNotExist(err) || s.protectedLocked(notePath, entry) {
+			continue
+		}
+		if _, known := s.known[notePath]; !known {
+			s.known[notePath] = &Known{Path: notePath, ETag: entry.ETag, Size: entry.Size, ModTime: entry.LocalMod}
+		}
+		delete(s.entries, notePath)
+		changed = true
+	}
+
+	files, err := os.ReadDir(s.notesDir())
+	if err != nil {
+		return changed
+	}
+	for _, file := range files {
+		if file.IsDir() || filepath.Ext(file.Name()) != ".md" || referenced[file.Name()] {
+			continue
+		}
+		if os.Remove(s.blobPath(file.Name())) == nil {
+			changed = true
+		}
+	}
+	return changed
+}
 
 // cacheName dérive le nom du fichier de cache d'un chemin de note.
 //
@@ -203,21 +272,41 @@ func (s *Store) save() error {
 // Get renvoie le contenu en cache d'une note.
 func (s *Store) Get(notePath string) ([]byte, Entry, bool) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	entry, ok := s.entries[notePath]
 	if !ok {
-		s.mu.Unlock()
 		return nil, Entry{}, false
 	}
-	copied := *entry
-	s.mu.Unlock()
 
-	content, err := os.ReadFile(s.blobPath(copied.Cache))
+	content, err := os.ReadFile(s.blobPath(entry.Cache))
 	if err != nil {
 		// L'index connaît la note mais le fichier a disparu : on traite le
 		// cache comme absent plutôt que de propager une erreur d'E/S.
 		return nil, Entry{}, false
 	}
-	return content, copied, true
+	entry.LastAccess = time.Now().UTC()
+	// Le contenu lu reste valable même si une persistance de sa date d'accès
+	// échoue. La prochaine écriture de l'index la rendra durable ; ne pas rendre
+	// une note illisible pour une information de classement non critique.
+	_ = s.save()
+	return content, *entry, true
+}
+
+// CachedEntry indique si le contenu est disponible sans le lire ni modifier
+// son rang LRU. Les listes l'utilisent pour afficher l'état Dirty : les
+// parcourir ne doit pas faire croire que toutes les notes ont été ouvertes.
+func (s *Store) CachedEntry(notePath string) (Entry, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entry, ok := s.entries[notePath]
+	if !ok {
+		return Entry{}, false
+	}
+	if _, err := os.Stat(s.blobPath(entry.Cache)); err != nil {
+		return Entry{}, false
+	}
+	return *entry, true
 }
 
 // Entries renvoie l'état du cache, trié par chemin.
@@ -303,13 +392,14 @@ func (s *Store) Accept(notePath string, content []byte, etag string) error {
 		return err
 	}
 	s.entries[notePath] = &Entry{
-		Path:     notePath,
-		Cache:    cacheName(notePath),
-		ETag:     etag,
-		Dirty:    false,
-		BaseHash: contentHash(content),
-		Size:     int64(len(content)),
-		LocalMod: time.Now().UTC(),
+		Path:       notePath,
+		Cache:      cacheName(notePath),
+		ETag:       etag,
+		Dirty:      false,
+		BaseHash:   contentHash(content),
+		Size:       int64(len(content)),
+		LocalMod:   time.Now().UTC(),
+		LastAccess: time.Now().UTC(),
 	}
 	return s.save()
 }
@@ -327,6 +417,7 @@ func (s *Store) putLocked(notePath string, content []byte, enqueue bool) error {
 	entry.Dirty = true
 	entry.Size = int64(len(content))
 	entry.LocalMod = time.Now().UTC()
+	entry.LastAccess = entry.LocalMod
 
 	if enqueue {
 		s.enqueueLocked(Operation{Kind: OpWrite, Path: notePath})
@@ -335,8 +426,12 @@ func (s *Store) putLocked(notePath string, content []byte, enqueue bool) error {
 }
 
 func (s *Store) writeBlob(notePath string, content []byte) error {
+	if err := s.ensureSpaceLocked(notePath, int64(len(content))); err != nil {
+		return err
+	}
 	name := cacheName(notePath)
 	tmp := s.blobPath(name) + ".tmp"
+	defer os.Remove(tmp)
 	if err := os.WriteFile(tmp, content, 0o600); err != nil {
 		return fmt.Errorf("store: [%s] écriture du cache de %s: %w", CodeStorageIO, notePath, err)
 	}

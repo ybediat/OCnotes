@@ -117,6 +117,52 @@ func TestRestoreOuvreLApplicationSansReseau(t *testing.T) {
 	}
 }
 
+// Une note évincée reste dans l'inventaire, se retélécharge quand le serveur
+// répond, et ne doit jamais s'ouvrir comme une note vide sans réseau.
+func TestNoteEvinceeRelueEnLignePuisSignaleeHorsLigne(t *testing.T) {
+	app, server, dataDir := prepare(t)
+
+	if _, err := app.CreateNoteJSON("", "ancienne", "aaaa"); err != nil {
+		t.Fatalf("création ancienne: %v", err)
+	}
+	if _, err := app.CreateNoteJSON("", "récente", "bbbb"); err != nil {
+		t.Fatalf("création récente: %v", err)
+	}
+	if err := app.SetCacheQuota(4); err != nil {
+		t.Fatalf("SetCacheQuota: %v", err)
+	}
+	if _, _, ok := app.cache.Get("ancienne.md"); ok {
+		t.Fatal("ancienne.md aurait dû être évincée")
+	}
+
+	content, err := app.ReadNote("ancienne.md")
+	if err != nil {
+		t.Fatalf("relecture réseau: %v", err)
+	}
+	if content != "aaaa" {
+		t.Errorf("contenu re-téléchargé = %q", content)
+	}
+
+	// On évince à nouveau la note, puis un nouveau processus démarre sans
+	// serveur : le nom reste visible, mais son contenu est explicitement absent.
+	if err := app.SetCacheQuota(4); err != nil {
+		t.Fatalf("seconde éviction: %v", err)
+	}
+	server.Close()
+	offline, err := NewApp(dataDir)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if err := offline.Restore(fakeToken); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	if _, err := offline.ReadNote("récente.md"); err == nil {
+		t.Fatal("une note évincée hors connexion devrait être signalée")
+	} else if code := ErrorCode(err.Error()); code != "CONTENT_NOT_CACHED" {
+		t.Errorf("code = %q, attendu CONTENT_NOT_CACHED (erreur: %v)", code, err)
+	}
+}
+
 // Une écriture hors connexion ne doit jamais échouer, et doit survivre à la
 // fermeture de l'application.
 func TestEcritureHorsConnexionPuisSynchronisation(t *testing.T) {

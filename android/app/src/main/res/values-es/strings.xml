@@ -57,7 +57,8 @@
     <string name="err_deplacement_dans_soi">Una carpeta no se puede mover dentro de sí misma.</string>
     <string name="err_chemin_vide">No se ha seleccionado ningún elemento.</string>
     <string name="err_dossier_hors_ligne">No se puede cambiar el nombre, mover ni eliminar una carpeta sin conexión. Vuelve a conectarte primero.</string>
-    <string name="err_stockage">No se puede escribir en el almacenamiento del dispositivo. Compruebe el espacio disponible.</string>
+    <string name="err_stockage">No se puede escribir en el almacenamiento del dispositivo. Compruebe el espacio disponible o sincronice primero los cambios locales.</string>
+    <string name="err_contenu_a_telecharger">Esta nota no está disponible sin conexión. Descárguela de nuevo cuando vuelva la red.</string>
     <string name="err_url_serveur_manquante">Introduzca la dirección del servidor.</string>
     <string name="err_url_serveur_invalide">Dirección del servidor no válida. Debe comenzar por http:// o https://</string>
     <string name="err_utilisateur_manquant">Introduzca su nombre de usuario.</string>
@@ -142,6 +143,20 @@
     <string name="sync_resume_partiel">%1$s. El servidor ha dejado de responder durante el proceso.</string>
     <string name="sync_a_jour">Todo está actualizado.</string>
     <string name="sync_hors_ligne">Servidor inaccesible. No hay nada que enviar por ahora.</string>
+
+    <string name="reglages_cache_titre">Caché sin conexión</string>
+    <string name="reglages_cache_quota">Límite de espacio</string>
+    <string name="reglages_cache_utilisation">Uso</string>
+    <string name="reglages_cache_usage">%1$s utilizados de %2$s</string>
+    <string name="reglages_cache_explication">Los borradores locales, las copias de conflicto y las operaciones pendientes nunca se eliminan automáticamente.</string>
+    <string name="reglages_cache_modifier_quota">Cambiar el límite</string>
+    <string name="reglages_cache_liberer">Liberar espacio</string>
+    <string name="reglages_cache_choix_titre">Límite de caché sin conexión</string>
+    <string name="reglages_cache_50_mo">50 MB</string>
+    <string name="reglages_cache_250_mo">250 MB</string>
+    <string name="reglages_cache_1_go">1 GB</string>
+    <string name="reglages_cache_5_go">5 GB</string>
+    <string name="reglages_cache_illimite">Ilimitado</string>
 
     <string name="sync_channel_name">Sincronización</string>
     <string name="sync_channel_description">Conflictos e incidencias de sincronización de notas</string>

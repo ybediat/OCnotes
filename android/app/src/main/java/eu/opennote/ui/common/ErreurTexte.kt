@@ -59,6 +59,7 @@ private fun texteLocal(code: String): Texte? = when (code) {
     "STRUCTURAL_OFFLINE_FOLDER" -> Texte.de(R.string.err_dossier_hors_ligne)
     "PATH_EMPTY" -> Texte.de(R.string.err_chemin_vide)
     "STORAGE_IO" -> Texte.de(R.string.err_stockage)
+    "CONTENT_NOT_CACHED" -> Texte.de(R.string.err_contenu_a_telecharger)
     "SERVER_URL_MISSING" -> Texte.de(R.string.err_url_serveur_manquante)
     "SERVER_URL_INVALID" -> Texte.de(R.string.err_url_serveur_invalide)
     "USERNAME_MISSING" -> Texte.de(R.string.err_utilisateur_manquant)

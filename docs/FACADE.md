@@ -83,6 +83,9 @@ sur l'instance : `app.stateJSON()`. La première lettre passe en minuscule.
 | Signature Go | Rôle |
 |---|---|
 | `NewApp(dataDir string) (*App, error)` | *fonction de paquet* — ouvre le cache et la configuration |
+| `CacheStateJSON() (string, error)` | quota et occupation réelle du cache local |
+| `SetCacheQuota(quota int64) error` | applique un quota local ; `0` signifie illimité |
+| `PruneCache() error` | évince les contenus récupérables selon LRU |
 | `Restore(appToken string) error` | remonte la session **sans réseau** — le chemin de démarrage normal |
 | `Connect(serverURL, username, appToken string) error` | ouvre la session et valide les identifiants auprès du serveur |
 | `Disconnect() error` | efface session, configuration **et cache** |
@@ -172,6 +175,22 @@ token est en mémoire. Après un redémarrage il faut toujours rappeler `Restore
 > Passer `root` comme chemin fait demander `Notes` à une façade qui préfixe
 > déjà par `Notes` : le serveur cherche `Notes/Notes` et répond que le dossier
 > n'existe pas. Ce bug a été rencontré en vrai au premier lancement.
+
+### `CacheStateJSON`
+
+```json
+{"quota":262144000,"usage":88080384}
+```
+
+`quota` et `usage` sont des octets. `quota: 0` signifie **illimité**. `usage`
+est la somme des blobs réellement présents : ni l'inventaire léger, ni la file
+hors ligne ne sont comptés. La préférence du quota est locale à Android ; elle
+doit être rappelée par `SetCacheQuota` à l'ouverture de l'application.
+
+`SetCacheQuota` et `PruneCache` n'évinceraient jamais une note `Dirty`, une
+copie de conflit ou une donnée liée à une opération en attente. Si ces seuls
+éléments dépassent le seuil, l'appel renvoie `[STORAGE_IO]` mais le réglage reste
+actif et aucune donnée n'est supprimée.
 
 ### `ListAllJSON`
 

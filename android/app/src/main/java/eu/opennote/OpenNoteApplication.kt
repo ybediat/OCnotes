@@ -35,6 +35,7 @@ class AppContainer(context: Context) {
     val repository = OpenNoteRepository(
         dataDir = context.filesDir.absolutePath,
         tokenStore = tokenStore,
+        preferences = preferencesAffichage,
     )
 
     val syncScheduler = SyncScheduler(context)

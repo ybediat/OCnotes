@@ -76,7 +76,8 @@
     <string name="err_deplacement_dans_soi">A folder cannot be moved into itself.</string>
     <string name="err_chemin_vide">No item specified.</string>
     <string name="err_dossier_hors_ligne">A folder cannot be renamed, moved, or deleted while offline. Reconnect first.</string>
-    <string name="err_stockage">Unable to write to the device storage. Check the available space.</string>
+    <string name="err_stockage">Unable to write to the device storage. Check the available space or sync local changes first.</string>
+    <string name="err_contenu_a_telecharger">This note is not available offline. Download it again once the network is back.</string>
     <string name="err_url_serveur_manquante">Enter the server address.</string>
     <string name="err_url_serveur_invalide">Invalid server address. It must start with http:// or https://</string>
     <string name="err_utilisateur_manquant">Enter your username.</string>
@@ -161,6 +162,20 @@
     <string name="sync_resume_partiel">%1$s. The server stopped responding partway through.</string>
     <string name="sync_a_jour">Everything is up to date.</string>
     <string name="sync_hors_ligne">Server unreachable. Nothing to send for now.</string>
+
+    <string name="reglages_cache_titre">Offline cache</string>
+    <string name="reglages_cache_quota">Storage limit</string>
+    <string name="reglages_cache_utilisation">Usage</string>
+    <string name="reglages_cache_usage">%1$s used out of %2$s</string>
+    <string name="reglages_cache_explication">Local drafts, conflict copies, and pending operations are never deleted automatically.</string>
+    <string name="reglages_cache_modifier_quota">Change limit</string>
+    <string name="reglages_cache_liberer">Free up space</string>
+    <string name="reglages_cache_choix_titre">Offline cache limit</string>
+    <string name="reglages_cache_50_mo">50 MB</string>
+    <string name="reglages_cache_250_mo">250 MB</string>
+    <string name="reglages_cache_1_go">1 GB</string>
+    <string name="reglages_cache_5_go">5 GB</string>
+    <string name="reglages_cache_illimite">Unlimited</string>
 
     <string name="sync_channel_name">Synchronization</string>
     <string name="sync_channel_description">Note synchronization conflicts and incidents</string>

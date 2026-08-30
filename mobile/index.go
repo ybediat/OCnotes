@@ -86,7 +86,7 @@ func (a *App) listingDepuisIndex(fromCache bool) folderListing {
 
 	for _, k := range a.cache.Index() {
 		nom := lastSegment(k.Path)
-		_, entry, cached := a.cache.Get(k.Path)
+		entry, cached := a.cache.CachedEntry(k.Path)
 		out.Entries = append(out.Entries, folderEntry{
 			Path:    k.Path,
 			Name:    nom,
