@@ -57,6 +57,11 @@
     <string name="err_deplacement_dans_soi">Una carpeta no se puede mover dentro de sí misma.</string>
     <string name="err_chemin_vide">No se ha seleccionado ningún elemento.</string>
     <string name="err_dossier_hors_ligne">No se puede cambiar el nombre, mover ni eliminar una carpeta sin conexión. Vuelve a conectarte primero.</string>
+    <string name="err_lecture_seule">Este documento no se puede editar aquí.</string>
+    <string name="err_format_non_pris_en_charge">Esta operación no es compatible con este formato de archivo.</string>
+    <string name="err_document_invalide">Este documento no es válido o está incompleto.</string>
+    <string name="err_document_trop_volumineux">El contenido de este documento es demasiado grande para mostrarlo.</string>
+    <string name="err_fichier_trop_volumineux">Este documento es demasiado grande para abrirlo.</string>
     <string name="err_stockage">No se puede escribir en el almacenamiento del dispositivo. Compruebe el espacio disponible o sincronice primero los cambios locales.</string>
     <string name="err_contenu_a_telecharger">Esta nota no está disponible sin conexión. Descárguela de nuevo cuando vuelva la red.</string>
     <string name="err_url_serveur_manquante">Introduzca la dirección del servidor.</string>
@@ -349,6 +354,7 @@
         l'interface web. Le message dit la cause, pas la mécanique.
     -->
     <string name="apercu_lecture_seule">Esta nota contiene un elemento demasiado largo para editarlo aquí. Se ha abierto en modo de solo lectura.</string>
+    <string name="apercu_document_lecture_seule">Este documento se abre en modo de solo lectura.</string>
     <string name="sync_conflits_suppression">\n• eliminación cancelada: %1$s cambió de forma remota</string>
     <string name="sync_conflits_deplacement">\n• traslado cancelado; copia conservada: %1$s</string>
     <string name="reglages_conflits_suppression">• Eliminación cancelada: %1$s cambió de forma remota</string>

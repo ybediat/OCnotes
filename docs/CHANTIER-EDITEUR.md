@@ -195,6 +195,30 @@ Deux gestes obligatoires : une ligne dans `docs/FACADE.md`, et **relancer
 `mobile/gomobile_test.go` vérifie les contraintes de types : la structure JSON
 doit rester **non exportée**.
 
+**État : fait et vérifié.** Ce qui a été écrit, et qui n'était pas tout à fait
+prévu :
+
+- `notes.Sections(name, content)` porte la **répartition**, comme `notes.Render`
+  — la question « ce nom désigne-t-il du Markdown ? » ne devait pas remonter
+  dans `mobile/`, qui sérialise et rien d'autre ;
+- `markdown.SectionsPlain` découpe le texte brut **sans vérification par le
+  rendu**. Valider un `.txt` contre l'analyseur Markdown aurait coûté une
+  analyse pour rien, et un fichier qui *ressemble* à une liste aurait refusé
+  d'être coupé — soit exactement la tranche démesurée qu'on cherche à éviter.
+  `TestSectionsPlainIgnorentLaStructureMarkdown` distingue les deux fonctions ;
+- `markdown.Slice(doc, s)` est le pendant Go de `String.substring` ;
+- côté Kotlin, `SectionDto` et `OpenNoteRepository.sections()`. `texteDe` est
+  volontairement **strict** : des bornes qui ne collent pas au document lèvent
+  plutôt que de rendre une tranche tronquée, qui serait recollée puis écrite sur
+  le serveur.
+
+Quatre tests de façade dans `mobile/app_test.go`, dont celui qui compte : les
+bornes reçues permettent de reconstruire le document **exactement**. Il a été vu
+échouer, en décalant `Start` d'une unité.
+
+Une ligne de `docs/FACADE.md` était devenue fausse et a été corrigée : un `.txt`
+n'y revient plus « en un seul bloc ».
+
 ### Étape 3 — l'écran
 
 `EditorScreen` passe d'un `TextField` à une `LazyColumn` de sections. L'état
@@ -335,12 +359,35 @@ sections donnerait N blocs, jamais un. La propriété « le rendu par sections
 puisqu'un texte brut n'a aucune construction multiligne à couper en deux. Toute
 frontière de ligne y est licite.
 
-**Et l'aperçu d'un gros `.txt` n'est pas protégé.** Un seul bloc, c'est un seul
-`Text` dans la `LazyColumn` : elle n'a qu'un élément, donc elle ne virtualise
-rien. La prémisse « l'aperçu est déjà fluide », vraie et mesurée pour le
-Markdown — 1,77 ms sur 295 ko — **est fausse pour le texte brut**, et le dossier
-de test en contient à 52 ko. Ça n'a pas été mesuré ; ça devrait l'être avant de
-concevoir l'étape 3, parce que l'écran s'appuie sur cet aperçu.
+**Et l'aperçu d'un gros `.txt` ne ralentit pas : il plante.** Mesuré depuis, sur
+une copie `.txt` de la note de test, reproduit deux fois sur deux :
+
+```
+java.lang.IllegalArgumentException: Can't represent a width of 0
+and height of 444403 in Constraints
+  at androidx.compose.foundation.layout.IntrinsicHeightNode.calculateContentConstraints
+```
+
+Un seul bloc, c'est un seul `Text` dans la `LazyColumn` : elle n'a qu'un
+élément, donc elle ne virtualise rien — et le `Modifier.height(IntrinsicSize.Min)`
+de `MarkdownView.kt`, qui sert à donner leur hauteur aux barres de citation,
+force le calcul d'une hauteur de 444 403 px. C'est le même plafond de 262 143 px
+que pour un champ de saisie en hauteur libre, atteint par un autre chemin.
+
+La prémisse « l'aperçu est déjà fluide, on peut s'appuyer dessus » — vraie et
+mesurée pour le Markdown, 1,77 ms sur 295 ko — **est donc fausse pour le texte
+brut**, et OpenCloud crée ses fichiers en `.txt`.
+
+**Corrigé.** `RenderPlain` découpe en blocs d'au plus `maxPlainLines` lignes,
+sur une ligne vide quand il y en a une, sans perdre un caractère. Vérifié sur
+l'appareil : le plantage a disparu et l'aperçu du `.txt` dessine en **1,27 ms**,
+contre 1,77 ms pour l'aperçu Markdown équivalent. Quatre tests dans
+`render_test.go`.
+
+La prémisse de l'étape 3 tient donc de nouveau — mais elle tenait à un fil, et
+il reste un cas de même nature, non mesuré : un fichier **Markdown** d'un seul
+paragraphe démesuré donnerait aussi un bloc unique. `ShortenLongWords` borne la
+longueur d'un mot, pas celle d'un bloc.
 
 ---
 

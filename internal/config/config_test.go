@@ -133,7 +133,9 @@ func TestValidate(t *testing.T) {
 		{"utilisateur en espaces", Config{ServerURL: "https://x.fr", Username: "   "}, false},
 		{"schéma manquant", Config{ServerURL: "cloud.exemple.fr", Username: "moi"}, false},
 		{"schéma inattendu", Config{ServerURL: "ftp://x.fr", Username: "moi"}, false},
+		{"HTTP interdit", Config{ServerURL: "http://x.fr", Username: "moi"}, false},
 		{"hôte manquant", Config{ServerURL: "https://", Username: "moi"}, false},
+		{"WebDAV HTTP interdit", Config{ServerURL: "https://x.fr", Username: "moi", DriveWebDavURL: "http://x.fr/dav"}, false},
 	}
 
 	for _, tc := range tests {

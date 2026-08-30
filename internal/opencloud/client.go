@@ -49,6 +49,16 @@ type Client struct {
 	hc   *http.Client
 }
 
+// rejectInsecureRedirect interdit une dégradation HTTPS vers HTTP. Le jeton
+// d'application étant porté par l'en-tête Authorization, il ne doit jamais
+// accompagner une requête en clair.
+func rejectInsecureRedirect(req *http.Request, _ []*http.Request) error {
+	if req.URL.Scheme != "https" {
+		return fmt.Errorf("opencloud: redirection refusée vers une URL non-HTTPS: %s", req.URL.Redacted())
+	}
+	return nil
+}
+
 // New construit un client pour l'URL racine du serveur, par exemple
 // https://cloud.exemple.fr (sans chemin).
 func New(serverURL string, auth Authenticator) (*Client, error) {
@@ -60,8 +70,8 @@ func New(serverURL string, auth Authenticator) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opencloud: URL de serveur invalide %q: %w", serverURL, err)
 	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return nil, fmt.Errorf("opencloud: URL de serveur invalide %q: schéma http ou https attendu", serverURL)
+	if u.Scheme != "https" {
+		return nil, fmt.Errorf("opencloud: URL de serveur invalide %q: HTTPS obligatoire", serverURL)
 	}
 	if u.Host == "" {
 		return nil, fmt.Errorf("opencloud: URL de serveur invalide %q: hôte manquant", serverURL)
@@ -70,7 +80,10 @@ func New(serverURL string, auth Authenticator) (*Client, error) {
 	return &Client{
 		base: u,
 		auth: auth,
-		hc:   &http.Client{Timeout: 30 * time.Second},
+		hc: &http.Client{
+			Timeout:       30 * time.Second,
+			CheckRedirect: rejectInsecureRedirect,
+		},
 	}, nil
 }
 
@@ -78,7 +91,11 @@ func New(serverURL string, auth Authenticator) (*Client, error) {
 // spécifiques à Android).
 func (c *Client) SetHTTPClient(hc *http.Client) {
 	if hc != nil {
-		c.hc = hc
+		copy := *hc
+		// Ce garde-fou ne doit pas pouvoir être neutralisé par un transport
+		// spécialisé (par exemple celui utilisé sur Android ou dans les tests).
+		copy.CheckRedirect = rejectInsecureRedirect
+		c.hc = &copy
 	}
 }
 

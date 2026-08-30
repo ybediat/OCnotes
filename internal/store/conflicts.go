@@ -66,7 +66,17 @@ func (s *Store) ResolveConflict(ctx context.Context, remote Remote, id string, r
 		return nil, fmt.Errorf("store: conflit introuvable %q", id)
 	}
 
-	if resolution == KeepBoth || (resolution == KeepServer && conflict.CopyPath == "") {
+	if resolution == KeepBoth {
+		// L'utilisateur garde sa copie comme note à part entière : elle cesse
+		// d'être un conflit en attente et redevient évincible par le quota.
+		if conflict.CopyPath != "" {
+			if err := s.UnmarkConflict(conflict.CopyPath); err != nil {
+				return nil, err
+			}
+		}
+		return nil, s.closeConflict(id)
+	}
+	if resolution == KeepServer && conflict.CopyPath == "" {
 		return nil, s.closeConflict(id)
 	}
 	if resolution == KeepLocal {

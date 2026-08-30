@@ -179,3 +179,20 @@ func (s *Store) MarkConflict(notePath string) error {
 	entry.LastAccess = time.Now().UTC()
 	return s.save()
 }
+
+// UnmarkConflict lève la protection posée par MarkConflict : la copie redevient
+// une note ordinaire, de nouveau évincible par le quota. Appelé quand
+// l'utilisateur garde les deux versions — la copie n'est plus un conflit en
+// attente. Une entrée déjà disparue n'est pas une erreur : il n'y a plus rien
+// à protéger.
+func (s *Store) UnmarkConflict(notePath string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, ok := s.entries[notePath]
+	if !ok || !entry.Conflict {
+		return nil
+	}
+	entry.Conflict = false
+	entry.LastAccess = time.Now().UTC()
+	return s.save()
+}

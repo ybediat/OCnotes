@@ -12,6 +12,7 @@ import eu.opennote.data.FormatAction
 import eu.opennote.data.NoteBlockDto
 import eu.opennote.data.OpenNoteException
 import eu.opennote.data.OpenNoteRepository
+import eu.opennote.data.SectionDto
 import eu.opennote.ui.common.Texte
 import eu.opennote.ui.common.texte
 import eu.opennote.sync.SyncScheduler
@@ -26,14 +27,51 @@ import kotlinx.coroutines.launch
 
 data class EditorUiState(
     val chemin: String = "",
+
     /**
-     * Contenu **et** sélection de l'éditeur.
+     * Le texte **complet** de la note, et la seule source de vérité.
+     *
+     * Les sections n'en sont qu'une vue : des couples de bornes. C'est ce qui
+     * permet au chemin d'enregistrement de ne pas changer d'un iota — on écrit
+     * ce document-là, comme avant — et donc à tout ce qui protège déjà les
+     * données de continuer à s'appliquer.
+     *
+     * Ne jamais le reconstruire en concaténant des sections gardées à part :
+     * la première divergence entre les deux représentations serait invisible et
+     * partirait sur le serveur.
+     */
+    val document: String = "",
+
+    /**
+     * Contenu **et** sélection de la section en cours d'édition — pas du
+     * document entier.
      *
      * `TextFieldValue` vit dans le ViewModel parce que la barre d'outils doit
      * pouvoir imposer une nouvelle sélection après une mise en forme : c'est
-     * le seul moyen de reposer le curseur exactement là où Go l'a calculé.
+     * le seul moyen de reposer le curseur exactement là où Go l'a calculé. Ses
+     * bornes sont donc relatives à la section, et `ApplyFormat` reçoit le texte
+     * de la section — lui passer le document entier recopierait 295 ko à chaque
+     * appui sur « gras ».
      */
     val valeur: TextFieldValue = TextFieldValue(),
+
+    /**
+     * Les tranches éditables du document, avec leurs blocs d'affichage.
+     *
+     * Une seule est un champ de saisie à la fois — voir [focus]. Les autres
+     * sont rendues en lecture, par le même chemin que l'aperçu.
+     */
+    val sections: List<SectionDto> = emptyList(),
+
+    /**
+     * Indice de la section en saisie, ou -1 quand aucune ne l'est.
+     *
+     * **L'invariant du chantier** : au plus un `TextField` composé à la fois.
+     * En laisser deux — « pour éviter un clignotement » — reconstruirait la
+     * chose lente : le coût de dessin d'un champ suit le nombre de lignes qu'il
+     * porte, à 0,14–0,24 ms la ligne, et le budget d'une image est de 16 ms.
+     */
+    val focus: Int = -1,
     val titre: String = "",
     val actions: List<FormatAction> = emptyList(),
     val chargement: Boolean = true,
@@ -66,6 +104,9 @@ data class EditorUiState(
      * écrirait des marqueurs que rien ne rendra jamais.
      */
     val texteBrut: Boolean = false,
+
+    /** Document Office lu par Go et toujours ouvert en lecture seule. */
+    val documentBureautique: Boolean = false,
 
     /**
      * Faux quand la note porte un mot si long qu'un champ de saisie ne
@@ -111,12 +152,21 @@ class EditorViewModel(
 
     private val nom = chemin.substringAfterLast('/')
 
+    // La frontière de formats vit dans Go. La poser avant le chargement évite
+    // qu'un .docx passe par ReadNote, où sa chaîne binaire serait abîmée avant
+    // d'atteindre RenderFileJSON.
+    private val documentBureautique = repository.isDocument(nom)
+
     // Le format se demande à Go, et dès la construction : la question se pose
     // avant qu'il y ait le moindre bloc à regarder, ne serait-ce que pour un
     // fichier vide. C'est aussi ce qui évite de recopier la liste des
     // extensions ici, où elle divergerait au premier format ajouté.
     private val _uiState = MutableStateFlow(
-        EditorUiState(chemin = chemin, texteBrut = repository.isPlainText(nom)),
+        EditorUiState(
+            chemin = chemin,
+            texteBrut = !documentBureautique && repository.isPlainText(nom),
+            documentBureautique = documentBureautique,
+        ),
     )
     val uiState: StateFlow<EditorUiState> = _uiState.asStateFlow()
 
@@ -134,36 +184,53 @@ class EditorViewModel(
     init {
         viewModelScope.launch {
             try {
-                val contenu = repository.readNote(chemin)
-
-                // Les images en ligne sortent du texte avant qu'il n'atteigne
-                // le champ de saisie, et n'y reviennent qu'à l'écriture. Sans
-                // cette étape, une note contenant une photo insérée depuis
-                // l'interface web fait tuer l'application par le système.
-                val prepare = repository.prepareEdit(nom, contenu)
-                images = prepare.images
-
-                // `update` prend une lambda non suspendue : tout appel à la
-                // façade se fait avant, jamais dedans.
-                val titre = repository.titleOf(nom, prepare.text)
-                val blocs = if (prepare.editable) {
-                    emptyList()
+                if (documentBureautique) {
+                    // Le ZIP est lu et analysé côté Go : ni le binaire ni un
+                    // champ de saisie ne traversent cette branche.
+                    val blocs = repository.renderFile(chemin)
+                    val titre = repository.titleOf(nom, "")
+                    _uiState.update {
+                        it.copy(
+                            chargement = false,
+                            charge = true,
+                            titre = titre,
+                            modifiable = false,
+                            apercu = true,
+                            blocs = blocs,
+                        )
+                    }
                 } else {
-                    repository.renderNote(nom, prepare.text)
-                }
+                    val contenu = repository.readNote(chemin)
 
-                _uiState.update {
-                    it.copy(
-                        chargement = false,
-                        charge = true,
-                        valeur = TextFieldValue(prepare.text, TextRange(prepare.text.length)),
-                        titre = titre,
-                        modifiable = prepare.editable,
-                        // Une note inaffichable en saisie s'ouvre directement
-                        // en lecture : c'est le seul mode qui tienne.
-                        apercu = !prepare.editable,
-                        blocs = blocs,
-                    )
+                    // Les images en ligne sortent du texte avant qu'il n'atteigne
+                    // le champ de saisie, et n'y reviennent qu'à l'écriture. Sans
+                    // cette étape, une note contenant une photo insérée depuis
+                    // l'interface web fait tuer l'application par le système.
+                    val prepare = repository.prepareEdit(nom, contenu)
+                    images = prepare.images
+
+                    // `update` prend une lambda non suspendue : tout appel à la
+                    // façade se fait avant, jamais dedans.
+                    val titre = repository.titleOf(nom, prepare.text)
+                    val blocs = if (prepare.editable) {
+                        emptyList()
+                    } else {
+                        repository.renderNote(nom, prepare.text)
+                    }
+
+                    _uiState.update {
+                        it.copy(
+                            chargement = false,
+                            charge = true,
+                            valeur = TextFieldValue(prepare.text, TextRange(prepare.text.length)),
+                            titre = titre,
+                            modifiable = prepare.editable,
+                            // Une note inaffichable en saisie s'ouvre directement
+                            // en lecture : c'est le seul mode qui tienne.
+                            apercu = !prepare.editable,
+                            blocs = blocs,
+                        )
+                    }
                 }
             } catch (e: OpenNoteException) {
                 _uiState.update { it.copy(chargement = false, erreur = e.texte()) }

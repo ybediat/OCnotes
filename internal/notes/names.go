@@ -25,6 +25,15 @@ var markdownExtensions = []string{".md", ".markdown", ".mdown", ".mkd"}
 // pas un titre.
 var plainExtensions = []string{".txt"}
 
+// documentExtensions liste ce que l'application sait lire et ne saura jamais
+// écrire.
+//
+// Un dossier de notes alimenté depuis l'interface web finit par en contenir.
+// Les afficher dans la liste et les ouvrir en aperçu est un service ; prétendre
+// les modifier serait un mensonge, et un .docx réécrit par nos soins serait un
+// .docx cassé.
+var documentExtensions = []string{".docx", ".odt"}
+
 // forbiddenInName rassemble les caractères qu'un nom de note ne peut pas
 // contenir.
 //
@@ -71,6 +80,15 @@ const (
 	CodeNameLeadingDot     = "NAME_LEADING_DOT"
 	CodeNameReservedDevice = "NAME_RESERVED_DEVICE"
 )
+
+// CodeReadOnly signale une écriture demandée sur un format que l'application
+// ne sait que lire.
+//
+// Ce n'est pas une règle de nommage mais une règle de format, d'où sa place à
+// part. Elle ne devrait jamais atteindre l'utilisateur : l'interface n'ouvre
+// pas de champ de saisie sur un document. Si elle y arrive, c'est un défaut de
+// l'interface — et le refus a évité d'écraser un fichier sur le serveur.
+const CodeReadOnly = "READONLY"
 
 // maxNameBytes borne la longueur d'un nom. La plupart des systèmes de fichiers
 // s'arrêtent à 255 octets ; on garde une marge pour les suffixes ajoutés lors
@@ -184,8 +202,14 @@ func lastRune(s string) (rune, int) {
 // L'application ne crée que du Markdown : un nom sans extension de note
 // reçoit .md. Pour un renommage, qui doit préserver le format existant,
 // voir WithExtensionOf.
+//
+// La condition est IsEditable et **non IsNote**, et c'est tout sauf un détail :
+// depuis que IsNote inclut les documents, une note créée sous le nom
+// « rapport.docx » repartirait avec cette extension — l'application écrirait du
+// Markdown dans un fichier que tout le monde, elle comprise, relira comme une
+// archive OOXML.
 func WithExtension(name string) string {
-	if IsNote(name) {
+	if IsEditable(name) {
 		return name
 	}
 	return name + Extension
@@ -197,11 +221,24 @@ func WithExtension(name string) string {
 // C'est ce qui fait qu'un renommage préserve le format : « journal.txt »
 // renommé en « carnet » donne « carnet.txt », et non « carnet.md » — un
 // changement de format silencieux, que l'utilisateur n'a pas demandé.
+//
+// Un document est traité à part, et plus strictement : son extension d'origine
+// est la seule qui vaille. Renommer « rapport.docx » en « bilan » donne
+// « bilan.docx » ; le renommer en « bilan.odt » donnerait « bilan.odt.docx »,
+// laid mais honnête — le fichier reste un .docx, et l'application ne sait pas
+// convertir. Entre deux formats modifiables, en revanche, saisir l'autre
+// extension la change délibérément : c'est le contrat annoncé.
 func WithExtensionOf(ref, name string) string {
-	if IsNote(name) {
+	if IsDocument(ref) {
+		if strings.EqualFold(path.Ext(name), path.Ext(ref)) {
+			return name
+		}
+		return name + path.Ext(ref)
+	}
+	if IsEditable(name) {
 		return name
 	}
-	if IsNote(ref) {
+	if IsEditable(ref) {
 		return name + path.Ext(ref)
 	}
 	return name + Extension
@@ -219,17 +256,44 @@ func IsPlainText(name string) bool {
 	return hasExtension(name, plainExtensions)
 }
 
+// IsDocument indique un fichier bureautique : lisible, jamais modifiable.
+func IsDocument(name string) bool {
+	return hasExtension(name, documentExtensions)
+}
+
+// IsEditable indique un format que l'application sait écrire.
+func IsEditable(name string) bool {
+	return IsMarkdown(name) || IsPlainText(name)
+}
+
 // IsNote indique si l'application sait ouvrir ce fichier, quel que soit son
 // format.
 //
-// Trois questions distinctes se posaient autrefois à la même fonction, et les
-// confondre coûte cher :
+// Quatre questions distinctes se posent, et les confondre coûte cher. Elles ont
+// longtemps été trois, la quatrième étant restée cachée derrière IsNote jusqu'à
+// ce que les documents arrivent :
 //
-//   - IsNote  : « faut-il l'afficher dans la liste ? » — dit oui au .txt ;
-//   - IsMarkdown : « faut-il l'interpréter ? » — dit non au .txt ;
-//   - WithExtension : « quelle extension écrire ? » — répond toujours .md.
+//   - IsNote       : « faut-il l'afficher dans la liste ? » — oui au .docx ;
+//   - IsMarkdown   : « faut-il l'interpréter ? » — non au .txt ;
+//   - IsDocument   : « faut-il l'analyser, et interdire la saisie ? » ;
+//   - IsEditable   : « l'application sait-elle écrire ce format ? » — c'est la
+//     condition de WithExtension, et elle ne peut pas être IsNote.
 func IsNote(name string) bool {
-	return IsMarkdown(name) || IsPlainText(name)
+	return IsEditable(name) || IsDocument(name)
+}
+
+// EnsureWritable refuse un chemin que l'application ne sait que lire.
+//
+// C'est le garde-fou du seul chemin qui peut détruire un fichier de
+// l'utilisateur en silence : une écriture partie sur un .docx le remplacerait
+// par du texte, sur un serveur partagé, sans le moindre message. Le vérifier
+// dans le cœur plutôt que de faire confiance à l'interface, c'est le même
+// principe que « ne jamais écrire sans restituer ».
+func EnsureWritable(itemPath string) error {
+	if IsDocument(itemPath) {
+		return fmt.Errorf("notes: [%s] un fichier %s s'ouvre en lecture seule", CodeReadOnly, path.Ext(itemPath))
+	}
+	return nil
 }
 
 func hasExtension(name string, extensions []string) bool {
@@ -248,6 +312,9 @@ func hasExtension(name string, extensions []string) bool {
 // qu'il peut cohabiter avec un « notes.md » dans le même dossier : les
 // afficher tous deux sous « notes » donnerait deux lignes identiques
 // désignant deux fichiers différents.
+//
+// Un document la garde pour la même raison, et pour une autre : c'est
+// l'extension qui prévient qu'on ne pourra pas le modifier.
 func DisplayName(name string) string {
 	if !IsMarkdown(name) {
 		return name

@@ -75,7 +75,15 @@ func newFakeServer(t *testing.T) *fakeServer {
 		etags:   map[string]string{},
 		folders: map[string]bool{"": true},
 	}
-	f.Server = httptest.NewServer(http.HandlerFunc(f.handle))
+	f.Server = httptest.NewTLSServer(http.HandlerFunc(f.handle))
+
+	// App ne permet volontairement pas d'injecter un transport : le client
+	// applicatif doit employer la validation TLS normale. Le certificat de
+	// httptest n'est connu que du transport fourni par le serveur ; on le rend
+	// temporairement disponible au client par défaut pendant ce test.
+	previousTransport := http.DefaultTransport
+	http.DefaultTransport = f.Server.Client().Transport
+	t.Cleanup(func() { http.DefaultTransport = previousTransport })
 	t.Cleanup(f.Server.Close)
 	return f
 }

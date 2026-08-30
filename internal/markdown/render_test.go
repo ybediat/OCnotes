@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -281,5 +282,64 @@ func TestRenderPlainNInterpreteRien(t *testing.T) {
 func TestRenderPlainVide(t *testing.T) {
 	if blocks := RenderPlain("\n \n"); len(blocks) != 0 {
 		t.Errorf("%d blocs pour un contenu vide: %+v", len(blocks), blocks)
+	}
+}
+
+// texteBrut fabrique un fichier texte de n lignes, avec une ligne vide toutes
+// les `respiration` lignes — ou aucune si `respiration` vaut zéro.
+func texteBrut(n, respiration int) string {
+	var b strings.Builder
+	for i := 1; i <= n; i++ {
+		fmt.Fprintf(&b, "Ligne %d du fichier, avec des mots ordinaires et rien à interpréter.\n", i)
+		if respiration > 0 && i%respiration == 0 {
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
+// Le découpage d'un texte brut ne doit rien changer à ce qui s'affiche : tout
+// le contrat de ce format est de montrer le fichier tel quel.
+func TestRenderPlainNePerdRien(t *testing.T) {
+	source := texteBrut(300, 7)
+
+	var recompose strings.Builder
+	for _, b := range RenderPlain(source) {
+		recompose.WriteString(b.Text)
+	}
+	if got := recompose.String(); got != strings.TrimRight(source, "\n") {
+		t.Errorf("la concaténation des blocs ne rend pas le texte d'entrée (%d contre %d octets)",
+			len(got), len(strings.TrimRight(source, "\n")))
+	}
+}
+
+// Un bloc unique portant tout le fichier a deux défauts mesurés : la
+// LazyColumn n'a rien à virtualiser, et sur un .txt de 292 ko la hauteur
+// intrinsèque du bloc fait planter l'application. Voir maxPlainLines.
+func TestRenderPlainBorneLesBlocs(t *testing.T) {
+	blocks := RenderPlain(texteBrut(300, 7))
+
+	if len(blocks) < 2 {
+		t.Fatalf("%d bloc pour un fichier de plus de 300 lignes", len(blocks))
+	}
+	for i, b := range blocks {
+		if n := nombreDeLignes(b.Text); n > maxPlainLines {
+			t.Errorf("bloc %d : %d lignes, %d au plus attendues", i, n, maxPlainLines)
+		}
+	}
+}
+
+// Le cas qui fait planter l'aperçu est précisément celui d'un fichier sans une
+// seule ligne vide : il ne faut donc pas que le découpage en dépende.
+func TestRenderPlainDecoupeSansLigneVide(t *testing.T) {
+	blocks := RenderPlain(texteBrut(300, 0))
+
+	if len(blocks) < 2 {
+		t.Fatalf("%d bloc pour 300 lignes sans ligne vide", len(blocks))
+	}
+	for i, b := range blocks {
+		if n := nombreDeLignes(b.Text); n > maxPlainLines {
+			t.Errorf("bloc %d : %d lignes, %d au plus attendues", i, n, maxPlainLines)
+		}
 	}
 }

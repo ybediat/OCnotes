@@ -207,8 +207,8 @@ func TestVraiConflitToujoursDetecte(t *testing.T) {
 	}
 }
 
-// La faÃ§ade doit exposer les conflits au-delÃ  du seul rapport de la passe et
-// transmettre la dÃ©cision locale au Store, sans que Kotlin ait Ã  manipuler un
+// La façade doit exposer les conflits au-delà du seul rapport de la passe et
+// transmettre la décision locale au Store, sans que Kotlin ait à manipuler un
 // ETag ni une structure Go.
 func TestResolveConflictJSONGardeLeLocal(t *testing.T) {
 	app, server, _ := prepare(t)
@@ -239,7 +239,7 @@ func TestResolveConflictJSONGardeLeLocal(t *testing.T) {
 
 	request, err := json.Marshal(conflictResolutionRequest{ID: conflicts[0].ID, Resolution: "local"})
 	if err != nil {
-		t.Fatalf("requÃªte: %v", err)
+		t.Fatalf("requête: %v", err)
 	}
 	if _, err := app.ResolveConflictJSON(string(request)); err != nil {
 		t.Fatalf("ResolveConflictJSON: %v", err)
@@ -247,7 +247,7 @@ func TestResolveConflictJSONGardeLeLocal(t *testing.T) {
 
 	raw, err = app.ConflictsJSON()
 	if err != nil {
-		t.Fatalf("ConflictsJSON aprÃ¨s rÃ©solution: %v", err)
+		t.Fatalf("ConflictsJSON après résolution: %v", err)
 	}
 	decodeJSON(t, raw, &conflicts)
 	if len(conflicts) != 0 {

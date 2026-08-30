@@ -226,6 +226,38 @@ data class NoteBlockDto(
     val header: Boolean = false,
 )
 
+/**
+ * Une tranche éditable d'une note, et les blocs qui l'affichent.
+ *
+ * [start] et [end] sont en **unités de code UTF-16** — l'unité de
+ * `String.substring` en Kotlin comme celle de `TextRange` dans Compose. C'est
+ * ce qui permet au texte de la tranche de ne **pas** traverser la frontière :
+ * on le découpe soi-même dans le document qu'on a déjà en main. Sur une note de
+ * 295 ko, le faire transiter reviendrait à la recopier deux fois de plus à
+ * chaque ouverture.
+ *
+ * Les tranches pavent le document sans trou ni recouvrement, et le recollage
+ * est exact : `document.substring(0, start) + tranche + document.substring(end)`
+ * rend le document d'origine. C'est de cette propriété que dépend
+ * l'enregistrement — voir `docs/FACADE.md`.
+ */
+@Serializable
+data class SectionDto(
+    val start: Int = 0,
+    val end: Int = 0,
+    val blocks: List<NoteBlockDto> = emptyList(),
+) {
+    /**
+     * Le texte de cette tranche, découpé dans le document complet.
+     *
+     * Volontairement strict : des bornes qui ne correspondent pas au document
+     * lèvent plutôt que de rendre une tranche tronquée. Une tranche fausse
+     * serait recollée dans la note, donc écrite sur le serveur — mieux vaut un
+     * arrêt bruyant qu'une corruption silencieuse.
+     */
+    fun texteDe(document: String): String = document.substring(start, end)
+}
+
 /** Valeurs du champ `kind` d'un [NoteBlockDto]. */
 object BlockKind {
     const val PARAGRAPHE = "paragraph"
@@ -238,7 +270,13 @@ object BlockKind {
     const val IMAGE = "image"
     const val LIGNE_TABLEAU = "tablerow"
 
-    /** Fichier non interprété — un .txt — rendu tel quel, en un seul bloc. */
+    /**
+     * Fichier non interprété — un .txt — rendu tel quel.
+     *
+     * En blocs, et non en un seul : un bloc unique portant tout le fichier
+     * faisait planter l'application au-delà de quelques centaines de ko, et ne
+     * laissait rien à virtualiser à la LazyColumn.
+     */
     const val BRUT = "plain"
 }
 

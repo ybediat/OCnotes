@@ -76,6 +76,11 @@
     <string name="err_deplacement_dans_soi">A folder cannot be moved into itself.</string>
     <string name="err_chemin_vide">No item specified.</string>
     <string name="err_dossier_hors_ligne">A folder cannot be renamed, moved, or deleted while offline. Reconnect first.</string>
+    <string name="err_lecture_seule">This document cannot be edited here.</string>
+    <string name="err_format_non_pris_en_charge">This operation does not support this file format.</string>
+    <string name="err_document_invalide">This document is invalid or incomplete.</string>
+    <string name="err_document_trop_volumineux">This document’s contents are too large to display.</string>
+    <string name="err_fichier_trop_volumineux">This document is too large to open.</string>
     <string name="err_stockage">Unable to write to the device storage. Check the available space or sync local changes first.</string>
     <string name="err_contenu_a_telecharger">This note is not available offline. Download it again once the network is back.</string>
     <string name="err_url_serveur_manquante">Enter the server address.</string>
@@ -370,6 +375,7 @@
         l'interface web. Le message dit la cause, pas la mécanique.
     -->
     <string name="apercu_lecture_seule">This note contains an element that is too long to edit here. It is open in read-only mode.</string>
+    <string name="apercu_document_lecture_seule">This document is open in read-only mode.</string>
     <string name="sync_conflits_suppression">\n• deletion cancelled: %1$s changed remotely</string>
     <string name="sync_conflits_deplacement">\n• move cancelled; copy kept: %1$s</string>
     <string name="reglages_conflits_suppression">• Deletion cancelled: %1$s changed remotely</string>

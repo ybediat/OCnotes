@@ -97,17 +97,83 @@ func Render(source string) []Block {
 	return r.out
 }
 
-// RenderPlain renvoie un fichier non-Markdown tel quel, en un seul bloc.
+// maxPlainLines borne le nombre de lignes d'un bloc de texte brut.
+//
+// RenderPlain rendait autrefois tout le fichier en un bloc unique. Deux
+// conséquences, constatées sur appareil et non déduites :
+//
+//   - la LazyColumn de l'aperçu n'avait qu'un seul élément, donc elle ne
+//     virtualisait rien — là où un Markdown de 295 ko lui en donne 1 105 et
+//     se dessine en 1,77 ms ;
+//   - sur un .txt de 292 ko, la hauteur intrinsèque de ce bloc atteignait
+//     444 403 px et **faisait planter l'application**. Compose ne sait pas
+//     représenter plus de 262 143 px dans un Constraints, et MarkdownView
+//     mesure chaque bloc en IntrinsicSize.Min pour donner leur hauteur aux
+//     barres de citation.
+//
+// Relevés et trace complète en section 7 bis de docs/ARCHITECTURE.md.
+const maxPlainLines = 40
+
+// RenderPlain renvoie un fichier non-Markdown tel quel, découpé en blocs.
 //
 // Aucune interprétation : dans un .txt, « # » est un dièse et « - » un tiret.
 // C'est le contrat annoncé à l'utilisateur, et le seul qui ne mente pas sur un
 // fichier créé par un autre outil.
+//
+// Le découpage ne change rien à ce contrat : aucun caractère n'est perdu ni
+// ajouté, seule la répartition en blocs change — voir decouperTexteBrut.
 func RenderPlain(source string) []Block {
 	body := strings.TrimRight(source, "\n")
 	if strings.TrimSpace(body) == "" {
 		return nil
 	}
-	return []Block{protegerLaMiseEnPage(Block{Kind: KindPlain, Text: body})}
+
+	morceaux := decouperTexteBrut(body)
+	out := make([]Block, 0, len(morceaux))
+	for _, m := range morceaux {
+		out = append(out, protegerLaMiseEnPage(Block{Kind: KindPlain, Text: m}))
+	}
+	return out
+}
+
+// decouperTexteBrut découpe un texte brut en morceaux qu'un Text de Compose
+// peut porter.
+//
+// **Aucun caractère n'est perdu** : la concaténation des morceaux rend le texte
+// d'entrée, et TestRenderPlainNePerdRien le vérifie. C'est ce qui permet au
+// découpage de rester invisible dans un format dont tout le contrat est de
+// montrer le fichier tel quel.
+//
+// La coupure est cherchée sur une ligne vide, en reculant depuis la borne :
+// l'espacement que la LazyColumn met entre deux blocs tombe alors là où le
+// texte avait déjà une respiration. À défaut de ligne vide, on coupe sur une
+// ligne quelconque plutôt que de laisser grossir le bloc — un texte sans une
+// seule ligne vide est justement le cas qui fait planter l'aperçu.
+func decouperTexteBrut(body string) []string {
+	// SplitAfter garde le « \n » à la fin de chaque ligne : c'est ce qui rend
+	// la concaténation exacte.
+	lignes := strings.SplitAfter(body, "\n")
+
+	var morceaux []string
+	debut := 0
+	for debut < len(lignes) {
+		fin := debut + maxPlainLines
+		if fin >= len(lignes) {
+			morceaux = append(morceaux, strings.Join(lignes[debut:], ""))
+			break
+		}
+
+		coupe := fin
+		for i := fin - 1; i > debut; i-- {
+			if strings.TrimSpace(lignes[i]) == "" {
+				coupe = i + 1
+				break
+			}
+		}
+		morceaux = append(morceaux, strings.Join(lignes[debut:coupe], ""))
+		debut = coupe
+	}
+	return morceaux
 }
 
 // --- Parcours des blocs -----------------------------------------------------

@@ -15,13 +15,14 @@ func testAuth() AppTokenAuth {
 // newTestClient monte un client pointant sur un serveur httptest.
 func newTestClient(t *testing.T, handler http.HandlerFunc) (*Client, *httptest.Server) {
 	t.Helper()
-	srv := httptest.NewServer(handler)
+	srv := httptest.NewTLSServer(handler)
 	t.Cleanup(srv.Close)
 
 	c, err := New(srv.URL, testAuth())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	c.SetHTTPClient(srv.Client())
 	return c, srv
 }
 
@@ -32,6 +33,7 @@ func TestNewRejetteURLInvalide(t *testing.T) {
 	}{
 		{"schéma manquant", "cloud.exemple.fr"},
 		{"schéma inattendu", "ftp://cloud.exemple.fr"},
+		{"HTTP interdit", "http://cloud.exemple.fr"},
 		{"hôte manquant", "https://"},
 	}
 	for _, tc := range tests {
@@ -40,6 +42,25 @@ func TestNewRejetteURLInvalide(t *testing.T) {
 				t.Errorf("New(%q) aurait dû échouer", tc.url)
 			}
 		})
+	}
+}
+
+func TestClientRefuseUneRedirectionVersHTTP(t *testing.T) {
+	var cibleAtteinte bool
+	cible := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cibleAtteinte = true
+	}))
+	t.Cleanup(cible.Close)
+
+	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, cible.URL, http.StatusFound)
+	})
+
+	if _, err := c.ListDrives(context.Background()); err == nil {
+		t.Fatal("la redirection vers HTTP aurait dû être refusée")
+	}
+	if cibleAtteinte {
+		t.Fatal("la requête ne doit jamais atteindre la cible HTTP")
 	}
 }
 

@@ -487,6 +487,36 @@ class OpenNoteRepository(
         json.decodeFromString(call { it.renderNoteJSON(name, content) })
 
     /**
+     * Blocs d'affichage d'un document Office, lu et analysé côté Go.
+     *
+     * Le fichier ne traverse jamais la frontière comme une chaîne : un .docx
+     * ou un .odt est une archive binaire. Comme [readNote], cet appel relit le
+     * serveur quand il est disponible et retombe sur le cache hors connexion.
+     */
+    suspend fun renderFile(filePath: String): List<NoteBlockDto> =
+        json.decodeFromString(call { it.renderFileJSON(filePath) })
+
+    /**
+     * Découpe une note en tranches éditables et rend chacune d'elles.
+     *
+     * C'est ce que l'éditeur appelle à l'ouverture : chaque tranche tient dans
+     * un champ de saisie, ce qui rend le coût de dessin indépendant de la
+     * taille du document. Sans ce découpage, une note de 295 ko coûte 500 ms
+     * par image au défilement et 750 ms par caractère à la frappe — mesures en
+     * section 7 bis de `docs/ARCHITECTURE.md`.
+     *
+     * **Le texte des tranches ne traverse pas la frontière** : seules leurs
+     * bornes reviennent, en unités UTF-16, et [SectionDto.texteDe] les applique
+     * au document qu'on a déjà en main. Le [name] décide de l'interprétation,
+     * comme pour [renderNote].
+     *
+     * Fonction pure côté Go : ni réseau, ni cache. Elle marche donc hors
+     * connexion et sur un brouillon jamais enregistré.
+     */
+    suspend fun sections(name: String, content: String): List<SectionDto> =
+        json.decodeFromString(call { it.sectionsJSON(name, content) })
+
+    /**
      * Vrai pour un fichier affiché tel quel, sans interprétation.
      *
      * La question se pose avant qu'il y ait des blocs à regarder — un fichier
@@ -495,6 +525,9 @@ class OpenNoteRepository(
      * ajouté. Appel synchrone et sans effet, il ne touche ni disque ni réseau.
      */
     fun isPlainText(name: String): Boolean = Mobile.isPlainText(name)
+
+    /** Vrai pour un document Office lisible, mais jamais modifiable. */
+    fun isDocument(name: String): Boolean = Mobile.isDocument(name)
 
     /**
      * Allège une note avant de l'ouvrir dans un champ de saisie.

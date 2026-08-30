@@ -8,16 +8,7 @@ serveur **OpenCloud**.
 - **Local-first** : on écrit hors connexion, la synchronisation suit.
 - Connexion par **App Token** OpenCloud (OIDC prévu ensuite).
 
-> **Statut**
->
-> Le **cœur métier est terminé et vérifié** : client OpenCloud, modèle de notes,
-> cache et synchronisation, mise en forme Markdown, configuration, façade
-> Android. 191 cas de test unitaires, plus des tests d'intégration contre un
-> vrai serveur OpenCloud 7.0.0.
->
-> L'**interface Compose est écrite mais jamais compilée** — le SDK Android n'est
-> pas installé sur la machine de développement. Voir `android/README.md` et la
-> réserve dans [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 
 ## Documentation
 

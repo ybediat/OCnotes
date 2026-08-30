@@ -98,7 +98,7 @@ sur l'instance : `app.stateJSON()`. La première lettre passe en minuscule.
 | `FoldersJSON() (string, error)` | tous les dossiers connus, pour choisir une destination |
 | `RefreshIndex() error` | reconstruit l'inventaire sans rien renvoyer (travailleur de synchro) |
 | `ReadNote(notePath string) (string, error)` | contenu d'une note |
-| `WriteNote(notePath, content string) error` | enregistre localement, **jamais d'erreur réseau** |
+| `WriteNote(notePath, content string) error` | enregistre localement, **jamais d'erreur réseau** ; refuse un document (`READONLY`) |
 | `RefreshNote(notePath string) error` | relit depuis le serveur |
 | `CreateNoteJSON(dir, name, content string) (string, error)` | crée une note |
 | `CreateFolderJSON(dir, name string) (string, error)` | crée un sous-dossier |
@@ -114,6 +114,8 @@ sur l'instance : `app.stateJSON()`. La première lettre passe en minuscule.
 | `ApplyFormatJSON(requestJSON string) (string, error)` | mise en forme Markdown |
 | `FormatActionsJSON() (string, error)` | liste des actions de la barre d'outils |
 | `RenderNoteJSON(name, content string) (string, error)` | blocs d'affichage pour l'aperçu en lecture seule |
+| `RenderFileJSON(filePath string) (string, error)` | blocs d'affichage d'un document lu côté Go |
+| `SectionsJSON(name, content string) (string, error)` | tranches éditables et leurs blocs, pour l'éditeur |
 | `PrepareEditJSON(name, content string) (string, error)` | allège une note avant de l'ouvrir en saisie |
 | `RestoreImages(text, imagesJSON string) (string, error)` | **obligatoire avant toute écriture** d'une note allégée |
 | `ErrorCode(message string) string` | code d'une erreur |
@@ -122,6 +124,7 @@ sur l'instance : `app.stateJSON()`. La première lettre passe en minuscule.
 | `ForbiddenNameChars() string` | caractères refusés à la création d'un nom |
 | `MaxEditableWord() int` | longueur maximale d'un mot affichable en saisie |
 | `IsPlainText(name string) bool` | *fonction de paquet* — le fichier s'affiche tel quel, sans interprétation |
+| `IsDocument(name string) bool` | *fonction de paquet* — le fichier est lisible mais jamais modifiable |
 
 Tous les chemins sont **relatifs au dossier de notes**, sans slash initial.
 Une chaîne vide désigne la racine.
@@ -408,9 +411,12 @@ app.renderNoteJSON("Projets/a.md", texteAffiché)
 ```
 
 > **Le nom compte autant que le contenu.** C'est lui qui décide si le texte est
-> interprété. Un `.md` est analysé ; un `.txt` revient en un seul bloc `plain`,
+> interprété. Un `.md` est analysé ; un `.txt` revient en blocs `plain`,
 > caractère pour caractère — dans un fichier texte, `#` est un dièse et non un
-> titre. Ne devinez pas le format côté Kotlin : la liste des extensions vit
+> titre. Le texte brut est découpé en blocs d'au plus quelques dizaines de
+> lignes, et **ce n'est pas cosmétique** : en un seul bloc, il faisait planter
+> l'application au-delà de quelques centaines de ko (section 7 bis de
+> `docs/ARCHITECTURE.md`). Ne devinez pas le format côté Kotlin : la liste des extensions vit
 > dans `internal/notes` et n'a pas à être recopiée.
 
 Réponse : un tableau **plat** de blocs, à parcourir dans l'ordre.
@@ -470,6 +476,85 @@ Deux choses ne traversent pas, volontairement :
   repère — c'est à l'interface d'écrire « Image » quand ce texte est vide, dans
   la langue de l'appareil.
 
+
+### `RenderFileJSON`
+
+Prépare l'aperçu d'un `.docx` ou d'un `.odt` dont le contenu est encore dans le
+cache ou sur le serveur.
+
+```kotlin
+app.renderFileJSON("Projets/rapport.docx")
+```
+
+Appelez cette méthode seulement si `Mobile.isDocument(path)` est vrai. Ce
+prédicat vient du cœur : Kotlin ne recopie donc aucune extension reconnue.
+
+La réponse est le même tableau de `blocks` que `RenderNoteJSON`. La différence
+est essentielle : le fichier est lu, décompressé et analysé entièrement côté
+Go ; seuls les blocs JSON franchissent `gomobile`. Ne passez jamais un document
+à `ReadNote` ni à `RenderNoteJSON` : un ZIP converti en `String` serait mutilé
+avant d'atteindre Kotlin.
+
+Comme `ReadNote`, cette méthode rafraîchit un contenu propre depuis le serveur,
+puis retombe sur la copie en cache quand le réseau est indisponible. Si le
+document n'a jamais été téléchargé, elle retourne `CONTENT_NOT_CACHED`.
+
+Un document invalide ou trop gros retourne l'un des codes locaux suivants :
+
+| Code | Cause |
+|---|---|
+| `DOC_INVALID` | archive ou XML illisible, ou partie obligatoire absente |
+| `DOC_TOO_LARGE` | une partie XML décompressée dépasse 8 Mo |
+| `FILE_TOO_LARGE` | le fichier entier dépasse 20 Mo |
+
+
+### `SectionsJSON`
+
+Découpe une note en **tranches éditables** et rend chacune d'elles. C'est ce que
+l'éditeur appelle à l'ouverture. Fonction pure, comme `RenderNoteJSON`.
+
+```kotlin
+app.sectionsJSON("Projets/a.md", texteComplet)
+```
+
+```json
+[
+  {"start": 0,   "end": 412, "blocks": [{"kind": "heading", "text": "Titre", "level": 1}]},
+  {"start": 412, "end": 998, "blocks": [{"kind": "paragraph", "text": "…"}]}
+]
+```
+
+Les `blocks` ont exactement la forme décrite pour `RenderNoteJSON`.
+
+> **Le texte d'une tranche ne traverse pas la frontière.** `start` et `end` sont
+> en unités de code UTF-16 — l'unité de `String.substring` en Kotlin — donc
+> l'interface découpe elle-même le contenu qu'elle a déjà en main :
+> `texte.substring(start, end)`. Le faire traverser reviendrait à recopier la
+> note deux fois de plus à chaque ouverture.
+
+Trois propriétés sur lesquelles l'éditeur s'appuie, chacune testée :
+
+1. **Les tranches pavent le document.** La première commence à 0, la fin de
+   chacune est le début de la suivante, la dernière finit à la fin du texte.
+   Aucun trou, aucun recouvrement.
+2. **Le recollage est exact.** `texte.substring(0, start) + tranche +
+   texte.substring(end)` rend le document d'origine. C'est de cette propriété
+   que dépend l'enregistrement : l'interface garde **un seul texte complet** et
+   y réinsère la tranche éditée.
+3. **Une tranche tient dans un champ de saisie.** Quelques dizaines de lignes,
+   sauf quand la structure interdit de couper — une liste de 500 lignes reste
+   d'un seul tenant, parce qu'un rendu juste passe avant une tranche rapide.
+
+> **Pourquoi tout ça.** Un `TextField` ré-enregistre sa display list entière à
+> chaque image, à 0,14–0,24 ms par ligne. Au-delà de ~80 lignes le budget de
+> 16 ms est dépassé ; sur une note de 295 ko, le défilement coûte 500 ms par
+> image et la frappe 750 ms par caractère. Mesures et protocole en section
+> 7 bis de `docs/ARCHITECTURE.md`, banc dans `scripts/banc-editeur.ps1`.
+
+Un `.docx` ou un `.odt` est **refusé** avec le code `[UNSUPPORTED]` : un
+document n'a pas de tranche éditable, l'application ne sait que le lire.
+
+---
 
 ### `PrepareEditJSON` et `RestoreImages`
 
@@ -579,6 +664,11 @@ journaux, et le repli d'Android.
 | `ROOT_IMMUTABLE` | `notes` | le dossier de notes ne se renomme pas |
 | `MOVE_INTO_SELF` | `notes` | déplacement d'un dossier dans lui-même |
 | `PATH_EMPTY` | `notes` | chemin vide |
+| `READONLY` | `notes` | ce format s'ouvre en lecture seule (`.docx`, `.odt`) |
+| `UNSUPPORTED` | `mobile` | cette méthode ne convient pas à ce format — voir le message |
+| `DOC_INVALID` | `documents` | document Office invalide ou incomplet |
+| `DOC_TOO_LARGE` | `documents` | une partie XML décompressée est trop volumineuse |
+| `FILE_TOO_LARGE` | `documents` | le document dépasse 20 Mo |
 | `STORAGE_IO` | `store`, `config` | panne du stockage local |
 | `SERVER_URL_MISSING` | `config` | adresse de serveur absente |
 | `SERVER_URL_INVALID` | `config` | adresse de serveur mal formée |

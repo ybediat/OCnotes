@@ -4,12 +4,18 @@ Ordre de travail pour un agent qui reprend le sujet à froid. Lire d'abord
 `CLAUDE.md`, puis `docs/FACADE.md` (le contrat gelé) et la section « L'aperçu :
 Go analyse, Compose dessine » de `CLAUDE.md`.
 
-**État au 30 août 2026.** Les lots 0 et 1 sont faits : les quatre fixtures
+**État au 30 août 2026.** Les lots 0 à 5 sont faits : les quatre fixtures
 existent, le relevé de leur XML est en section 6 — lisez-le, il corrige quatre
-lignes des tables de correspondance — et `internal/documents` analyse le
-`.docx` avec dix cas de test. **Le prochain lot est le 2**, l'`.odt`, qui
-partage déjà `documents.go` avec le `.docx` : le constructeur de blocs, le
-rognage, les bornes et `niveauDepuisNom` sont écrits pour les deux.
+lignes des tables de correspondance —, `internal/documents` analyse les deux
+formats, le cœur refuse désormais toute écriture sur un document, et
+`RenderFileJSON` garde le binaire côté Go jusqu'à son analyse ; Android ouvre
+le résultat en aperçu non modifiable.
+
+**Le prochain lot est le 6**, l'appareil : un document réel envoyé par
+l'interface web doit apparaître dans la liste, s'ouvrir sans saisie et pouvoir
+être renommé sans changer de format. Le lot 5 a relié `IsDocument` et
+`RenderFileJSON` à l'éditeur, régénéré le binding, puis compilé et vérifié
+l'application Android.
 
 La base est verte — `go vet ./...`, `gofmt -l .` et `go test ./... -short` ne
 signalent rien.
@@ -197,11 +203,29 @@ Le souligné se fait dans ce lot, pas après : voir la décision en section 5.
 **Critère de sortie** : `go test ./internal/documents` au vert sur la fixture
 réelle, sans qu'aucune ligne d'Android n'ait bougé.
 
-### Lot 2 — le `.odt`, même paquet, même signature
+### Lot 2 — le `.odt`, même paquet, même signature — **fait**
 
 ```go
 func Odt(data []byte) ([]markdown.Block, error)
 ```
+
+`odt.go` n'a eu que sa passe de styles et son parcours à écrire : les bornes,
+le constructeur de blocs, le rognage et `niveauDepuisNom` venaient du lot 1.
+Deux passes, comme le veut le piège n° 5 — une sur `styles.xml` puis sur
+`content.xml` pour les tables d'héritage, de mise en forme et de listes, une
+seconde pour le contenu.
+
+`TestDocxEtOdtConvergent` passe : les deux analyseurs tirent **exactement** les
+mêmes blocs du même document, spans et bornes compris. Quatre garde-fous ODF ont
+été vus échouer : héritage de style pour le titre de niveau 1, résolution
+puce/numéro par le style de liste, lecture de `table:table-header-rows`, table
+des styles de texte.
+
+Ce qui est **écrit mais pas testé**, faute d'occurrence dans la fixture :
+`text:s` (les espaces multiples, que l'ODF compte au lieu de les écrire),
+`text:tab`, `text:line-break`, `text:list-header`, et la cellule fusionnée
+`table:covered-table-cell`. À couvrir le jour où un document réel les amène —
+ou en enrichissant l'HTML source du lot 0.
 
 Même principe : ZIP, mais le contenu est dans `content.xml`.
 
@@ -218,7 +242,7 @@ Même principe : ZIP, mais le contenu est dans `content.xml`.
 les erreurs d'interprétation du modèle, celles qu'un test format par format ne
 voit pas parce qu'il compare l'analyseur à lui-même.
 
-### Lot 3 — la quatrième question, et les refus d'écriture
+### Lot 3 — la quatrième question, et les refus d'écriture — **fait**
 
 Tout en Go, tout testable sur desktop. C'est le lot qui protège les données.
 
@@ -235,10 +259,26 @@ Tout en Go, tout testable sur desktop. C'est le lot qui protège les données.
 6. `RenderNoteJSON` refuse un nom de document, code `[UNSUPPORTED]` — écart
    n° 4.
 
-**Critère de sortie** : un test qui prouve qu'on ne peut pas écrire sur un
-`.docx` depuis la façade — **et qu'on a vu échouer** en désactivant le refus.
+**Critère de sortie, atteint** : `TestWriteNoteRefuseUnDocument` prouve que
+l'écriture est refusée *et* que rien n'est resté dans le cache — sans quoi la
+prochaine synchronisation pousserait quand même. Les six garde-fous du lot ont
+été vus échouer.
 
-### Lot 4 — la frontière binaire
+Deux choses ont été décidées en écrivant, et méritent d'être sues :
+
+- **`WithExtensionOf` traite un document plus strictement qu'une note.** Entre
+  `.md` et `.txt`, saisir l'autre extension est une conversion demandée, et
+  l'application sait la faire. Vers ou depuis un document, elle ne sait pas :
+  « rapport.docx » renommé en « bilan.odt » donne « bilan.odt.docx », laid mais
+  honnête. Sans cette branche, élargir `IsNote` laissait renommer une note en
+  `.docx` — un fichier Markdown que l'application relirait comme une archive.
+- **Les codes de document ont leur pendant Kotlin.** `READONLY`, `UNSUPPORTED`,
+  `DOC_INVALID`, `DOC_TOO_LARGE` et `FILE_TOO_LARGE` sont formulés dans les
+  trois langues de `ErreurTexte.kt`. Le refus `READONLY` ne devrait jamais
+  atteindre l'utilisateur — l'interface n'ouvre pas de champ de saisie sur un
+  document — mais la traduction reste un repli sûr.
+
+### Lot 4 — la frontière binaire — **fait**
 
 La seule étape qui touche `docs/FACADE.md`. Voir le piège n° 1 avant d'écrire
 une ligne.
@@ -265,11 +305,11 @@ Le titre ne demande aucune API neuve : `titleOf(nom, "")` retombe sur
 `DisplayName`, qui garde l'extension. « rapport.docx » s'affiche en titre, ce
 qui est honnête.
 
-**Critère de sortie** : `go test ./mobile` au vert contre le faux serveur, plus
-une ligne dans le tableau des méthodes de `FACADE.md` et une section décrivant
-le format de sortie.
+**Critère de sortie, atteint** : `go test ./mobile` est vert contre le faux
+serveur, sur les deux formats puis hors connexion ; `FACADE.md` contient la
+méthode, son format de sortie et ses trois codes d'erreur.
 
-### Lot 5 — l'interface
+### Lot 5 — l'interface — **fait**
 
 1. `EditorViewModel.init` branche : si `repository.isDocument(nom)`, appeler
    `renderFile(chemin)` au lieu de `readNote` + `prepareEdit`, et poser
@@ -279,8 +319,9 @@ le format de sortie.
    dans les trois `strings.xml`** — jamais un littéral dans le code.
 3. `gomobile bind`, puis `assembleDebug`, `testDebugUnitTest`, `lintDebug`.
 
-**Critère de sortie** : ça **compile**. Pas « testé » : il n'y a aucun test
-instrumenté dans ce dépôt, et le dire autrement serait mentir.
+**Critère de sortie, atteint** : `gomobile bind`, `assembleDebug`,
+`testDebugUnitTest` et `lintDebug` passent. Les tests sont unitaires : aucune
+preuve sur appareil n'est prétendue avant le lot 6.
 
 ### Lot 6 — l'appareil
 

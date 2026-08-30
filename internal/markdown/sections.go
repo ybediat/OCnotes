@@ -329,3 +329,63 @@ func abs(x int) int {
 	}
 	return x
 }
+
+// SectionsPlain découpe un texte brut en tranches éditables.
+//
+// Contrairement à Sections, aucune vérification par le rendu : un texte brut
+// n'a aucune construction multiligne qu'une coupure pourrait casser, donc toute
+// frontière de ligne y est licite. Valider un .txt contre l'analyseur Markdown
+// serait doublement faux — ça coûterait une analyse pour rien, et un fichier
+// qui *ressemble* à une liste refuserait d'être coupé, ce qui redonnerait la
+// section démesurée qu'on cherche à éviter.
+//
+// La coupure est tout de même cherchée sur une ligne vide, comme pour le
+// Markdown : l'espacement que la LazyColumn met entre deux blocs tombe alors là
+// où le texte respirait déjà.
+//
+// La borne est maxPlainLines, la même que celle des blocs de RenderPlain : pour
+// un texte brut, tranche éditable et bloc d'affichage n'ont aucune raison de
+// différer.
+func SectionsPlain(text string) []Section {
+	units := utf16.Encode([]rune(text))
+	n := len(units)
+	lignes := decoupeEnLignes(units)
+
+	var sections []Section
+	debut, idx := 0, 0
+	for idx < len(lignes) {
+		fin := idx + maxPlainLines
+		if fin >= len(lignes) {
+			sections = append(sections, Section{Start: debut, End: n})
+			break
+		}
+
+		coupe := fin
+		for i := fin - 1; i > idx; i-- {
+			if lignes[i].vide {
+				coupe = i + 1
+				break
+			}
+		}
+		sections = append(sections, Section{Start: debut, End: lignes[coupe].start})
+		debut, idx = lignes[coupe].start, coupe
+	}
+	return sections
+}
+
+// Slice renvoie le texte d'une section.
+//
+// C'est le pendant Go de String.substring en Kotlin : les bornes sont en
+// unités de code UTF-16, donc les deux découpent au même endroit sans
+// conversion. Les bornes sont assainies — bornées au texte et remises dans
+// l'ordre — parce qu'une section peut venir d'un document qui a changé depuis,
+// et qu'un panic ne serait pas la bonne réponse.
+func Slice(doc string, s Section) string {
+	units := utf16.Encode([]rune(doc))
+	n := len(units)
+	debut, fin := clamp(s.Start, 0, n), clamp(s.End, 0, n)
+	if debut > fin {
+		debut, fin = fin, debut
+	}
+	return unitesVersTexte(units[debut:fin])
+}

@@ -2,71 +2,147 @@ package eu.opennote.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.security.GeneralSecurityException
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 
 /**
- * Conservation de l'App Token.
+ * Stockage du token d'application chiffré par une clé Android Keystore.
  *
- * C'est **le seul endroit** où le secret est écrit sur l'appareil. Le cœur Go
- * ne le persiste jamais : il le reçoit à chaque démarrage via `Connect` et le
- * garde en mémoire dans le client HTTP. Un test Go vérifie que le
- * `config.json` écrit par la couche métier ne contient aucun secret.
+ * Aucune migration depuis l'ancien format n'est réalisée : une réinstallation
+ * est requise lors du passage à ce schéma.
  *
- * `EncryptedSharedPreferences` s'appuie sur une clé maîtresse du Keystore,
- * adossée au matériel quand l'appareil en dispose. Les clés comme les valeurs
- * sont chiffrées.
- *
- * Toutes les méthodes sont `suspend` : la première ouverture dérive une clé et
- * peut solliciter le Keystore, ce qui n'a rien à faire sur le thread
- * principal.
+ * Les préférences ne contiennent que le nonce et le texte chiffré AES-GCM. La
+ * clé AES reste non exportable dans Android Keystore. Le chiffrement est aussi
+ * lié à ce format de donnée par une donnée authentifiée additionnelle stable.
  */
 class TokenStore(private val context: Context) {
 
     @Volatile
     private var cached: SharedPreferences? = null
 
-    private suspend fun prefs(): SharedPreferences = withContext(Dispatchers.IO) {
-        cached ?: synchronized(this@TokenStore) {
-            cached ?: create().also { cached = it }
+    private fun prefs(): SharedPreferences =
+        cached ?: synchronized(this) {
+            cached ?: context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
+                .also { cached = it }
+        }
+
+    /** Le token enregistré, ou `null` si aucun token n'est disponible. */
+    suspend fun appToken(): String? = withContext(Dispatchers.IO) {
+        val encoded = prefs().getString(KEY_APP_TOKEN, null) ?: return@withContext null
+
+        try {
+            val token = decrypt(encoded)
+            if (token == null) {
+                discardUnreadableToken()
+                null
+            } else {
+                token.takeIf { it.isNotBlank() }
+            }
+        } catch (_: GeneralSecurityException) {
+            // Une clé invalidée ou une valeur altérée ne doit pas empêcher
+            // l'application de démarrer. L'utilisateur se reconnectera.
+            discardUnreadableToken()
+            null
+        } catch (_: IllegalArgumentException) {
+            // Base64 ou format de donnée malformé : même comportement sûr.
+            discardUnreadableToken()
+            null
         }
     }
 
-    private fun create(): SharedPreferences {
-        val masterKey = MasterKey.Builder(context, MasterKey.DEFAULT_MASTER_KEY_ALIAS)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
+    /** Chiffre et enregistre un token après une connexion validée. */
+    suspend fun saveAppToken(token: String) = withContext(Dispatchers.IO) {
+        val encrypted = encrypt(token)
+        check(prefs().edit().putString(KEY_APP_TOKEN, encrypted).commit()) {
+            "écriture du token chiffré impossible" // i18n-ok: exception technique, non affichée
+        }
+    }
 
-        return EncryptedSharedPreferences.create(
-            context,
-            FILE_NAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+    /** Efface le texte chiffré puis la clé qui permettrait de le déchiffrer. */
+    suspend fun clear() = withContext(Dispatchers.IO) {
+        check(prefs().edit().clear().commit()) {
+            "effacement du token chiffré impossible" // i18n-ok: exception technique, non affichée
+        }
+        keyStore().deleteEntry(KEY_ALIAS)
+    }
+
+    private fun encrypt(token: String): String {
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, encryptionKey())
+        cipher.updateAAD(AAD)
+        val encrypted = cipher.doFinal(token.toByteArray(Charsets.UTF_8))
+        return listOf(
+            Base64.encodeToString(cipher.iv, Base64.NO_WRAP),
+            Base64.encodeToString(encrypted, Base64.NO_WRAP),
+        ).joinToString(".")
+    }
+
+    private fun decrypt(encoded: String): String? {
+        val (ivEncoded, ciphertextEncoded) = encoded.split('.', limit = 2)
+            .takeIf { it.size == 2 } ?: return null
+        val key = decryptionKey() ?: return null
+
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(
+            Cipher.DECRYPT_MODE,
+            key,
+            GCMParameterSpec(GCM_TAG_LENGTH_BITS, Base64.decode(ivEncoded, Base64.NO_WRAP)),
         )
+        cipher.updateAAD(AAD)
+        return cipher.doFinal(Base64.decode(ciphertextEncoded, Base64.NO_WRAP))
+            .toString(Charsets.UTF_8)
     }
 
-    /** Le token enregistré, ou `null` si aucune session n'a été ouverte. */
-    suspend fun appToken(): String? =
-        prefs().getString(KEY_APP_TOKEN, null)?.takeIf { it.isNotBlank() }
+    @Synchronized
+    private fun encryptionKey(): SecretKey {
+        decryptionKey()?.let { return it }
 
-    suspend fun saveAppToken(token: String) {
-        withContext(Dispatchers.IO) {
-            prefs().edit().putString(KEY_APP_TOKEN, token).commit()
-        }
+        val generator = KeyGenerator.getInstance(
+            KeyProperties.KEY_ALGORITHM_AES,
+            KEYSTORE_PROVIDER,
+        )
+        generator.init(
+            KeyGenParameterSpec.Builder(
+                KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(AES_KEY_SIZE_BITS)
+                .build(),
+        )
+        return generator.generateKey()
     }
 
-    /** Efface le secret. Appelé par la déconnexion, avant `App.disconnect()`. */
-    suspend fun clear() {
-        withContext(Dispatchers.IO) {
-            prefs().edit().clear().commit()
-        }
+    private fun decryptionKey(): SecretKey? =
+        keyStore().getKey(KEY_ALIAS, null) as? SecretKey
+
+    private fun keyStore(): KeyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply {
+        load(null)
+    }
+
+    private fun discardUnreadableToken() {
+        prefs().edit().remove(KEY_APP_TOKEN).commit()
+        runCatching { keyStore().deleteEntry(KEY_ALIAS) }
     }
 
     private companion object {
-        const val FILE_NAME = "opennote_secrets"
+        const val FILE_NAME = "opennote_secrets_v2"
         const val KEY_APP_TOKEN = "app_token"
+        const val KEY_ALIAS = "opennote_app_token_v2"
+        const val KEYSTORE_PROVIDER = "AndroidKeyStore"
+        const val TRANSFORMATION = "AES/GCM/NoPadding"
+        const val AES_KEY_SIZE_BITS = 256
+        const val GCM_TAG_LENGTH_BITS = 128
+        val AAD = "eu.opennote.app-token.v2".toByteArray(Charsets.UTF_8)
     }
 }

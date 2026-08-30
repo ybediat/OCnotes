@@ -145,14 +145,20 @@ func (c Config) Validate() error {
 	if err != nil {
 		return fmt.Errorf("config: [%s] URL de serveur invalide %q: %w", CodeServerURLInvalid, c.ServerURL, err)
 	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("config: [%s] URL de serveur invalide %q: schéma http ou https attendu", CodeServerURLInvalid, c.ServerURL)
+	if u.Scheme != "https" {
+		return fmt.Errorf("config: [%s] URL de serveur invalide %q: HTTPS obligatoire", CodeServerURLInvalid, c.ServerURL)
 	}
 	if u.Host == "" {
 		return fmt.Errorf("config: [%s] URL de serveur invalide %q: hôte manquant", CodeServerURLInvalid, c.ServerURL)
 	}
 	if strings.TrimSpace(c.Username) == "" {
 		return fmt.Errorf("config: [%s] nom d'utilisateur manquant", CodeUsernameMissing)
+	}
+	if c.DriveWebDavURL != "" {
+		davURL, err := url.Parse(c.DriveWebDavURL)
+		if err != nil || davURL.Scheme != "https" || davURL.Host == "" {
+			return fmt.Errorf("config: [%s] URL WebDAV invalide %q: HTTPS obligatoire", CodeServerURLInvalid, c.DriveWebDavURL)
+		}
 	}
 	return nil
 }

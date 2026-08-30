@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ybediat/OpenNote/internal/documents"
 	"github.com/ybediat/OpenNote/internal/markdown"
 	"github.com/ybediat/OpenNote/internal/opencloud"
 )
@@ -432,11 +433,72 @@ func TitleOf(note Note, content []byte) string {
 // interprété. Le paquet markdown ne connaît pas les extensions et l'interface
 // n'a pas à les connaître : lui laisser ce choix reviendrait à recopier la
 // liste des extensions en Kotlin, où elle divergerait au premier ajout.
-func Render(name string, content []byte) []markdown.Block {
-	if IsPlainText(name) {
-		return markdown.RenderPlain(string(content))
+// L'erreur ne peut venir que d'un document : un ZIP tronqué, une partie
+// absente, une bombe de décompression. Ni le Markdown ni le texte brut ne
+// savent échouer — mais leur faire porter la même signature évite d'avoir deux
+// points d'entrée, donc deux endroits où l'on oublie d'ajouter un format.
+func Render(name string, content []byte) ([]markdown.Block, error) {
+	switch {
+	case IsDocument(name):
+		return renderDocument(name, content)
+	case IsPlainText(name):
+		return markdown.RenderPlain(string(content)), nil
+	default:
+		return markdown.Render(string(content)), nil
 	}
-	return markdown.Render(string(content))
+}
+
+// Sections découpe une note en tranches éditables et rend chacune d'elles.
+//
+// Même répartition que Render, et pour la même raison : la question « ce nom
+// désigne-t-il du Markdown ? » vit ici, et nulle part ailleurs. La façade se
+// contente de sérialiser.
+//
+// Les trois cas ne se ressemblent pas :
+//
+//   - un **document** n'a aucune tranche éditable, l'application ne sait que le
+//     lire. Le refus porte CodeReadOnly, comme une écriture refusée : c'est la
+//     même règle vue d'un autre côté ;
+//   - un **texte brut** n'a pas de construction multiligne à préserver, donc
+//     toute frontière de ligne est licite. Tranche éditable et bloc d'affichage
+//     y coïncident, et SectionsPlain les borne pareil ;
+//   - un **Markdown** passe par RenderSections, qui vérifie chaque coupure par
+//     le rendu et ne paie l'analyse des définitions de lien qu'une fois.
+//
+// Le texte des tranches ne traverse pas la frontière : l'interface le découpe
+// elle-même à partir des bornes, qui sont en unités UTF-16 des deux côtés.
+func Sections(name string, content []byte) ([]markdown.Section, [][]markdown.Block, error) {
+	switch {
+	case IsDocument(name):
+		return nil, nil, fmt.Errorf("notes: [%s] un fichier %s n'a pas de tranche éditable",
+			CodeReadOnly, path.Ext(name))
+
+	case IsPlainText(name):
+		texte := string(content)
+		sections := markdown.SectionsPlain(texte)
+		blocs := make([][]markdown.Block, 0, len(sections))
+		for _, s := range sections {
+			blocs = append(blocs, markdown.RenderPlain(markdown.Slice(texte, s)))
+		}
+		return sections, blocs, nil
+
+	default:
+		sections, blocs := markdown.RenderSections(string(content))
+		return sections, blocs, nil
+	}
+}
+
+func renderDocument(name string, content []byte) ([]markdown.Block, error) {
+	switch strings.ToLower(path.Ext(name)) {
+	case ".docx":
+		return documents.Docx(content)
+	case ".odt":
+		return documents.Odt(content)
+	}
+	// Inatteignable tant que documentExtensions et ce switch disent la même
+	// chose ; le jour où ils divergeront, mieux vaut une erreur qu'un document
+	// rendu comme du Markdown.
+	return nil, fmt.Errorf("notes: [%s] format non pris en charge: %s", documents.CodeInvalid, path.Ext(name))
 }
 
 // PrepareEdit allège un contenu avant de le confier à un champ de saisie.

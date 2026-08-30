@@ -560,20 +560,33 @@ func indexByte(s string, b byte) int {
 // Une note portant des modifications locales n'est jamais rafraîchie : sa
 // version en cache fait foi jusqu'à la synchronisation, qui tranchera.
 func (a *App) ReadNote(notePath string) (string, error) {
+	content, err := a.readBytes(notePath)
+	if err != nil {
+		return "", err
+	}
+	return string(content), nil
+}
+
+// readBytes lit un fichier depuis le cache ou le serveur.
+//
+// Le repli hors connexion est commun aux notes texte et aux documents. Garder
+// ce chemin en octets est indispensable pour les archives : seules les notes
+// sont converties en chaîne, à la toute fin de ReadNote.
+func (a *App) readBytes(notePath string) ([]byte, error) {
 	a.mu.Lock()
 	lib := a.lib
 	a.mu.Unlock()
 
 	if lib == nil {
-		return "", errNoWorkspace()
+		return nil, errNoWorkspace()
 	}
 
 	content, entry, cached := a.cache.Get(notePath)
 	if cached && (entry.Dirty || a.recentlyOffline()) {
-		return string(content), nil
+		return content, nil
 	}
 	if !cached && a.recentlyOffline() {
-		return "", contentNotCachedError(notePath)
+		return nil, contentNotCachedError(notePath)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
@@ -584,21 +597,21 @@ func (a *App) ReadNote(notePath string) (string, error) {
 		if cached {
 			// Le réseau manque, mais la note est connue : on l'ouvre telle
 			// qu'on la connaît plutôt que d'échouer.
-			return string(content), nil
+			return content, nil
 		}
 		if errors.Is(err, opencloud.ErrOffline) {
-			return "", contentNotCachedError(notePath)
+			return nil, contentNotCachedError(notePath)
 		}
-		return "", err
+		return nil, err
 	}
 	a.noteNetworkResult(nil)
 
 	fresh, _, ok := a.cache.Get(notePath)
 	if !ok {
 		// Pull a constaté que la note n'existe plus côté serveur.
-		return "", fmt.Errorf("mobile: %s: %w", notePath, opencloud.ErrNotFound)
+		return nil, fmt.Errorf("mobile: %s: %w", notePath, opencloud.ErrNotFound)
 	}
-	return string(fresh), nil
+	return fresh, nil
 }
 
 func contentNotCachedError(notePath string) error {
@@ -636,6 +649,13 @@ func (a *App) recentlyOffline() bool {
 // échouer faute de réseau. La propagation vers le serveur a lieu au prochain
 // Sync.
 func (a *App) WriteNote(notePath, content string) error {
+	// Un document ne s'écrit jamais, et le refus est ici plutôt que dans
+	// l'interface : c'est le seul appel de la façade qui peut détruire un
+	// fichier de l'utilisateur en silence. Une écriture partie sur un .docx le
+	// remplacerait par du texte, sur un serveur partagé, sans message.
+	if err := notes.EnsureWritable(notePath); err != nil {
+		return err
+	}
 	return a.cache.Put(notePath, []byte(content))
 }
 
@@ -1160,8 +1180,47 @@ type noteBlock struct {
 // est interprété comme du Markdown ou affiché tel quel. Un .txt n'est jamais
 // interprété.
 func (a *App) RenderNoteJSON(name, content string) (string, error) {
-	blocks := notes.Render(name, []byte(content))
+	// Un document n'entre pas par ici, et c'est une question de format, pas de
+	// politesse : gomobile décode la chaîne en UTF-8 vers un String Java, et un
+	// .docx en ressortirait truffé de caractères de remplacement. Le binaire se
+	// lit du côté Go — voir RenderFileJSON.
+	if notes.IsDocument(name) {
+		return "", fmt.Errorf("mobile: [%s] un fichier %s ne traverse pas la frontière en chaîne", CodeUnsupported, path.Ext(name))
+	}
 
+	blocks, err := notes.Render(name, []byte(content))
+	if err != nil {
+		return "", err
+	}
+
+	return toJSON(versNoteBlocks(blocks))
+}
+
+// RenderFileJSON prépare l'affichage d'un fichier que l'application ne sait
+// que lire.
+//
+// Le fichier est lu et analysé entièrement côté Go : un .docx ou un .odt est
+// une archive binaire, qu'il serait destructeur de faire traverser gomobile
+// dans une chaîne UTF-8. Seuls les blocs JSON traversent la frontière.
+func (a *App) RenderFileJSON(filePath string) (string, error) {
+	content, err := a.readBytes(filePath)
+	if err != nil {
+		return "", err
+	}
+
+	blocks, err := notes.Render(filePath, content)
+	if err != nil {
+		return "", err
+	}
+	return toJSON(versNoteBlocks(blocks))
+}
+
+// versNoteBlocks convertit les blocs du cœur vers la forme sérialisée.
+//
+// Extraite parce que deux entrées de la façade en ont besoin — RenderNoteJSON
+// pour un document entier, SectionsJSON pour chaque tranche — et qu'un champ
+// ajouté à markdown.Block ne doit pas avoir deux endroits où être oublié.
+func versNoteBlocks(blocks []markdown.Block) []noteBlock {
 	out := make([]noteBlock, 0, len(blocks))
 	for _, b := range blocks {
 		converti := noteBlock{
@@ -1185,6 +1244,51 @@ func (a *App) RenderNoteJSON(name, content string) (string, error) {
 			})
 		}
 		out = append(out, converti)
+	}
+	return out
+}
+
+// noteSection est une tranche éditable et ses blocs d'affichage.
+//
+// Le **texte** de la tranche n'y figure pas, et c'est délibéré : Start et End
+// sont en unités de code UTF-16, l'unité de String.substring en Kotlin, donc
+// l'interface découpe elle-même le contenu qu'elle a déjà en main. Le faire
+// traverser reviendrait à recopier la note une fois de plus.
+type noteSection struct {
+	Start  int         `json:"start"`
+	End    int         `json:"end"`
+	Blocks []noteBlock `json:"blocks"`
+}
+
+// SectionsJSON découpe une note en tranches éditables et rend chacune d'elles.
+//
+// C'est ce que l'interface appelle à l'ouverture d'une note : chaque tranche
+// tient dans un champ de saisie sans que le coût de dessin dépende de la taille
+// du document. Voir docs/CHANTIER-EDITEUR.md et la section 7 bis de
+// docs/ARCHITECTURE.md pour les mesures qui l'imposent.
+//
+// Fonction pure : ni réseau, ni cache, ni session. Comme RenderNoteJSON, le
+// **nom** décide si le texte est interprété comme du Markdown ou découpé tel
+// quel.
+func (a *App) SectionsJSON(name, content string) (string, error) {
+	// Même refus que RenderNoteJSON, et pour la même raison de format : un
+	// .docx ressortirait truffé de caractères de remplacement.
+	if notes.IsDocument(name) {
+		return "", fmt.Errorf("mobile: [%s] un fichier %s ne traverse pas la frontière en chaîne", CodeUnsupported, path.Ext(name))
+	}
+
+	sections, blocs, err := notes.Sections(name, []byte(content))
+	if err != nil {
+		return "", err
+	}
+
+	out := make([]noteSection, 0, len(sections))
+	for i, s := range sections {
+		out = append(out, noteSection{
+			Start:  s.Start,
+			End:    s.End,
+			Blocks: versNoteBlocks(blocs[i]),
+		})
 	}
 	return toJSON(out)
 }
@@ -1218,6 +1322,13 @@ type preparedEdit struct {
 // un fichier qui n'a rien à voir avec une image. La note s'ouvre alors en
 // lecture seule : l'aperçu, lui, n'a pas cette limite.
 func (a *App) PrepareEditJSON(name, content string) (string, error) {
+	// Préparer la saisie d'un document n'a pas de sens, et le laisser passer en
+	// aurait un mauvais : l'interface ouvrirait un champ de texte, l'utilisateur
+	// taperait, et l'enregistrement écraserait le document.
+	if err := notes.EnsureWritable(name); err != nil {
+		return "", err
+	}
+
 	text, images := notes.PrepareEdit(name, content)
 	if images == nil {
 		images = []string{}
@@ -1248,6 +1359,15 @@ func (a *App) RestoreImages(text, imagesJSON string) (string, error) {
 func MaxEditableWord() int { return markdown.MaxEditableWord() }
 
 // --- Erreurs ----------------------------------------------------------------
+
+// CodeUnsupported signale un appel de la façade qui ne sait pas traiter ce
+// fichier — pas parce que le contenu est refusé, mais parce que ce chemin-là ne
+// convient pas au format.
+//
+// C'est le seul code né dans mobile/ : il ne décrit pas une règle du cœur mais
+// une contrainte du binding, celle qui veut qu'un binaire ne traverse pas
+// gomobile dans une chaîne.
+const CodeUnsupported = "UNSUPPORTED"
 
 // ErrorCode extrait l'étiquette de catégorie d'un message d'erreur.
 //
@@ -1344,6 +1464,13 @@ func IsOfflineError(message string) bool {
 // divergerait au premier format ajouté.
 func IsPlainText(name string) bool {
 	return notes.IsPlainText(name)
+}
+
+// IsDocument indique qu'un nom désigne un fichier lisible mais jamais
+// modifiable. Fonction de paquet pour que Kotlin n'ait pas à recopier les
+// extensions reconnues par le cœur.
+func IsDocument(name string) bool {
+	return notes.IsDocument(name)
 }
 
 func errNotConnected() error {

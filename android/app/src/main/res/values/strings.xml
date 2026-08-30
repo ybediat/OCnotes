@@ -70,6 +70,11 @@
     <string name="err_deplacement_dans_soi">Un dossier ne peut pas être déplacé dans lui-même.</string>
     <string name="err_chemin_vide">Aucun élément désigné.</string>
     <string name="err_dossier_hors_ligne">Un dossier ne peut pas être renommé, déplacé ou supprimé hors connexion. Reconnectez-vous d\'abord.</string>
+    <string name="err_lecture_seule">Ce document ne peut pas être modifié ici.</string>
+    <string name="err_format_non_pris_en_charge">Cette opération ne convient pas à ce format de fichier.</string>
+    <string name="err_document_invalide">Ce document est invalide ou incomplet.</string>
+    <string name="err_document_trop_volumineux">Le contenu de ce document est trop volumineux à afficher.</string>
+    <string name="err_fichier_trop_volumineux">Ce document est trop volumineux à ouvrir.</string>
     <string name="err_stockage">Impossible d\'écrire sur le stockage de l\'appareil. Vérifiez l\'espace disponible ou synchronisez d\'abord vos modifications locales.</string>
     <string name="err_contenu_a_telecharger">Le contenu de cette note n\'est pas disponible hors connexion. Téléchargez-la une fois le réseau revenu.</string>
     <string name="err_url_serveur_manquante">Indiquez l\'adresse du serveur.</string>
@@ -240,8 +245,8 @@
     <string name="menu_reglages">Réglages</string>
     <string name="menu_a_propos">À propos</string>
     <string name="a_propos_titre">À propos d\'OpenNote</string>
-    <string name="a_propos_description">Application Android légère pour écrire des notes Markdown stockées sur un serveur OpenCloud.</string>
-    <string name="a_propos_licence">Licence : à renseigner.</string>
+    <string name="a_propos_description">Gestionnaire de notes stockées sur un serveur OpenCloud. Créé par Yannis Bediat. V1.0 Aout 2026</string>
+    <string name="a_propos_licence">Licence : MIT https://github.com/ybediat/OpenNote/tree/main?tab=MIT-1-ov-file</string>
     <string name="a_propos_depot">Dépôt Git</string>
     <string name="a_propos_depot_url" translatable="false">https://github.com/ybediat/OpenNote</string>
 
@@ -370,6 +375,7 @@
         l'interface web. Le message dit la cause, pas la mécanique.
     -->
     <string name="apercu_lecture_seule">Cette note contient un élément trop long pour être modifié ici. Elle est ouverte en lecture seule.</string>
+    <string name="apercu_document_lecture_seule">Ce document est ouvert en lecture seule.</string>
     <string name="sync_conflits_suppression">\n• suppression annulée : %1$s a changé à distance</string>
     <string name="sync_conflits_deplacement">\n• déplacement annulé ; copie conservée : %1$s</string>
     <string name="reglages_conflits_suppression">• Suppression annulée : %1$s a changé à distance</string>

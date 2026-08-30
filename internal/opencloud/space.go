@@ -25,6 +25,9 @@ func (c *Client) Space(d Drive) (*Space, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opencloud: URL WebDAV invalide %q: %w", d.WebDavURL, err)
 	}
+	if u.Scheme != "https" || u.Host == "" {
+		return nil, fmt.Errorf("opencloud: URL WebDAV invalide %q: HTTPS obligatoire", d.WebDavURL)
+	}
 	return &Space{c: c, davBase: u}, nil
 }
 

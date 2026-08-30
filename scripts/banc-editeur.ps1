@@ -54,6 +54,12 @@
     et ne dessine que le visible — sauf pour un fichier texte brut, dont
     RenderPlain ne fait qu'un seul bloc. C'est ce cas-là qu'il faut mesurer.
 
+.PARAMETER Prechauffer
+    Ouvre la note **sans couper le reseau** et sans rien mesurer, pour que son
+    contenu descende dans le cache. A lancer une fois quand le banc se plaint
+    que la note n'est pas chargee : hors connexion, une note dont le cache n'a
+    que l'inventaire ne peut pas s'ouvrir, et la mesure n'a rien a mesurer.
+
 .PARAMETER Paquet
     Nom du paquet. Par défaut la variante debug.
 
@@ -72,6 +78,8 @@ param(
     [switch] $Frappe,
 
     [switch] $Apercu,
+
+    [switch] $Prechauffer,
 
     [string] $Paquet = "eu.opennote.debug"
 )
@@ -152,10 +160,16 @@ function Get-HauteurEcran {
 }
 
 function Enter-Liste {
+    # « Dans l'application et pas dans l'editeur » ne suffit PAS a dire qu'on
+    # est dans la liste : l'ecran « Note non chargee » n'a aucun champ de
+    # saisie, et passait donc pour la liste — le banc cherchait ensuite un
+    # champ de recherche qui n'y etait pas. Le marqueur de la liste est la
+    # presence de son champ de recherche, le seul EditText mince.
     for ($i = 0; $i -lt 5; $i++) {
         $xml = Get-Ecran
         if (Test-DansApp -Xml $xml) {
-            if (-not (Test-DansEditeur -Xml $xml -Hauteur $script:Hauteur)) { return }
+            if ($null -ne (Get-ChampRecherche -Xml $xml -Hauteur $script:Hauteur)) { return }
+            # Editeur, apercu, ecran d'erreur : on remonte.
             Invoke-Adb shell input keyevent 4 | Out-Null
             Start-Sleep -Seconds 3
             continue
@@ -187,16 +201,25 @@ function Get-ChampRecherche {
 
 function Get-BoutonApercu {
     param([string] $Xml)
+    # L'icone la plus a droite de la barre du haut. Les bornes de TAILLE ne sont
+    # pas decoratives : sans elles, le champ de saisie de l'editeur — cliquable,
+    # pleine largeur, et dont le haut est aussi dans la bande — gagnait le
+    # « plus a droite », et le tap atterrissait dans le texte. Un bouton d'icone
+    # Material fait environ 130x130.
     $motif = '<node[^>]*clickable="true"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"'
     $meilleur = $null
     foreach ($m in [regex]::Matches($Xml, $motif)) {
-        $haut = [int]$m.Groups[2].Value
+        $gauche = [int]$m.Groups[1].Value
+        $haut   = [int]$m.Groups[2].Value
         $droite = [int]$m.Groups[3].Value
-        if ($haut -gt 400) { continue }   # barre du haut seulement
+        $bas    = [int]$m.Groups[4].Value
+        if ($haut -gt 400) { continue }
+        if (($droite - $gauche) -gt 250) { continue }
+        if (($bas - $haut) -gt 250) { continue }
         if (($null -eq $meilleur) -or ($droite -gt $meilleur.Droite)) {
             $meilleur = @{
-                X      = [int](([int]$m.Groups[1].Value + $droite) / 2)
-                Y      = [int]((($haut) + [int]$m.Groups[4].Value) / 2)
+                X      = [int](($gauche + $droite) / 2)
+                Y      = [int](($haut + $bas) / 2)
                 Droite = $droite
             }
         }
@@ -228,11 +251,21 @@ function Enter-Note {
     $champ = Get-ChampRecherche -Xml (Get-Ecran) -Hauteur $script:Hauteur
     if ($null -eq $champ) { throw "Champ de recherche introuvable sur cet ecran." }
 
-    Invoke-Adb shell input touchscreen tap $champ.X $champ.Y | Out-Null
-    # Le focus met un temps a se poser : avec 800 ms, les touches suivantes
-    # partaient dans le vide et la recherche restait vierge — panne silencieuse,
-    # le script concluait « note absente ».
-    Start-Sleep -Milliseconds 1500
+    # Taper puis esperer ne suffit pas : un tap peut etre purement avale — c'est
+    # frequent juste apres un demarrage de l'application — et les touches
+    # suivantes partent alors dans le vide. La recherche reste vierge et le banc
+    # conclut « note absente », ce qui ne designe pas la cause. On verifie donc
+    # que le champ a reellement pris le focus.
+    $focalise = $false
+    for ($i = 0; $i -lt 4; $i++) {
+        Invoke-Adb shell input touchscreen tap $champ.X $champ.Y | Out-Null
+        Start-Sleep -Milliseconds 1500
+        if ((Get-Ecran) -match '<node[^>]*class="android\.widget\.EditText"[^>]*focused="true"') {
+            $focalise = $true
+            break
+        }
+    }
+    if (-not $focalise) { throw "Le champ de recherche n'a pas pris le focus." }
 
     # Vider d'abord : le script doit etre rejouable quel que soit l'etat laisse
     # par la mesure precedente. 113 = CTRL gauche, 29 = A, 67 = SUPPR.
@@ -266,7 +299,9 @@ function Enter-Note {
         Start-Sleep -Seconds 6
         if (Test-DansEditeur -Xml (Get-Ecran) -Hauteur $script:Hauteur) { return }
     }
-    throw "L'editeur ne s'est pas ouvert sur '$Nom' (tap avale ?)."
+    throw ("L'editeur ne s'est pas ouvert sur '$Nom'. Deux causes : un tap avale, " +
+        "ou le contenu absent du cache — hors connexion l'ecran affiche alors " +
+        "« Note non chargee ». Dans le doute, relancez une fois avec -Prechauffer.")
 }
 
 <#
@@ -344,16 +379,26 @@ try {
         throw "Aucun appareil connecte."
     }
 
-    Write-Host "Reseau coupe (la synchronisation fausserait la mesure)."
-    Invoke-Adb shell svc wifi disable | Out-Null
-    Invoke-Adb shell svc data disable | Out-Null
-    $reseauCoupe = $true
+    if ($Prechauffer) {
+        Write-Host "Prechauffage : reseau laisse actif, aucune mesure."
+    } else {
+        Write-Host "Reseau coupe (la synchronisation fausserait la mesure)."
+        Invoke-Adb shell svc wifi disable | Out-Null
+        Invoke-Adb shell svc data disable | Out-Null
+        $reseauCoupe = $true
+    }
 
     $script:Hauteur = Get-HauteurEcran
 
     Enter-Liste
     Reset-Gfx
     Enter-Note -Nom $Note
+
+    if ($Prechauffer) {
+        Write-Host "Note ouverte, contenu en cache. Relancez sans -Prechauffer pour mesurer."
+        return
+    }
+
     Show-Mesure -Titre "OUVERTURE" -Agg (Get-Agg) -Frames (Get-Frames)
 
     if ($Apercu) {

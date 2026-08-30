@@ -333,3 +333,93 @@ func TestSectionsRenduesRestentRapides(t *testing.T) {
 			duree.Round(time.Millisecond), len(sections))
 	}
 }
+
+// Les propriétés de pavage et de recollage valent pour le texte brut comme
+// pour le Markdown : c'est d'elles que dépend l'enregistrement.
+func TestSectionsPlainPaventEtRecollent(t *testing.T) {
+	documents := map[string]string{
+		"vide":                   "",
+		"une ligne":              "Juste une phrase.",
+		"sans saut final":        texteBrut(90, 7) + "fin sans saut",
+		"avec respirations":      texteBrut(300, 7),
+		"sans aucune ligne vide": texteBrut(300, 0),
+	}
+
+	for nom, doc := range documents {
+		t.Run(nom, func(t *testing.T) {
+			secs := SectionsPlain(doc)
+			if len(secs) == 0 {
+				t.Fatal("aucune section")
+			}
+			if secs[0].Start != 0 {
+				t.Errorf("première section à %d, 0 attendu", secs[0].Start)
+			}
+			for i := 1; i < len(secs); i++ {
+				if secs[i].Start != secs[i-1].End {
+					t.Errorf("trou entre les sections %d et %d", i-1, i)
+				}
+			}
+			n := longueurUTF16(doc)
+			if fin := secs[len(secs)-1].End; fin != n {
+				t.Errorf("dernière section finit à %d, %d attendu", fin, n)
+			}
+
+			var recompose string
+			for _, s := range secs {
+				recompose += trancheUTF16(doc, s.Start, s.End)
+			}
+			if recompose != doc {
+				t.Error("la concaténation des tranches ne rend pas le document")
+			}
+		})
+	}
+}
+
+// La borne vaut aussi sans une seule ligne vide : c'est le cas qui faisait
+// planter l'aperçu, et il ne doit pas produire une tranche démesurée non plus.
+func TestSectionsPlainBornentLaTaille(t *testing.T) {
+	for nom, doc := range map[string]string{
+		"avec respirations":      texteBrut(300, 7),
+		"sans aucune ligne vide": texteBrut(300, 0),
+	} {
+		t.Run(nom, func(t *testing.T) {
+			secs := SectionsPlain(doc)
+			if len(secs) < 2 {
+				t.Fatalf("%d section pour 300 lignes", len(secs))
+			}
+			for i, s := range secs {
+				if n := nombreDeLignes(trancheUTF16(doc, s.Start, s.End)); n > maxPlainLines {
+					t.Errorf("section %d : %d lignes, %d au plus attendues",
+						i, n, maxPlainLines)
+				}
+			}
+		})
+	}
+}
+
+// SectionsPlain ne doit pas se comporter comme Sections : un texte brut qui
+// *ressemble* à une longue liste n'a aucune structure à préserver, et refuser
+// de le couper redonnerait la tranche démesurée qu'on cherche à éviter.
+//
+// C'est le test qui distingue les deux fonctions ; sans lui, appeler l'une pour
+// l'autre passerait inaperçu.
+func TestSectionsPlainIgnorentLaStructureMarkdown(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("Avant.\n\n")
+	for i := 1; i <= 300; i++ {
+		fmt.Fprintf(&b, "%d. ce qui ressemble à un élément de liste\n", i)
+	}
+	doc := b.String()
+
+	plain := SectionsPlain(doc)
+	markdown := Sections(doc)
+
+	if len(plain) < 5 {
+		t.Errorf("%d sections en texte brut : la structure Markdown a été prise "+
+			"au sérieux alors qu'un .txt n'en a pas", len(plain))
+	}
+	// Et pour mémoire : en Markdown, la même liste refuse d'être coupée.
+	if len(markdown) != 1 {
+		t.Logf("note : Sections en produit %d sur ce document", len(markdown))
+	}
+}

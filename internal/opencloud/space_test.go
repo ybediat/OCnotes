@@ -16,13 +16,14 @@ const spaceID = "11111111-1111-4111-8111-111111111111$22222222-2222-4222-8222-22
 
 func newTestSpace(t *testing.T, handler http.HandlerFunc) (*Space, *httptest.Server) {
 	t.Helper()
-	srv := httptest.NewServer(handler)
+	srv := httptest.NewTLSServer(handler)
 	t.Cleanup(srv.Close)
 
 	c, err := New(srv.URL, testAuth())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	c.SetHTTPClient(srv.Client())
 	sp, err := c.Space(Drive{
 		ID:        spaceID,
 		Name:      "Admin",
@@ -33,6 +34,17 @@ func newTestSpace(t *testing.T, handler http.HandlerFunc) (*Space, *httptest.Ser
 		t.Fatalf("Space: %v", err)
 	}
 	return sp, srv
+}
+
+func TestSpaceRefuseUneURLWebDAVNonHTTPS(t *testing.T) {
+	c, err := New("https://cloud.exemple.fr", testAuth())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if _, err := c.Space(Drive{Name: "Admin", WebDavURL: "http://cloud.exemple.fr/dav/spaces/admin"}); err == nil {
+		t.Fatal("Space aurait dû refuser une URL WebDAV en HTTP")
+	}
 }
 
 // Le '$' de l'identifiant d'espace doit arriver littéral sur le réseau, tandis

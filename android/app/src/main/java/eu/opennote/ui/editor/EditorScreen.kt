@@ -167,7 +167,7 @@ fun EditorScreen(
                     .fillMaxSize()
                     .padding(paddings),
             ) {
-                if (!etat.modifiable) BandeauLectureSeule()
+                if (!etat.modifiable) BandeauLectureSeule(etat.documentBureautique)
                 VueMarkdown(blocs = etat.blocs, modifier = Modifier.weight(1f))
             }
             return@Scaffold
@@ -237,11 +237,11 @@ fun EditorScreen(
  * Explique pourquoi la note ne s'ouvre pas en saisie.
  *
  * Sans ce bandeau, l'absence de champ de texte passerait pour une panne. Le
- * message dit la cause — une suite de caractères démesurée — plutôt que la
- * mécanique, dont l'utilisateur n'a rien à faire.
+ * message dit la cause — document Office ou suite de caractères démesurée —
+ * plutôt que la mécanique, dont l'utilisateur n'a rien à faire.
  */
 @Composable
-private fun BandeauLectureSeule() {
+private fun BandeauLectureSeule(documentBureautique: Boolean) {
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
         modifier = Modifier.fillMaxWidth(),
@@ -257,7 +257,13 @@ private fun BandeauLectureSeule() {
                 modifier = Modifier.padding(end = 12.dp),
             )
             Text(
-                text = stringResource(R.string.apercu_lecture_seule),
+                text = stringResource(
+                    if (documentBureautique) {
+                        R.string.apercu_document_lecture_seule
+                    } else {
+                        R.string.apercu_lecture_seule
+                    },
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )

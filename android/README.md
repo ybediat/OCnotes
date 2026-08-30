@@ -2,10 +2,10 @@
 
 Interface Jetpack Compose posée sur le cœur métier Go, lié par `gomobile bind`.
 
-> **État : jamais compilé.** Ni le SDK Android, ni Gradle, ni le NDK ne sont
-> installés sur la machine où ce code a été écrit. Il n'a donc pas été
-> construit, ni exécuté. Attendez-vous à une passe de correction au premier
-> build (versions du catalogue, imports, API Compose).
+> **État au 30 août 2026 : compilé.** `gomobile bind`, `assembleDebug`,
+> `testDebugUnitTest` et `lintDebug` passent avec le SDK Android, Gradle et le
+> NDK installés sur cette machine. L'application n'a pas encore été validée sur
+> un appareil : cette preuve appartient au lot 6 du chantier documents.
 
 ## Prérequis
 
@@ -53,7 +53,7 @@ commande `gomobile bind` (`-target=android/arm64,android/arm`).
 ```
 data/         OpenNoteRepository — seul point de contact avec mobile.App :
               Dispatchers.IO, parsing kotlinx.serialization, erreurs typées
-              TokenStore        — App Token dans les EncryptedSharedPreferences
+              TokenStore        — App Token chiffré par Android Keystore
 sync/         SyncScheduler     — WorkManager : périodique, premier plan,
                                   anti-rebond après écriture
               SyncWorker        — une passe de synchronisation
@@ -74,9 +74,10 @@ refus `AUTH` ramène à la saisie, une panne réseau s'ignore. Démarrer par
 `connect` ferait échouer le lancement hors connexion — et avec lui *tous* les
 appels de navigation, y compris ceux qui savent se replier sur le cache.
 
-**Le token ne quitte pas les `EncryptedSharedPreferences`.** Le cœur Go ne le
-persiste jamais : il le reçoit à chaque démarrage via `Restore` puis `Connect`. Ne l'écrivez
-ni dans `SharedPreferences` ordinaires, ni dans un fichier, ni dans un journal.
+**Le token est chiffré par une clé Android Keystore.** Le cœur Go ne le persiste
+jamais : il le reçoit à chaque démarrage via `Restore` puis `Connect`. Ne
+l'écrivez ni en clair dans les préférences, ni dans un fichier, ni dans un
+journal.
 
 **Les bornes de sélection ne subissent aucune conversion.** La barre d'outils
 passe `TextFieldValue.selection.start` et `.end` tels quels à

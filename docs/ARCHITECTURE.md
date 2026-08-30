@@ -636,6 +636,62 @@ hauteur totale de son contenu.
 Le plafond de 262 143 px vient du schéma d'empaquetage de Compose ; le fait
 mesuré, lui, est le refus de 531 251.
 
+### Le texte brut fait planter l'aperçu
+
+Constaté, reproduit deux fois sur deux, sur une copie `.txt` de la note de test
+(292 026 octets). Ouvrir la note puis toucher le bouton d'aperçu tue
+l'application :
+
+```
+java.lang.IllegalArgumentException: Can't represent a width of 0
+and height of 444403 in Constraints
+  at androidx.compose.foundation.layout.IntrinsicHeightNode.calculateContentConstraints
+  at androidx.compose.foundation.layout.IntrinsicSizeModifier.measure
+```
+
+C'est le même plafond que plus haut — 262 143 px — atteint par un autre chemin,
+et cette fois dans le code livré, pas dans une expérience.
+
+La cause tient en deux lignes qui ne se regardent jamais :
+
+- **`markdown.RenderPlain` renvoie un bloc unique** portant tout le fichier.
+  Pour du Markdown, `Render` produit un bloc par paragraphe — 1 105 sur cette
+  note — et la `LazyColumn` n'en compose que le visible. Pour du texte brut,
+  elle n'a qu'un seul élément : **elle ne virtualise rien.**
+- **`MarkdownView.kt` mesure chaque bloc en `Modifier.height(IntrinsicSize.Min)`**,
+  pour que les barres de citation (`fillMaxHeight`) aient la hauteur du bloc.
+  Cela force le calcul de la hauteur intrinsèque du bloc — 444 403 px — et
+  `Constraints.fixedHeight` déborde.
+
+Conséquences pratiques : OpenCloud crée ses fichiers en `.txt`, donc le cas
+n'est pas exotique. Et la prémisse « l'aperçu est fluide, on peut s'appuyer
+dessus », vraie et mesurée pour le Markdown — 1,77 ms sur 295 ko — **est fausse
+pour le texte brut**, où l'aperçu ne s'ouvre pas du tout.
+
+L'éditeur, lui, se comporte pareil sur les deux formats : 500 ms de médiane et
+323 ms de dessin sur le `.txt`, contre 500 et 341 sur le `.md`. C'est le même
+`TextField` des deux côtés.
+
+**Corrigé, et vérifié sur l'appareil.** `RenderPlain` découpe désormais en
+blocs d'au plus `maxPlainLines` lignes, en cherchant la coupure sur une ligne
+vide pour que l'espacement de la `LazyColumn` tombe là où le texte respirait
+déjà. Aucun caractère n'est perdu — la concaténation des blocs rend le texte
+d'entrée, et `TestRenderPlainNePerdRien` le vérifie.
+
+| aperçu du `.txt` de 292 ko | avant | après |
+|---|---|---|
+| résultat | **plantage** | 226 images rendues |
+| médiane par image | — | 13 ms |
+| dessin | — | **1,27 ms** |
+
+Soit le même régime que l'aperçu Markdown sur la note équivalente : 1,77 ms de
+dessin, 14 ms de médiane. Le texte brut n'est plus un cas à part.
+
+Reste non mesuré, et de même nature : un fichier **Markdown** d'un seul
+paragraphe démesuré produirait lui aussi un bloc unique, donc la même hauteur
+intrinsèque. `ShortenLongWords` ne couvre pas ce cas — il borne la longueur d'un
+mot, pas celle d'un bloc.
+
 ### Ce que ça impose
 
 Deux bornes indépendantes sur ce qu'un champ de saisie peut contenir :

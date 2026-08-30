@@ -479,6 +479,9 @@ func TestGarderLesDeuxClotLeConflitSansToucherAuxFichiers(t *testing.T) {
 	}
 	remote.files["a.md"], remote.etags["a.md"] = "serveur", `"e1"`
 	remote.files["a (conflit).md"], remote.etags["a (conflit).md"] = "local", `"e2"`
+	if err := s.MarkConflict("a (conflit).md"); err != nil {
+		t.Fatal(err)
+	}
 	conflict, err := s.recordConflict(OpWrite, "a.md", "a (conflit).md", `"e1"`)
 	if err != nil {
 		t.Fatal(err)
@@ -488,6 +491,11 @@ func TestGarderLesDeuxClotLeConflitSansToucherAuxFichiers(t *testing.T) {
 	}
 	if len(s.Conflicts()) != 0 || remote.files["a (conflit).md"] != "local" {
 		t.Errorf("résolution a modifié les fichiers ou laissé le conflit: %+v", s.Conflicts())
+	}
+	// La copie devient une note ordinaire : plus de marque de conflit, donc
+	// plus de protection contre l'éviction du quota.
+	if _, entry, _ := s.Get("a (conflit).md"); entry.Conflict {
+		t.Error("la copie garde la marque de conflit après « garder les deux »")
 	}
 }
 
@@ -518,7 +526,7 @@ func TestGarderLeLocalRefuseUneCopieModifieeADistance(t *testing.T) {
 		t.Fatalf("ResolveConflict = %v, conflit attendu", err)
 	}
 	if remote.files["a.md"] != "serveur" || len(s.Conflicts()) != 1 {
-		t.Errorf("rÃ©fÃ©rence ou conflit modifiÃ© : fichiers=%+v conflits=%+v", remote.files, s.Conflicts())
+		t.Errorf("référence ou conflit modifié : fichiers=%+v conflits=%+v", remote.files, s.Conflicts())
 	}
 }
 

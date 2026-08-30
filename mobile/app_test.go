@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf16"
 )
 
 // prepare monte une application connectée à un serveur factice, avec un espace
@@ -599,5 +600,133 @@ func TestPrepareEditJSONMotDemesureResteNonModifiable(t *testing.T) {
 		if prepare.Text != source {
 			t.Errorf("%s : le contenu a été modifié alors qu'il n'y avait rien à extraire", nom)
 		}
+	}
+}
+
+// recolleSections rejoue ce que fera Kotlin : découper le texte qu'il détient
+// déjà, avec les bornes reçues, en unités de code UTF-16.
+func recolleSections(t *testing.T, contenu string, sections []noteSection) string {
+	t.Helper()
+	units := utf16.Encode([]rune(contenu))
+
+	var out []uint16
+	for i, s := range sections {
+		if s.Start < 0 || s.End > len(units) || s.Start > s.End {
+			t.Fatalf("section %d hors bornes : [%d:%d] pour %d unités", i, s.Start, s.End, len(units))
+		}
+		if i > 0 && s.Start != sections[i-1].End {
+			t.Fatalf("trou entre les sections %d et %d", i-1, i)
+		}
+		out = append(out, units[s.Start:s.End]...)
+	}
+	return string(utf16.Decode(out))
+}
+
+// La propriété dont dépend tout l'éditeur par tranches : les bornes reçues
+// permettent à l'interface de reconstruire le document **exactement**.
+//
+// Si ce recollage n'est pas l'identité, une frappe anodine réécrit la note de
+// travers, en silence, et jusque sur le serveur.
+func TestSectionsJSONRecollentLeDocument(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	var b strings.Builder
+	for i := 0; i < 200; i++ {
+		b.WriteString("Un paragraphe avec des accents — é, è, ï — et un emoji 😀.\n\n")
+	}
+	contenu := b.String()
+
+	for _, nom := range []string{"note.md", "note.txt"} {
+		raw, err := app.SectionsJSON(nom, contenu)
+		if err != nil {
+			t.Fatalf("%s : SectionsJSON: %v", nom, err)
+		}
+		var sections []noteSection
+		decodeJSON(t, raw, &sections)
+
+		if len(sections) < 2 {
+			t.Fatalf("%s : %d section pour un document de 400 lignes", nom, len(sections))
+		}
+		if got := recolleSections(t, contenu, sections); got != contenu {
+			t.Errorf("%s : le recollage ne rend pas le document (%d contre %d unités)",
+				nom, len(utf16.Encode([]rune(got))), len(utf16.Encode([]rune(contenu))))
+		}
+	}
+}
+
+// Le texte des tranches ne traverse pas la frontière : c'est ce qui évite de
+// recopier une note de 295 ko deux fois de plus à chaque ouverture.
+func TestSectionsJSONNeTransportePasLeTexte(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	// Une chaîne qu'on reconnaîtrait à coup sûr si elle était sérialisée en
+	// dehors des blocs d'affichage.
+	const temoin = "MARQUEUR-TEMOIN-DE-TRANCHE"
+	raw, err := app.SectionsJSON("note.txt", temoin+"\n")
+	if err != nil {
+		t.Fatalf("SectionsJSON: %v", err)
+	}
+
+	var sections []noteSection
+	decodeJSON(t, raw, &sections)
+	if len(sections) != 1 {
+		t.Fatalf("%d sections, 1 attendue", len(sections))
+	}
+	// Le témoin n'a le droit d'apparaître qu'une fois : dans le bloc
+	// d'affichage. Deux fois voudrait dire qu'on transporte aussi la tranche.
+	if n := strings.Count(raw, temoin); n != 1 {
+		t.Errorf("le témoin apparaît %d fois dans le JSON, 1 attendue — la tranche "+
+			"est-elle sérialisée en plus des blocs ?", n)
+	}
+}
+
+// C'est le nom qui décide de l'interprétation, ici comme pour RenderNoteJSON.
+func TestSectionsJSONSuitLeFormat(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	source := "# pas un titre\n- pas une puce\n"
+
+	raw, err := app.SectionsJSON("note.txt", source)
+	if err != nil {
+		t.Fatalf("SectionsJSON: %v", err)
+	}
+	var brut []noteSection
+	decodeJSON(t, raw, &brut)
+	if len(brut) != 1 || len(brut[0].Blocks) != 1 || brut[0].Blocks[0].Kind != "plain" {
+		t.Errorf("un .txt n'est pas interprété : %+v", brut)
+	}
+
+	raw, err = app.SectionsJSON("note.md", source)
+	if err != nil {
+		t.Fatalf("SectionsJSON: %v", err)
+	}
+	var md []noteSection
+	decodeJSON(t, raw, &md)
+	if len(md) != 1 || len(md[0].Blocks) != 2 || md[0].Blocks[0].Kind != "heading" {
+		t.Errorf("un .md est interprété : %+v", md)
+	}
+}
+
+// Un document n'a aucune tranche éditable, et le refus doit porter un code que
+// l'interface sait lire.
+func TestSectionsJSONRefuseUnDocument(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	if _, err := app.SectionsJSON("rapport.docx", "peu importe"); err == nil {
+		t.Fatal("un .docx devrait être refusé")
+	} else if code := ErrorCode(err.Error()); code != CodeUnsupported {
+		t.Errorf("code = %q, attendu %q", code, CodeUnsupported)
 	}
 }

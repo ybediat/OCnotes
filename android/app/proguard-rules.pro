@@ -17,11 +17,3 @@
 -keepclasseswithmembers class eu.opennote.data.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
-
-# Tink, la bibliothèque de chiffrement derrière EncryptedSharedPreferences,
-# référence des annotations de compilation (errorprone, javax.annotation) qui
-# ne sont pas embarquées à l'exécution. Elles n'ont aucun effet au runtime :
-# il suffit de faire taire R8, sans quoi le build en release échoue.
--dontwarn com.google.errorprone.annotations.**
--dontwarn javax.annotation.Nullable
--dontwarn javax.annotation.concurrent.GuardedBy
