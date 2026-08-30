@@ -368,6 +368,10 @@ class OpenNoteRepository(
     suspend fun rename(itemPath: String, newName: String): String =
         call { it.rename(itemPath, newName) }
 
+    /** Déplace vers un autre dossier et renvoie le **nouveau chemin**. */
+    suspend fun move(itemPath: String, targetDir: String): String =
+        call { it.move(itemPath, targetDir) }
+
     suspend fun delete(itemPath: String) {
         call { it.delete(itemPath) }
         refreshPending()

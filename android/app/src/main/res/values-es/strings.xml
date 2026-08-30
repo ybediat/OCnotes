@@ -1,0 +1,326 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Traduction espagnole.
+
+    La référence est `values/strings.xml`, en français : elle seule fait foi,
+    elle seule est touchée par le code. Les règles de traduction — clés
+    recopiées telles quelles, paramètres de format conservés, apostrophe
+    échappée, formes de pluriel propres à la langue — sont écrites en tête de
+    `values-en/strings.xml`, qui sert de modèle.
+--><resources>
+    <!-- ================================================================
+         Éléments communs
+
+         Les libellés que plusieurs écrans partagent vivent ici. Les
+         dupliquer par écran ferait diverger deux boutons qui portent le
+         même geste — une traduction sur deux, et rien pour le signaler.
+         ================================================================ -->
+    <string name="action_annuler">Cancelar</string>
+    <string name="action_supprimer">Eliminar</string>
+    <string name="action_deplacer">Mover</string>
+    <string name="action_renommer">Renombrar</string>
+    <string name="action_creer">Crear</string>
+    <string name="action_retour">Volver</string>
+
+    <!-- Un constat, pas une erreur : la vue vient du cache, elle est
+         utilisable, elle peut simplement être incomplète. -->
+    <string name="commun_bandeau_cache">Servidor inaccesible: vista reconstruida desde la caché. Puede estar incompleta.</string>
+
+    <!-- ================================================================
+         Erreurs
+
+         Les catégories de transport ([AUTH], [CONFLICT]…) sont reformulées
+         plutôt que relayées : « HTTP 502 » sur une URL WebDAV n\'apprend rien
+         à personne. Les codes locaux ([NAME_*], [STORAGE_IO]…) viennent du
+         cœur Go, qui refuse de créer un nom que le cache ne saurait écrire.
+         ================================================================ -->
+    <string name="err_auth">Credenciales rechazadas. Compruebe el nombre de usuario y el App Token, que puede haber caducado.</string>
+    <string name="err_conflit">Esta nota se ha modificado en otro dispositivo.</string>
+    <string name="err_introuvable">No se encuentra en el servidor. Es posible que la nota o la carpeta se haya eliminado desde otro dispositivo.</string>
+    <string name="err_http">El servidor no está disponible en este momento.</string>
+    <string name="err_hors_ligne">Servidor inaccesible. Vuelva a intentarlo cuando se restablezca la conexión.</string>
+    <string name="err_inconnue">No se puede realizar la operación.</string>
+
+    <string name="err_nom_vide">El nombre no puede estar vacío.</string>
+    <string name="err_nom_reserve">Este nombre está reservado por el sistema.</string>
+    <!-- %1$d vient de Mobile.maxNameBytes() : la borne n\'est pas recopiée ici. -->
+    <string name="err_nom_trop_long">El nombre es demasiado largo: %1$d bytes como máximo.</string>
+    <!-- %1$s vient de Mobile.forbiddenNameChars(), pour la même raison. -->
+    <string name="err_nom_caracteres_interdits">El nombre no puede contener estos caracteres: %1$s</string>
+    <string name="err_nom_caractere_controle">El nombre contiene un carácter invisible.</string>
+    <string name="err_nom_espaces">El nombre no puede comenzar ni terminar con un espacio.</string>
+    <string name="err_nom_point_final">El nombre no puede terminar con un punto.</string>
+    <string name="err_nom_point_initial">El nombre no puede comenzar con un punto.</string>
+    <string name="err_nom_reserve_windows">Este nombre está reservado por Windows y no se puede utilizar.</string>
+    <string name="err_nom_aucun_libre">Ya hay demasiadas notas con este nombre.</string>
+    <string name="err_racine_protegee">La carpeta de notas no se puede renombrar, mover ni eliminar.</string>
+    <string name="err_deplacement_dans_soi">Una carpeta no se puede mover dentro de sí misma.</string>
+    <string name="err_chemin_vide">No se ha seleccionado ningún elemento.</string>
+    <string name="err_stockage">No se puede escribir en el almacenamiento del dispositivo. Compruebe el espacio disponible.</string>
+    <string name="err_url_serveur_manquante">Introduzca la dirección del servidor.</string>
+    <string name="err_url_serveur_invalide">Dirección del servidor no válida. Debe comenzar por http:// o https://</string>
+    <string name="err_utilisateur_manquant">Introduzca su nombre de usuario.</string>
+
+    <!-- ================================================================
+         Démarrage
+         ================================================================ -->
+    <string name="demarrage_token_refuse">El servidor ya no acepta su App Token. Probablemente ha caducado: cree uno nuevo e introdúzcalo.</string>
+    <string name="demarrage_espace_hors_ligne">Todavía hay que elegir un espacio para las notas y este paso requiere una conexión al servidor. Vuelva a intentarlo cuando se restablezca la conexión.</string>
+
+    <!-- ================================================================
+         Connexion
+
+         L'aide sur les App Tokens n'est pas décorative : personne ne devine
+         qu'il faut créer un jeton dédié plutôt que saisir son mot de passe,
+         et c'est le premier point de blocage d'une application auto-hébergée.
+         Le chemin de menu doit rester celui d'OpenCloud, dans la langue où
+         OpenCloud l'affiche.
+         ================================================================ -->
+    <string name="login_accroche">Sus notas Markdown, en su servidor OpenCloud.</string>
+    <string name="login_serveur_label">Dirección del servidor</string>
+    <string name="login_serveur_exemple">https://cloud.ejemplo.es</string>
+    <string name="login_utilisateur_label">Nombre de usuario</string>
+    <string name="login_token_label">App Token</string>
+    <string name="login_token_afficher">Mostrar token</string>
+    <string name="login_token_masquer">Ocultar token</string>
+    <!-- Un échec réseau ne demande aucune correction : le libellé invite à
+         réessayer, pas à recommencer la saisie. -->
+    <string name="login_connecter">Iniciar sesión</string>
+    <string name="login_reessayer">Volver a intentarlo</string>
+    <string name="login_aide_titre">¿Todavía no tiene un App Token?</string>
+    <string name="login_aide_chemin">En OpenCloud: Ajustes de la cuenta → App Tokens → + New. Asígnele un nombre y una fecha de caducidad. El token solo se muestra una vez, así que cópielo inmediatamente.</string>
+    <string name="login_aide_revocation">No es su contraseña: un App Token se puede revocar sin cambiar sus credenciales.</string>
+
+    <!-- ================================================================
+         Choix de l'espace
+
+         Un espace inutilisable reste visible mais grisé, avec l'explication
+         de son inaptitude : l'utilisateur le voit dans son navigateur web et
+         se demanderait où il est passé.
+         ================================================================ -->
+    <string name="espace_titre">¿Dónde guardar sus notas?</string>
+    <string name="espace_stockage">Espacio de almacenamiento</string>
+    <string name="espace_dossier_titre">Carpeta de notas</string>
+    <string name="espace_chemin_label">Ruta dentro del espacio</string>
+    <string name="espace_chemin_aide">La carpeta se crea si no existe. Deje el campo vacío para utilizar la raíz del espacio, por ejemplo, si sus notas ya están allí.</string>
+    <string name="espace_continuer">Continuar</string>
+    <string name="espace_preparation">Preparando…</string>
+    <string name="espace_virtuel">Conjunto de carpetas compartidas con usted, no un espacio de almacenamiento: no se puede crear una carpeta de notas aquí.</string>
+    <string name="espace_inutilisable">Este espacio no puede alojar notas.</string>
+    <string name="espace_personnel">Su espacio personal</string>
+    <string name="espace_projet">Espacio de proyecto compartido</string>
+    <string name="espace_monte">Carpeta montada</string>
+
+    <!-- ================================================================
+         Synchronisation
+
+         Le résumé décrit ce qui s\'est passé plutôt que de conclure. Une
+         panne réseau donne un état partiel, pas un échec : « 3 notes
+         envoyées, 2 en attente » est exact, là où « échec » ferait croire
+         à une perte.
+         ================================================================ -->
+    <plurals name="sync_notes_envoyees">
+        <item quantity="one">%d nota enviada</item>
+        <item quantity="other">%d notas enviadas</item>
+    </plurals>
+    <plurals name="sync_deplacements">
+        <item quantity="one">%d movimiento</item>
+        <item quantity="other">%d movimientos</item>
+    </plurals>
+    <plurals name="sync_suppressions">
+        <item quantity="one">%d eliminación</item>
+        <item quantity="other">%d eliminaciones</item>
+    </plurals>
+    <plurals name="sync_en_attente">
+        <item quantity="one">%d pendiente</item>
+        <item quantity="other">%d pendientes</item>
+    </plurals>
+    <!-- Séparateur d\'énumération : il change de forme selon la langue. -->
+    <string name="sync_separateur">", "</string>
+    <string name="sync_resume">%1$s.</string>
+    <string name="sync_resume_partiel">%1$s. El servidor ha dejado de responder durante el proceso.</string>
+    <string name="sync_a_jour">Todo está actualizado.</string>
+    <string name="sync_hors_ligne">Servidor inaccesible. No hay nada que enviar por ahora.</string>
+
+    <string name="sync_channel_name">Sincronización</string>
+    <string name="sync_channel_description">Conflictos e incidencias de sincronización de notas</string>
+    <plurals name="sync_conflits_titre">
+        <item quantity="one">Una nota modificada en dos dispositivos</item>
+        <item quantity="other">%d notas modificadas en dos dispositivos</item>
+    </plurals>
+    <string name="sync_conflits_rassurance">Su versión se ha conservado aparte; no se ha perdido nada.</string>
+    <string name="sync_conflits_ligne">\n• %1$s</string>
+    <plurals name="sync_conflits_reste">
+        <item quantity="one">\n• …y %d más</item>
+        <item quantity="other">\n• …y %d más</item>
+    </plurals>
+
+    <!-- ================================================================
+         Navigateur
+         ================================================================ -->
+    <string name="browser_supprime">Se ha eliminado «%1$s».</string>
+    <string name="browser_deplace">Se ha movido «%1$s».</string>
+    <string name="browser_deplacer_titre">Mover «%1$s»</string>
+    <string name="browser_dossier_parent">Carpeta superior</string>
+    <string name="browser_rafraichir">Actualizar y sincronizar</string>
+    <string name="browser_nouvelle_note">Nueva nota</string>
+    <string name="browser_nouveau_dossier">Nueva carpeta</string>
+    <string name="browser_type_dossier">Carpeta</string>
+    <string name="browser_type_note">Nota</string>
+    <string name="browser_actions">Acciones para «%1$s»</string>
+
+    <!-- Recherche. Elle ne porte que sur le dossier affiché : l'invite doit
+         le dire, sinon un résultat manquant passe pour une note perdue. -->
+    <string name="browser_recherche_invite">Buscar en esta carpeta</string>
+    <string name="browser_recherche_invite_tout">Buscar en todas las notas</string>
+    <string name="browser_recherche_effacer">Borrar búsqueda</string>
+    <string name="browser_recherche_vide_titre">Ningún resultado</string>
+    <string name="browser_recherche_vide_detail">Ningún nombre coincide con su búsqueda.</string>
+
+    <!-- Créer une note demande désormais où la ranger. L\'application le
+         choisissait déjà, mais sans le dire. -->
+    <string name="browser_note_dossier">Carpeta</string>
+
+    <!-- Choix de la forme de la page d\'accueil, dans le tiroir. -->
+    <string name="menu_affichage">Vista</string>
+    <string name="menu_mode_arborescence">Por carpetas</string>
+    <string name="menu_mode_liste">Todas las notas</string>
+
+    <!-- La liste plate n\'a pas de dossier courant : l\'invitation à créer une
+         note ne peut pas parler « de ce dossier ». -->
+    <string name="browser_liste_vide_titre">Ninguna nota</string>
+    <string name="browser_liste_vide_detail">Cree su primera nota con el botón situado en la parte inferior de la pantalla.</string>
+
+    <!-- Bouton de tri : son icône montre l'ordre en cours, sa description dit
+         ce qu'un appui ferait — c'est ce dont TalkBack a besoin. -->
+    <string name="browser_tri_par_nom">Ordenar por nombre</string>
+    <string name="browser_tri_par_date">Ordenar por fecha</string>
+
+    <!-- Un dossier vide n'est pas une panne : le dire, et dire quoi faire. -->
+    <string name="browser_vide_titre">Esta carpeta está vacía</string>
+    <string name="browser_vide_detail">Cree una nota con el botón situado en la parte inferior de la pantalla.</string>
+    <string name="browser_vide_cache">No hay nada en la caché para esta carpeta. Aun así puede crear una nota: se enviará la próxima vez que se conecte.</string>
+
+    <string name="browser_note_label">Título</string>
+    <string name="browser_note_aide">El nombre del archivo se deriva del título; se añade un sufijo si el nombre ya está en uso.</string>
+    <string name="browser_dossier_label">Nombre de la carpeta</string>
+    <string name="browser_renommer_label">Nuevo nombre</string>
+
+    <!-- Sous-titre d'une ligne : date, taille, état d'envoi. La date et la
+         taille sont mises en forme par la plateforme, dans la langue et les
+         unités du téléphone ; seul leur assemblage est ici. -->
+    <string name="browser_soustitre_separateur">" · "</string>
+    <string name="browser_en_attente">pendiente de envío</string>
+
+    <!-- Un dossier part avec tout ce qu'il contient : le dire, parce que
+         c'est la seule action de l'application qui détruise des données. -->
+    <string name="dialogue_supprimer_titre">¿Eliminar «%1$s»?</string>
+    <string name="dialogue_supprimer_dossier">La carpeta y todas las notas que contiene se eliminarán del servidor. Esta acción es permanente.</string>
+    <string name="dialogue_supprimer_note">La nota se eliminará del servidor. Esta acción es permanente.</string>
+
+    <!-- ================================================================
+         Menu latéral
+         ================================================================ -->
+    <string name="menu_reglages">Ajustes</string>
+
+    <!-- ================================================================
+         Réglages
+         ================================================================ -->
+    <string name="reglages_compte">Cuenta</string>
+    <string name="reglages_serveur">Servidor</string>
+    <string name="reglages_utilisateur">Usuario</string>
+    <!-- La session a pu être remontée hors connexion : l'application est
+         utilisable, mais le serveur n'a encore rien confirmé. -->
+    <string name="reglages_token_non_confirme">El servidor todavía no ha confirmado su App Token desde el inicio. Mientras tanto, puede consultar y modificar sus notas.</string>
+
+    <string name="reglages_espace_titre">Espacio de notas</string>
+    <string name="reglages_espace">Espacio</string>
+    <string name="reglages_dossier">Carpeta</string>
+    <string name="reglages_racine_espace">raíz del espacio</string>
+
+    <string name="reglages_sync_titre">Sincronización</string>
+    <string name="reglages_en_attente">Operaciones pendientes</string>
+    <string name="reglages_aucune">ninguna</string>
+    <string name="reglages_sync_explication">Se realiza una sincronización automática al volver a la aplicación, poco después de cada modificación y cada hora si la red está disponible.</string>
+    <string name="reglages_sync_en_cours">Sincronizando…</string>
+    <string name="reglages_sync_maintenant">Sincronizar ahora</string>
+
+    <string name="reglages_deconnexion">Cerrar sesión</string>
+    <string name="reglages_deconnexion_explication">Al cerrar sesión se eliminan el token, la configuración y la caché local de este dispositivo. Sus notas permanecen en el servidor.</string>
+    <string name="reglages_deconnexion_titre">¿Cerrar sesión?</string>
+    <string name="reglages_deconnexion_confirmation">Se eliminarán el token, la configuración y la caché local. Sus notas permanecen en el servidor.</string>
+    <!-- Des modifications non envoyées seraient perdues : c'est la seule mise
+         en garde de l'écran, elle compte ce qui est en jeu. -->
+    <plurals name="reglages_deconnexion_attente">
+        <item quantity="one">Advertencia: %d modificación local todavía no se ha enviado al servidor. Al cerrar sesión se elimina la caché y se perderá. Sincronice primero.</item>
+        <item quantity="other">Advertencia: %d modificaciones locales todavía no se han enviado al servidor. Al cerrar sesión se elimina la caché y se perderán. Sincronice primero.</item>
+    </plurals>
+
+    <!-- Le seul événement de synchronisation qui mérite d'interrompre : la
+         version de l'utilisateur a été mise de côté, il doit savoir où la
+         retrouver. -->
+    <string name="reglages_conflits_titre">Modificada en dos dispositivos</string>
+    <string name="reglages_conflits_explication">La versión del servidor era más reciente. Su versión se ha conservado aparte, con un nuevo nombre: no se ha perdido nada:</string>
+    <string name="reglages_conflits_ligne">• %1$s</string>
+    <string name="reglages_compris">Entendido</string>
+
+    <!-- ================================================================
+         Éditeur
+         ================================================================ -->
+    <!-- Un état, pas une alerte : dit ce qui se passe sans laisser croire
+         à une perte. -->
+    <string name="editeur_brouillon">Borrador local, envío programado</string>
+    <string name="editeur_saisie_vide">Escriba aquí…</string>
+    <string name="editeur_illisible_titre">Nota no cargada</string>
+    <string name="editeur_illisible_detail">No se ha podido leer su contenido. No se ha modificado nada: vuelva a abrirla cuando se restablezca la conexión.</string>
+
+    <!-- ================================================================
+         Barre de mise en forme
+
+         Chaque action porte deux textes : le libellé écrit sur le bouton et
+         la description lue par TalkBack. Un libellé qui est une lettre
+         mnémonique se traduit — « G » pour gras devient « B » pour bold —
+         là où un symbole est le même partout et porte translatable="false".
+
+         La liste des actions vient du cœur Go : une action qu'il ajoute
+         sans clé ici s'affiche avec son identifiant brut, pas d'erreur.
+         ================================================================ -->
+    <string name="format_gras_libelle">N</string>
+    <string name="format_gras">Negrita</string>
+    <string name="format_italique_libelle">C</string>
+    <string name="format_italique">Cursiva</string>
+    <string name="format_barre_libelle">T</string>
+    <string name="format_barre">Tachado</string>
+    <string name="format_code">Código en línea</string>
+    <!-- Le bouton porte le mot lui-même : libellé et description confondus. -->
+    <string name="format_lien">Enlace</string>
+    <string name="format_titre1_libelle">H1</string>
+    <string name="format_titre1">Encabezado de nivel 1</string>
+    <string name="format_titre2_libelle">H2</string>
+    <string name="format_titre2">Encabezado de nivel 2</string>
+    <string name="format_titre3_libelle">H3</string>
+    <string name="format_titre3">Encabezado de nivel 3</string>
+    <string name="format_puces">Lista con viñetas</string>
+    <string name="format_numerotee">Lista numerada</string>
+    <string name="format_case">Casilla de verificación</string>
+    <string name="format_citation">Cita</string>
+    <string name="format_bloc_code">Bloque de código</string>
+
+    <!-- ================================================================
+         Aperçu
+
+         Lecture seule : la note s'affiche mise en forme, sans champ de
+         saisie. Un fichier texte, lui, n'est jamais interprété.
+         ================================================================ -->
+    <string name="apercu_activer">Vista previa</string>
+    <string name="apercu_quitter">Editar</string>
+    <!-- Repère posé à la place d'une image : la source n'est pas affichée. -->
+    <string name="apercu_image">Imagen</string>
+    <string name="apercu_vide">Esta nota está vacía.</string>
+    <!--
+        Affiché quand la note contient une suite de caractères sans espace trop
+        longue pour un champ de saisie — typiquement une image collée par
+        l'interface web. Le message dit la cause, pas la mécanique.
+    -->
+    <string name="apercu_lecture_seule">Esta nota contiene un elemento demasiado largo para editarlo aquí. Se ha abierto en modo de solo lectura.</string>
+</resources>

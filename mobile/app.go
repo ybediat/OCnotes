@@ -776,6 +776,49 @@ func (a *App) Rename(itemPath, newName string) (string, error) {
 	return target, nil
 }
 
+// Move déplace une note ou un dossier vers un autre dossier.
+//
+// Même schéma que Rename : le serveur d'abord, et un repli hors connexion qui
+// calcule le même chemin cible que la synchronisation atteindra plus tard —
+// ResolveMove porte cette règle, partagée avec Library.Move pour que les deux
+// chemins ne puissent pas diverger.
+func (a *App) Move(itemPath, targetDir string) (string, error) {
+	a.mu.Lock()
+	lib := a.lib
+	a.mu.Unlock()
+
+	if lib == nil {
+		return "", errNoWorkspace()
+	}
+
+	ctx, cancel := a.ctx()
+	defer cancel()
+
+	newPath, err := lib.Move(ctx, itemPath, targetDir)
+	if err == nil {
+		// Le cache suit, sans rien remettre en file : le serveur est déjà à
+		// jour. `RenameLocal` fait exactement ce qu'il faut ici — c'est le
+		// même geste sur le cache, que le chemin ait changé de dossier ou de
+		// nom.
+		if err := a.cache.RenameLocal(itemPath, newPath); err != nil {
+			return "", err
+		}
+		return newPath, nil
+	}
+	if !errors.Is(err, opencloud.ErrOffline) {
+		return "", err
+	}
+
+	target, err := notes.ResolveMove(itemPath, targetDir)
+	if err != nil {
+		return "", err
+	}
+	if err := a.cache.Rename(itemPath, target); err != nil {
+		return "", err
+	}
+	return target, nil
+}
+
 // Delete supprime une note ou un dossier.
 func (a *App) Delete(itemPath string) error {
 	a.mu.Lock()

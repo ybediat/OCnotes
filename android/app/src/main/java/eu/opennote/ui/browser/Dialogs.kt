@@ -25,6 +25,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import eu.opennote.R
+import eu.opennote.data.FolderEntryDto
 import eu.opennote.data.FolderRefDto
 
 /**
@@ -112,13 +113,6 @@ fun NouvelleNoteDialog(
 ) {
     var titre by remember { mutableStateOf("") }
     var dossier by remember { mutableStateOf(dossierPropose) }
-    var deroule by remember { mutableStateOf(false) }
-
-    // Le dossier de notes a un chemin vide et un nom vide : la façade ne
-    // choisit pas son libellé, c'est l'écran qui le connaît.
-    val libelle: (FolderRefDto) -> String = { if (it.path.isEmpty()) nomRacine else it.path }
-    val choix = dossiers.ifEmpty { listOf(FolderRefDto()) }
-    val libelleCourant = choix.firstOrNull { it.path == dossier }?.let(libelle) ?: nomRacine
 
     AlertDialog(
         onDismissRequest = onFermer,
@@ -133,37 +127,13 @@ fun NouvelleNoteDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                ExposedDropdownMenuBox(
-                    expanded = deroule,
-                    onExpandedChange = { deroule = it },
+                SelecteurDossier(
+                    dossiers = dossiers,
+                    nomRacine = nomRacine,
+                    valeur = dossier,
+                    onValeur = { dossier = it },
                     modifier = Modifier.padding(top = 12.dp),
-                ) {
-                    OutlinedTextField(
-                        value = libelleCourant,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text(stringResource(R.string.browser_note_dossier)) },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = deroule) },
-                        modifier = Modifier
-                            .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                            .fillMaxWidth(),
-                    )
-                    ExposedDropdownMenu(
-                        expanded = deroule,
-                        onDismissRequest = { deroule = false },
-                        modifier = Modifier.heightIn(max = 280.dp),
-                    ) {
-                        choix.forEach { ref ->
-                            DropdownMenuItem(
-                                text = { Text(libelle(ref)) },
-                                onClick = {
-                                    dossier = ref.path
-                                    deroule = false
-                                },
-                            )
-                        }
-                    }
-                }
+                )
 
                 Text(
                     text = stringResource(R.string.browser_note_aide),
@@ -188,6 +158,112 @@ fun NouvelleNoteDialog(
             TextButton(onClick = onFermer) { Text(stringResource(R.string.action_annuler)) }
         },
     )
+}
+
+/**
+ * Déplace une note vers un autre dossier.
+ *
+ * Réservé aux notes : un dossier porte la même action dans son menu, mais son
+ * déplacement suit une règle de cache différente — le renommage local d'un
+ * dossier ne remet à jour que ses notes déjà chargées, pas celles jamais
+ * ouvertes — et n'est pas couvert ici.
+ *
+ * Le dossier actuel de la note reste sélectionnable dans la liste : le
+ * confirmer ne fait rien, plutôt que d'obliger l'utilisateur à en choisir un
+ * autre pour fermer la boîte.
+ */
+@Composable
+fun DeplacerDialog(
+    entree: FolderEntryDto,
+    dossiers: List<FolderRefDto>,
+    nomRacine: String,
+    onValider: (dossier: String) -> Unit,
+    onFermer: () -> Unit,
+) {
+    val dossierActuel = entree.path.substringBeforeLast('/', "")
+    var dossier by remember { mutableStateOf(dossierActuel) }
+
+    AlertDialog(
+        onDismissRequest = onFermer,
+        title = { Text(stringResource(R.string.browser_deplacer_titre, entree.display)) },
+        text = {
+            SelecteurDossier(
+                dossiers = dossiers,
+                nomRacine = nomRacine,
+                valeur = dossier,
+                onValeur = { dossier = it },
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onValider(dossier)
+                    onFermer()
+                },
+                enabled = dossier != dossierActuel,
+            ) {
+                Text(stringResource(R.string.action_deplacer))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onFermer) { Text(stringResource(R.string.action_annuler)) }
+        },
+    )
+}
+
+/**
+ * Menu déroulant de choix d'un dossier, partagé par la création et le
+ * déplacement.
+ *
+ * Le dossier de notes a un chemin vide et un nom vide dans [FolderRefDto] : la
+ * façade ne choisit pas son libellé, puisque l'écran l'affiche déjà en titre.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SelecteurDossier(
+    dossiers: List<FolderRefDto>,
+    nomRacine: String,
+    valeur: String,
+    onValeur: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var deroule by remember { mutableStateOf(false) }
+
+    val libelle: (FolderRefDto) -> String = { if (it.path.isEmpty()) nomRacine else it.path }
+    val choix = dossiers.ifEmpty { listOf(FolderRefDto()) }
+    val libelleCourant = choix.firstOrNull { it.path == valeur }?.let(libelle) ?: nomRacine
+
+    ExposedDropdownMenuBox(
+        expanded = deroule,
+        onExpandedChange = { deroule = it },
+        modifier = modifier,
+    ) {
+        OutlinedTextField(
+            value = libelleCourant,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(stringResource(R.string.browser_note_dossier)) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = deroule) },
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth(),
+        )
+        ExposedDropdownMenu(
+            expanded = deroule,
+            onDismissRequest = { deroule = false },
+            modifier = Modifier.heightIn(max = 280.dp),
+        ) {
+            choix.forEach { ref ->
+                DropdownMenuItem(
+                    text = { Text(libelle(ref)) },
+                    onClick = {
+                        onValeur(ref.path)
+                        deroule = false
+                    },
+                )
+            }
+        }
+    }
 }
 
 /**

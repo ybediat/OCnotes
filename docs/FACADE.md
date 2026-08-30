@@ -100,6 +100,7 @@ sur l'instance : `app.stateJSON()`. La première lettre passe en minuscule.
 | `CreateNoteJSON(dir, name, content string) (string, error)` | crée une note |
 | `CreateFolderJSON(dir, name string) (string, error)` | crée un sous-dossier |
 | `Rename(itemPath, newName string) (string, error)` | renomme, renvoie le nouveau chemin |
+| `Move(itemPath, targetDir string) (string, error)` | déplace vers un autre dossier, renvoie le nouveau chemin |
 | `Delete(itemPath string) error` | supprime (récursif sur un dossier) |
 | `SuggestName(title string) string` | nom de fichier valide depuis un titre |
 | `TitleOf(name, content string) string` | titre à afficher |

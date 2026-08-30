@@ -73,6 +73,7 @@ private sealed interface Dialogue {
     data object NouvelleNote : Dialogue
     data object NouveauDossier : Dialogue
     data class Renommer(val entree: FolderEntryDto) : Dialogue
+    data class Deplacer(val entree: FolderEntryDto) : Dialogue
     data class Supprimer(val entree: FolderEntryDto) : Dialogue
 }
 
@@ -244,6 +245,14 @@ fun BrowserScreen(
                             afficherDossier = etat.enListePlate,
                             onClick = { viewModel.ouvrir(entree) },
                             onRenommer = { dialogue = Dialogue.Renommer(entree) },
+                            // Réservé aux notes : déplacer un dossier suit
+                            // une règle de cache différente, non couverte
+                            // par DeplacerDialog.
+                            onDeplacer = if (entree.isDir) {
+                                null
+                            } else {
+                                { dialogue = Dialogue.Deplacer(entree) }
+                            },
                             onSupprimer = { dialogue = Dialogue.Supprimer(entree) },
                         )
                     }
@@ -281,6 +290,14 @@ fun BrowserScreen(
             valeurInitiale = d.entree.display,
             libelleValidation = stringResource(R.string.action_renommer),
             onValider = { nom -> viewModel.renommer(d.entree, nom) },
+            onFermer = { dialogue = null },
+        )
+
+        is Dialogue.Deplacer -> DeplacerDialog(
+            entree = d.entree,
+            dossiers = etat.dossiers,
+            nomRacine = etat.nomRacine,
+            onValider = { dossier -> viewModel.deplacer(d.entree, dossier) },
             onFermer = { dialogue = null },
         )
 
@@ -371,6 +388,9 @@ private fun LigneEntree(
     afficherDossier: Boolean,
     onClick: () -> Unit,
     onRenommer: () -> Unit,
+    // `null` retire l'action du menu plutôt que de l'y laisser inerte —
+    // c'est le cas d'un dossier, que DeplacerDialog ne couvre pas.
+    onDeplacer: (() -> Unit)?,
     onSupprimer: () -> Unit,
 ) {
     var menuOuvert by remember { mutableStateOf(false) }
@@ -431,6 +451,15 @@ private fun LigneEntree(
                             onRenommer()
                         },
                     )
+                    onDeplacer?.let { deplacer ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_deplacer)) },
+                            onClick = {
+                                menuOuvert = false
+                                deplacer()
+                            },
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.action_supprimer)) },
                         onClick = {

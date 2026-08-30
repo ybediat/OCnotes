@@ -332,8 +332,12 @@ func (l *Library) Rename(ctx context.Context, itemPath, newName string) (string,
 	return target, nil
 }
 
-// Move déplace une note ou un dossier vers un autre dossier.
-func (l *Library) Move(ctx context.Context, itemPath, targetDir string) (string, error) {
+// ResolveMove calcule le chemin cible d'un déplacement, sans toucher au
+// réseau : mêmes règles que Move, dans le même esprit que ResolveRename.
+//
+// Exposé pour que la façade puisse déplacer hors connexion et aboutir au même
+// chemin que le fera plus tard la synchronisation.
+func ResolveMove(itemPath, targetDir string) (string, error) {
 	itemPath = CleanPath(itemPath)
 	if itemPath == "" {
 		return "", fmt.Errorf("notes: [%s] la racine ne peut pas être déplacée", CodeRootImmutable)
@@ -344,7 +348,17 @@ func (l *Library) Move(ctx context.Context, itemPath, targetDir string) (string,
 		return "", fmt.Errorf("notes: [%s] %q ne peut pas être déplacé dans lui-même", CodeMoveIntoSelf, itemPath)
 	}
 
-	target := path.Join(targetDir, path.Base(itemPath))
+	return path.Join(targetDir, path.Base(itemPath)), nil
+}
+
+// Move déplace une note ou un dossier vers un autre dossier.
+func (l *Library) Move(ctx context.Context, itemPath, targetDir string) (string, error) {
+	target, err := ResolveMove(itemPath, targetDir)
+	if err != nil {
+		return "", err
+	}
+
+	itemPath = CleanPath(itemPath)
 	if target == itemPath {
 		return itemPath, nil
 	}

@@ -26,6 +26,7 @@
          ================================================================ -->
     <string name="action_annuler">Annuler</string>
     <string name="action_supprimer">Supprimer</string>
+    <string name="action_deplacer">Déplacer</string>
     <string name="action_renommer">Renommer</string>
     <string name="action_creer">Créer</string>
     <string name="action_retour">Retour</string>
@@ -171,6 +172,9 @@
          Navigateur
          ================================================================ -->
     <string name="browser_supprime">« %1$s » supprimé.</string>
+    <string name="browser_deplace">« %1$s » déplacé.</string>
+    <!-- Titre de la boîte de déplacement, avec le nom de la note concernée. -->
+    <string name="browser_deplacer_titre">Déplacer « %1$s »</string>
     <string name="browser_dossier_parent">Dossier parent</string>
     <string name="browser_rafraichir">Rafraîchir et synchroniser</string>
     <string name="browser_nouvelle_note">Nouvelle note</string>

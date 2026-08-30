@@ -345,6 +345,26 @@ class BrowserViewModel(
         }
     }
 
+    /**
+     * Déplace une note vers un autre dossier.
+     *
+     * `entree.path` reste celui d'avant le déplacement : si l'utilisateur
+     * regardait ce dossier en arborescence, la note doit en disparaître au
+     * rechargement, ce que le nouveau chemin lu depuis le serveur garantit
+     * déjà — inutile de la retirer de la liste ici.
+     */
+    fun deplacer(entree: FolderEntryDto, dossier: String) {
+        viewModelScope.launch {
+            try {
+                repository.move(entree.path, dossier)
+                recharger()
+                _evenements.value = BrowserEvent.Message(Texte.de(R.string.browser_deplace, entree.display))
+            } catch (e: OpenNoteException) {
+                _evenements.value = BrowserEvent.Message(e.texte())
+            }
+        }
+    }
+
     fun supprimer(entree: FolderEntryDto) {
         viewModelScope.launch {
             try {
