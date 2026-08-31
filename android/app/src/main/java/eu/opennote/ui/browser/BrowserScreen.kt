@@ -18,7 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
-import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
@@ -470,7 +470,7 @@ private fun LigneEntree(
             }
         },
         leadingContent = {
-            // Un document ne se distingue pas par la seule teinte : une couleur
+            // Un document en lecture seule ne se distingue pas par la seule teinte : une couleur
             // ne se voit ni en daltonisme, ni sous un écran au soleil, ni pour
             // TalkBack. L'icône et la description changent donc avec elle.
             //
@@ -481,7 +481,7 @@ private fun LigneEntree(
                 imageVector = when {
                     entree.isDir -> Icons.Default.Folder
                     document -> Icons.AutoMirrored.Filled.Article
-                    else -> Icons.Default.Description
+                    else -> Icons.Default.EditNote
                 },
                 contentDescription = stringResource(
                     when {

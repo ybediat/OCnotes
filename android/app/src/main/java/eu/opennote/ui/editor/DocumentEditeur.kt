@@ -100,8 +100,15 @@ internal fun monterFenetre(
     val marge = budget - longueurSelection
     val margeAvant = marge / 2
     val margeApres = marge - margeAvant
-    val retoursAvant = CIBLE_RETOURS_EDITEUR / 2
-    val retoursApres = CIBLE_RETOURS_EDITEUR - retoursAvant
+
+    // Le contexte en retours se compte sur ce qui RESTE après la sélection.
+    // Sans cette soustraction, une sélection portant déjà douze retours en
+    // recevait quatre de plus, et la fenêtre naissait au-dessus de sa limite.
+    val budgetRetours = (MAX_RETOURS_EDITEUR - compterRetours(document, debutSelection, finSelection))
+        .coerceAtLeast(0)
+    val cibleRetours = min(CIBLE_RETOURS_EDITEUR, budgetRetours)
+    val retoursAvant = cibleRetours / 2
+    val retoursApres = cibleRetours - retoursAvant
 
     val debutBrut = etendreAvant(
         document = document,
@@ -115,8 +122,20 @@ internal fun monterFenetre(
         maxUtf16 = margeApres,
         maxRetours = retoursApres,
     )
-    val debutFenetre = alignerDebutMot(document, debutBrut)
-    val finFenetre = alignerFinMot(document, finBrute)
+
+    // L'alignement sur les mots élargit la fenêtre, donc il peut la faire
+    // sortir de ses budgets — c'est arrivé, et le symptôme n'était pas là où
+    // on le cherchait : une fenêtre de 650 unités demande son propre
+    // rééquilibrage au premier déplacement du curseur, ce qui la remonte, ce
+    // qui vide l'historique d'annulation du champ. Un confort de découpe ne
+    // passe donc jamais devant une borne : la borne brute reprend la main.
+    val debutAligne = alignerDebutMot(document, debutBrut)
+    val debutFenetre =
+        if (depasseLesBudgets(document, debutAligne, finBrute)) debutBrut else debutAligne
+
+    val finAlignee = alignerFinMot(document, finBrute)
+    val finFenetre =
+        if (depasseLesBudgets(document, debutFenetre, finAlignee)) finBrute else finAlignee
 
     return monterIntervalleActif(
         document = document,
@@ -157,7 +176,7 @@ internal fun etendreFenetrePourSelection(
 
     val longueurActuelle = finActif - debutActif
     val budgetUtf16 = (MAX_UTF16_EDITEUR - longueurActuelle).coerceAtLeast(0)
-    val retoursActuels = document.substring(debutActif, finActif).count { it == '\n' }
+    val retoursActuels = compterRetours(document, debutActif, finActif)
     val budgetRetours = (MAX_RETOURS_EDITEUR - retoursActuels).coerceAtLeast(0)
 
     val budgetAvantUtf16 = when {
@@ -247,14 +266,27 @@ private fun monterIntervalleActif(
 }
 
 /** Le rééquilibrage est rare : uniquement après franchissement d'une borne. */
-internal fun doitReequilibrer(texte: String): Boolean {
-    if (texte.length > MAX_UTF16_EDITEUR) return true
+internal fun doitReequilibrer(texte: String): Boolean =
+    depasseLesBudgets(texte, 0, texte.length)
 
+/**
+ * La règle des deux budgets, sur un intervalle du document.
+ *
+ * Elle vit ici, en un seul endroit, parce que le montage d'une fenêtre et la
+ * décision de la rééquilibrer doivent être la **même** règle. Les écrire deux
+ * fois, c'est laisser naître une fenêtre que le test suivant refuse aussitôt.
+ */
+private fun depasseLesBudgets(document: String, debut: Int, fin: Int): Boolean {
+    if (fin - debut > MAX_UTF16_EDITEUR) return true
+    return compterRetours(document, debut, fin) > MAX_RETOURS_EDITEUR
+}
+
+private fun compterRetours(document: String, debut: Int, fin: Int): Int {
     var retours = 0
-    for (caractere in texte) {
-        if (caractere == '\n' && ++retours > MAX_RETOURS_EDITEUR) return true
+    for (i in debut until fin) {
+        if (document[i] == '\n') retours++
     }
-    return false
+    return retours
 }
 
 private fun decouperIntervalle(

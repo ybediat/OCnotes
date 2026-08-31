@@ -345,6 +345,91 @@ class DocumentEditeurTest {
         assertEquals(TextRange(50, 80), apres.valeur.selection)
     }
 
+    /*
+     * Les trois tests qui suivent portent la même règle : une fenêtre qui vient
+     * d'être montée ne doit jamais demander son propre rééquilibrage. Sinon le
+     * moindre déplacement du curseur la remonte, et l'historique d'annulation du
+     * champ est vidé à chaque fois.
+     */
+
+    @Test
+    fun fenetreMonteeRespecteLaLongueurDure() {
+        // Des mots de cinquante caractères : toute borne tombe au milieu d'un
+        // mot, donc l'alignement cherche un séparateur de part et d'autre.
+        val document = ("m".repeat(49) + " ").repeat(200)
+        val montage = monterFenetre(document, 1_000, 1_000 + MAX_UTF16_EDITEUR)
+        val active = montage.tranches[montage.focus]
+
+        assertTrue(
+            "fenêtre de ${active.fin - active.debut} unités",
+            active.fin - active.debut <= MAX_UTF16_EDITEUR,
+        )
+        assertPavage(document, montage.tranches)
+    }
+
+    @Test
+    fun fenetreMonteeRespecteLeBudgetDeRetours() {
+        val document = "l\n".repeat(400)
+        // Une sélection de douze retours, soit tout ce qu'un champ peut porter.
+        val debut = 100
+        val montage = monterFenetre(document, debut, debut + 2 * MAX_RETOURS_EDITEUR)
+        val active = montage.tranches[montage.focus]
+        val retours = active.texteDe(document).count { it == '\n' }
+
+        assertTrue("fenêtre de $retours retours", retours <= MAX_RETOURS_EDITEUR)
+        assertPavage(document, montage.tranches)
+    }
+
+    @Test
+    fun fenetreMonteeNeSeReequilibrePasAussitot() {
+        val motsLongs = ("m".repeat(49) + " ").repeat(200)
+        val lignesCourtes = "l\n".repeat(400)
+
+        val cas = listOf(
+            Triple(motsLongs, 1_000, 1_000 + MAX_UTF16_EDITEUR),
+            Triple(lignesCourtes, 100, 100 + 2 * MAX_RETOURS_EDITEUR),
+            Triple(motsLongs, 512, 512),
+            Triple(lignesCourtes, 0, 0),
+        )
+
+        cas.forEach { (document, debut, fin) ->
+            val montage = monterFenetre(document, debut, fin)
+            val texte = montage.tranches[montage.focus].texteDe(document)
+            assertFalse(
+                "fenêtre de ${texte.length} unités, ${texte.count { it == '\n' }} retours",
+                doitReequilibrer(texte),
+            )
+        }
+    }
+
+    @Test
+    fun agrandissementNeDepassePasLesBudgets() {
+        listOf(("m".repeat(49) + " ").repeat(200), "l\n".repeat(400)).forEach { document ->
+            val montage = monterFenetre(document, 1_000)
+            val active = montage.tranches[montage.focus]
+
+            // Les deux poignées sur les deux bords : le cas qui charge le plus
+            // de contexte d'un coup.
+            val agrandi = etendreFenetrePourSelection(
+                document = document,
+                debutActif = active.debut,
+                finActif = active.fin,
+                selectionDebut = active.debut,
+                selectionFin = active.fin,
+            )
+
+            val texte = if (agrandi == null) {
+                active.texteDe(document)
+            } else {
+                agrandi.tranches[agrandi.focus].texteDe(document)
+            }
+            assertFalse(
+                "fenêtre de ${texte.length} unités, ${texte.count { it == '\n' }} retours",
+                doitReequilibrer(texte),
+            )
+        }
+    }
+
     private fun assertPavage(document: String, tranches: List<TrancheEditeur>) {
         assertTrue(tranches.isNotEmpty())
         assertEquals(0, tranches.first().debut)

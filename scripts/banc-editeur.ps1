@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Ce script existe parce qu'un chiffre de performance sans protocole ne vaut
-    rien, et parce que le protocole a trois pièges qui produisent des résultats
+    rien, et parce que le protocole a sept pièges qui produisent des résultats
     faux mais plausibles. Les relevés qu'il produit sont ceux de la section
     7 bis de docs/ARCHITECTURE.md.
 
@@ -27,7 +27,7 @@
     la colonne 1 est un identifiant de vsync, pas un horodatage, et la prendre
     pour IntendedVsync donne des durées de quarante heures.
 
-    Les cinq pièges, chacun payé une fois :
+    Les sept pièges, chacun payé une fois :
 
     1. Un tap perdu ne se voit pas dans les résultats. Le thread UI reste
        bloqué assez longtemps pour que l'appui soit avalé ; on mesure alors le
@@ -53,13 +53,29 @@
        pièce. L'éditeur sature le thread UI **sans que personne ne touche à
        rien**.
 
-       5. Le champ de saisie de l'éditeur ressemble à la barre de recherche.
-          Depuis la virtualisation, l'éditeur compose un petit EditText dès
-          qu'on touche le texte — mince, comme une barre de recherche. Le banc
-          a pris l'éditeur pour la liste, y a joué « tout sélectionner,
-          supprimer », puis tapé son mot-clé : deux cents caractères détruits
-          dans un vrai document, enregistrés et poussés sur le serveur. Voir
-          Get-ChampRecherche et Test-RechercheFocalisee.
+    5. La première passe après un `adb install` est la pire, et de loin.
+       Le profil ART vient d'être effacé : la phase qui précède le travail
+       de l'interface passe de 6-9 ms à 17,7 ms, et la frappe de 25 à 36 ms
+       de médiane. Rien n'y paraît — les chiffres restent plausibles. Faire
+       une passe de chauffe après toute installation, et ne jamais comparer
+       une mesure d'après-installation aux autres.
+
+    6. `input tap` et `input text` peuvent cesser d'agir sans rien dire.
+       Constaté le 31 août 2026 après une longue session d'automatisation :
+       l'application au premier plan, l'écran allumé, l'arbre d'accessibilité
+       normal, et pourtant aucun tap ne prenait — ni sur une ligne de liste, ni
+       sur le champ de recherche. `input motionevent DOWN/UP`, `input keyevent`
+       et `input keyboard text` fonctionnaient dans la même seconde.
+       Diagnostic : ne jamais conclure « l'application ne répond pas » sans
+       avoir essayé une autre forme d'injection.
+
+    7. Le champ de saisie de l'éditeur ressemble à la barre de recherche.
+       Depuis la virtualisation, l'éditeur compose un petit EditText dès
+       qu'on touche le texte — mince, comme une barre de recherche. Le banc
+       a pris l'éditeur pour la liste, y a joué « tout sélectionner,
+       supprimer », puis tapé son mot-clé : deux cents caractères détruits
+       dans un vrai document, enregistrés et poussés sur le serveur. Voir
+       Get-ChampRecherche et Test-RechercheFocalisee.
 
 .PARAMETER Note
     Nom de la note à mesurer, tel qu'il s'affiche dans la liste.

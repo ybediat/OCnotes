@@ -739,9 +739,14 @@ virtualisé dessine la note entière moins cher que le monolithique ne dessinait
 vingt lignes.
 
 Les passes tardives sont systématiquement meilleures que les premières — 0,75
-contre 1,34 ms de dessin, 12 % d'images en retard contre 32 %. L'écart n'a pas
-été instruit ; il ne change pas la conclusion, les deux extrémités tenant le
-budget avec plus d'un ordre de grandeur de marge.
+contre 1,34 ms de dessin, 12 % d'images en retard contre 32 %. La cause s'est
+montrée d'elle-même : **la première passe après un `adb install` est toujours
+la pire**, et l'écart se voit surtout sur la phase qui précède le travail de
+l'interface — 17,7 ms contre 6 à 9 ms d'ordinaire, sur une application dont le
+profil ART vient d'être effacé. Conséquence de protocole : une mesure prise
+juste après une installation n'est pas comparable aux autres, et une passe de
+chauffe doit précéder toute campagne. Cela ne change pas la conclusion, les
+deux extrémités tenant le budget avec plus d'un ordre de grandeur de marge.
 
 **La frappe est trente fois moins chère, et reste au-dessus de sa cible.**
 

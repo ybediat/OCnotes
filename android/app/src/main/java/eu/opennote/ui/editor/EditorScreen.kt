@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.Icons
@@ -247,11 +248,32 @@ private fun EditeurVirtualise(
             ): Float = calculerDistanceMiseEnVue(offset, size, containerSize)
         }
     }
+    val etatListe = rememberLazyListState()
 
     CompositionLocalProvider(LocalBringIntoViewSpec provides miseEnVue) {
         LazyColumn(
+            state = etatListe,
             contentPadding = PaddingValues(vertical = 8.dp),
-            modifier = modifier,
+            // Sous la dernière tranche, il n'y a plus d'élément — donc plus rien
+            // qui reçoive un toucher. Sur une note de quinze lignes, la moitié
+            // basse de l'écran ne répondait pas : le champ monolithique, lui,
+            // occupait toute la hauteur et se focalisait où qu'on tape.
+            //
+            // Ce détecteur est posé au-dessus de la liste, donc il ne voit que
+            // les touchers qu'aucune tranche n'a consommés. Le défilement, lui,
+            // consomme ses propres gestes et annule celui-ci.
+            modifier = modifier.pointerInput(tranches.lastIndex) {
+                detectTapGestures { position ->
+                    val dernier = etatListe.layoutInfo.visibleItemsInfo.lastOrNull()
+                        ?: return@detectTapGestures
+                    val sousLeTexte = toucheSousLeTexte(
+                        positionY = position.y,
+                        basDernierElement = (dernier.offset + dernier.size).toFloat(),
+                        dernierEstFinDuDocument = dernier.index == tranches.lastIndex,
+                    )
+                    if (sousLeTexte) onActiver(document.length)
+                }
+            },
         ) {
             itemsIndexed(
                 items = tranches,
@@ -279,6 +301,20 @@ private fun EditeurVirtualise(
         }
     }
 }
+
+/**
+ * Un toucher tombé dans le vide, sous la fin du document, ouvre-t-il la saisie ?
+ *
+ * Deux conditions, et la seconde est celle qu'on oublie : il ne suffit pas
+ * d'être sous le dernier élément **visible**, encore faut-il que celui-ci soit
+ * le dernier du document. Sans elle, un toucher dans la marge d'une note de
+ * 295 ko enverrait le curseur à la fin du fichier.
+ */
+internal fun toucheSousLeTexte(
+    positionY: Float,
+    basDernierElement: Float,
+    dernierEstFinDuDocument: Boolean,
+): Boolean = dernierEstFinDuDocument && positionY > basDernierElement
 
 /**
  * Laisse le curseur tranquille dans les deux tiers supérieurs de la liste.

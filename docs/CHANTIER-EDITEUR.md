@@ -141,7 +141,9 @@ dans l'usage.
 - tranches inactives bornées à 640 unités UTF-16 ou 12 retours à la ligne ;
 - fenêtre initiale ciblée à 192 unités ou 4 retours, centrée sur le curseur ;
 - bords avancés ou reculés jusqu'à un séparateur proche pour ne pas couper un
-  mot en usage normal ;
+  mot en usage normal — **mais jamais au-delà des deux budgets** : l'alignement
+  est un confort, la borne est une limite, et quand les deux s'opposent c'est la
+  borne brute qui reprend la main ;
 - marge entre cible et limite dure, afin de laisser plusieurs centaines de
   caractères de frappe avant un rééquilibrage ;
 - agrandissement du champ actif jusqu'à 640 unités ou 12 retours lorsqu'une
@@ -152,6 +154,19 @@ dans l'usage.
 Un mot de plus de 64 unités autour d'une borne autorise encore la coupure dure.
 Ce cas ne parvient normalement pas à l'éditeur : `PrepareEditJSON` ouvre en
 lecture seule les mots démesurés qui menacent le moteur de mise en page.
+
+**Une fenêtre qui vient de naître ne doit jamais demander son rééquilibrage.**
+C'est l'invariant que le montage et `doitReequilibrer` partagent, et il tenait
+mal : l'alignement sur les mots pouvait rendre une fenêtre de 650 unités, et le
+contexte de quatre retours s'ajoutait à une sélection qui en portait déjà douze,
+pour un total de 17. Le symptôme n'était ni un plantage ni un ralentissement
+visible, mais un **remontage à chaque déplacement du curseur** — donc un
+historique d'annulation vidé sans que rien ne le dise.
+
+Les deux budgets s'énoncent désormais une seule fois, sur un intervalle du
+document, et le montage consulte exactement la règle que l'éditeur appliquera
+ensuite. Les écrire deux fois, c'est laisser naître une fenêtre que le test
+suivant refuse.
 
 ### 3.2 État, données et opérations
 
@@ -208,8 +223,16 @@ au montage abandonné qui rendait chaque tranche comme un document Markdown.
 - compilation debug, compilation release et lint passent ;
 - l'APK intégrée a été installée sur le Redmi Note 12 ;
 - **mesurée sur cet appareil le 31 août 2026** : défilement acquis et reproduit
-  sur deux passes, frappe encore au-dessus de sa cible — section 6, relevés en
-  7 bis de `docs/ARCHITECTURE.md`.
+  sur huit passes, frappe encore au-dessus de sa cible — section 6, relevés en
+  7 bis de `docs/ARCHITECTURE.md` ;
+- **quatre tests de plus** sur les deux budgets d'une fenêtre au montage, dont
+  trois vus échouer sur le défaut réel — 650 unités et 17 retours — et le
+  quatrième sur une violation injectée dans le chemin d'agrandissement ;
+- **quatre tests de sûreté** sur les formes de texte de la section 6, tous vus
+  échouer quand la matérialisation perd un caractère ;
+- **quatre tests sur le toucher dans le vide**, dont un vu échouer quand on
+  retire la condition « le dernier élément visible est aussi le dernier du
+  document ». 51 tests JVM au total.
 
 Distinguer ce que chaque ligne établit : les tests JVM disent que le découpage
 est juste, la compilation qu'il tient, l'appareil qu'il s'affiche, et le banc
@@ -222,7 +245,37 @@ Le dernier contrôle manuel consiste à confirmer sur cette APK que le clavier
 reste ouvert pendant un rééquilibrage réel, puis qu'une poignée peut continuer
 son glissé après l'agrandissement sans saut visuel gênant.
 
-### 3.6 Limite encore assumée : sélection globale
+### 3.6 Le vide sous la fin du document — corrigé
+
+`EditeurVirtualise` ne compose que les tranches. Sous la dernière, la
+`LazyColumn` n'a plus d'élément, donc plus rien qui reçoive un toucher. Arrivé
+en bas d'une note, on touche sous la dernière ligne et il ne se passe rien : ni
+curseur, ni clavier. Le champ monolithique, lui, occupait toute la hauteur et se
+focalisait où qu'on tape.
+
+Le correctif est un détecteur de toucher posé **au-dessus** de la liste, dans le
+même `Modifier` : il ne voit que les gestes qu'aucune tranche n'a consommés, et
+le défilement annule les siens. `toucheSousLeTexte` décide, et sa seconde
+condition est celle qu'on oublie — il ne suffit pas d'être sous le dernier
+élément *visible*, encore faut-il qu'il soit le dernier du *document*. Sans
+elle, un toucher dans une marge au milieu d'une note de 295 ko enverrait le
+curseur à la fin du fichier. Quatre tests JVM tiennent la règle, dont un vu
+échouer quand on retire cette condition.
+
+Vérifié sur appareil, note d'essai portant une image : défilé jusqu'à la fin,
+touché dans le vide sous la dernière ligne, le clavier se lève et le caractère
+tapé arrive bien à la fin du document. Le défilement d'une note de 295 ko et le
+toucher sur le texte restent intacts.
+
+**Une correction à ce sujet, parce qu'elle vaut plus que le correctif.** Ce
+défaut avait d'abord été décrit comme « sur une note courte, la moitié basse de
+l'écran est inerte », sur la foi d'un toucher resté sans effet à mi-hauteur. La
+capture d'écran l'a démenti : le texte de cette note descendait jusqu'en bas, le
+toucher tombait dessus, et son échec venait de l'injection ADB, capricieuse ce
+jour-là — piège n° 6 du banc. Le défaut existait bel et bien, mais pas là où on
+l'avait vu. Un symptôme observé une fois n'est pas un diagnostic.
+
+### 3.7 Limite encore assumée : sélection globale
 
 Ce palier rend la sélection transverse aux petits contextes initiaux, mais pas
 encore au document entier : elle s'arrête à la fenêtre dure de 640 unités
@@ -537,16 +590,53 @@ Les colonnes décisives sont `PerformTraversalsStart → DrawStart` et
 `DrawStart → SyncQueued`. Vérifier l'écran avant et après chaque mesure : un tap
 perdu peut produire un chiffre plausible sur le mauvais écran.
 
-Ajouter quatre cas de sûreté au corpus :
+Ajouter quatre cas de sûreté au corpus. La mesure de performance ne remplace
+pas la preuve de données : après chaque cas modifié, relire le fichier écrit et
+vérifier l'aller-retour exact, images comprises.
 
-- Markdown d'un seul paragraphe très long ;
-- liste ou bloc de code de plus de 500 lignes ;
-- texte avec accents, emoji et images en ligne allégées ;
-- gros fichier `.txt`.
+**Deux niveaux de preuve, à ne pas confondre.** `CasDeSureteTest` éprouve la
+machine d'édition Kotlin sur les quatre formes de texte, sur la JVM, et les
+quatre tests ont été vus échouer quand la matérialisation perd un caractère.
+Mais il ne traverse ni `prepareEdit`, ni `restoreImages`, ni `writeNote` : le
+câblage du `ViewModel` n'est pas testable sur la JVM, `OpenNoteRepository`
+étant une classe finale dont les méthodes appellent directement le binding
+gomobile. Ce maillon-là ne se vérifie que sur un vrai fichier.
 
-La mesure de performance ne remplace pas la preuve de données : après chaque
-cas modifié, relire le fichier écrit et vérifier l'aller-retour exact, images
-comprises.
+| cas | machine d'édition (JVM) | fichier relu (appareil) |
+|---|---|---|
+| paragraphe unique démesuré | ✅ | manque une note d'essai |
+| liste ou bloc de code > 500 lignes | ✅ | manque une note d'essai |
+| accents, emoji, images allégées | ✅ | ✅ |
+| gros fichier `.txt` | ✅ | ✅ |
+
+Le `.txt` de 292 026 octets, le 31 août 2026 : un caractère inséré, enregistré,
+puis le fichier relu depuis le cache — 292 027 octets, divergence unique au
+caractère 404, les 291 622 octets suivants identiques. Le caractère retiré, la
+note retrouve son empreinte d'origine. La note de 295 ko a fait le même
+aller-retour deux fois, à quarante caractères.
+
+**Le cas des images est passé, et c'était le seul qui comptait vraiment.** Une
+note de 3 793 652 octets portant une unique charge `data:image/png;base64,…` de
+3 792 854 octets, insérée depuis l'éditeur web d'OpenCloud. Réseau coupé pendant
+l'essai, pour qu'un éventuel dégât ne parte pas sur le serveur.
+
+- l'éditeur l'ouvre en saisie et affiche `![](opennote-image:0)` à la place de
+  l'image : l'extraction fait son travail ;
+- deux caractères tapés, enregistrés, puis le fichier relu depuis le cache :
+  3 793 654 octets, divergence unique au caractère 26, les 3 793 626 octets
+  suivants identiques ;
+- **la charge base64 est intacte au bit près** — même longueur, même empreinte
+  SHA-256, simplement décalée de deux octets ;
+- **aucun `opennote-image` dans le fichier écrit** : la restitution a bien eu
+  lieu ;
+- les deux caractères retirés, la note retrouve son empreinte d'origine.
+
+C'est le seul chemin du dépôt qui peut détruire des données sans un message :
+le texte que voit l'éditeur porte des jetons, et l'enregistrer sans restitution
+remplacerait l'image par son jeton dans la vraie note. Les tests Go couvraient
+la restitution ; ce qui ne l'était nulle part, c'est que les images capturées au
+chargement soient bien celles rendues à l'écriture. Ça l'est maintenant, mais
+par une vérification manuelle : aucun test ne la rejouera.
 
 ---
 
