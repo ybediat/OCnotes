@@ -188,6 +188,7 @@
     <string name="browser_nouveau_dossier">Nueva carpeta</string>
     <string name="browser_type_dossier">Carpeta</string>
     <string name="browser_type_note">Nota</string>
+    <string name="browser_type_document">Documento de solo lectura</string>
     <string name="browser_actions">Acciones para «%1$s»</string>
 
     <!-- Recherche. Elle ne porte que sur le dossier affiché : l'invite doit

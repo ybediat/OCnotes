@@ -173,11 +173,15 @@ internal fun modifierFenetre(etat: EditorUiState, nouvelle: TextFieldValue): Edi
     if (etat.focus !in etat.tranches.indices) return etat
     if (nouvelle.text == etat.valeur.text) {
         val selectionSeulement = etat.copy(valeur = nouvelle)
-        return if (nouvelle.composition == null && doitReequilibrer(nouvelle.text)) {
-            reequilibrerFenetre(selectionSeulement)
-        } else {
-            selectionSeulement
+        if (nouvelle.composition == null) {
+            if (doitReequilibrer(nouvelle.text)) {
+                return reequilibrerFenetre(selectionSeulement)
+            }
+            if (!nouvelle.selection.collapsed) {
+                return etendreSelectionFenetre(selectionSeulement)
+            }
         }
+        return selectionSeulement
     }
 
     val modifie = etat.copy(
@@ -190,6 +194,33 @@ internal fun modifierFenetre(etat: EditorUiState, nouvelle: TextFieldValue): Edi
     } else {
         modifie
     }
+}
+
+private fun etendreSelectionFenetre(etat: EditorUiState): EditorUiState {
+    val active = etat.tranches.getOrNull(etat.focus) ?: return etat
+    val document = materialiser(etat)
+    val debutActif = active.debut
+    val finActif = debutActif + etat.valeur.text.length
+    val debutGlobal = debutActif + etat.valeur.selection.start
+    val finGlobal = debutActif + etat.valeur.selection.end
+    val montage = etendreFenetrePourSelection(
+        document = document,
+        debutActif = debutActif,
+        finActif = finActif,
+        selectionDebut = debutGlobal,
+        selectionFin = finGlobal,
+    ) ?: return etat
+    val nouvelleActive = montage.tranches[montage.focus]
+
+    return etat.copy(
+        document = document,
+        tranches = montage.tranches,
+        focus = montage.focus,
+        valeur = TextFieldValue(
+            text = nouvelleActive.texteDe(document),
+            selection = TextRange(montage.selectionDebut, montage.selectionFin),
+        ),
+    )
 }
 
 private fun reequilibrerFenetre(etat: EditorUiState): EditorUiState {
@@ -208,7 +239,6 @@ private fun reequilibrerFenetre(etat: EditorUiState): EditorUiState {
             text = nouvelleActive.texteDe(document),
             selection = TextRange(montage.selectionDebut, montage.selectionFin),
         ),
-        activation = etat.activation + 1,
     )
 }
 
@@ -345,7 +375,9 @@ class EditorViewModel(
      *
      * Un déplacement du curseur ne relance pas l'enregistrement. La fenêtre
      * n'est remontée qu'après dépassement de sa borne dure, jamais à chaque
-     * caractère. Une composition IME en cours n'est pas interrompue.
+     * caractère. Une sélection au bord peut toutefois charger le contexte
+     * restant jusqu'à cette borne. Une composition IME en cours n'est pas
+     * interrompue.
      */
     fun onValeurChangee(nouvelle: TextFieldValue) {
         val etat = _uiState.value

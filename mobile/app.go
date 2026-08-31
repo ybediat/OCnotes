@@ -403,6 +403,12 @@ type folderEntry struct {
 	// Pending indique une modification locale pas encore synchronisée, pour
 	// que l'interface puisse l'afficher.
 	Pending bool `json:"pending"`
+
+	// ReadOnly signale un format que l'application sait lire mais jamais
+	// écrire. La réponse vient du cœur : recopier une liste d'extensions dans
+	// l'interface, c'est se préparer à la voir diverger au premier format
+	// ajouté.
+	ReadOnly bool `json:"readOnly,omitempty"`
 }
 
 // folderListing est le contenu d'un dossier.
@@ -463,12 +469,13 @@ func (a *App) ListFolderJSON(dir string) (string, error) {
 	for _, n := range listing.Notes {
 		entry, cached := a.cache.CachedEntry(n.Path)
 		out.Entries = append(out.Entries, folderEntry{
-			Path:    n.Path,
-			Name:    n.Name,
-			Display: n.DisplayName,
-			Size:    n.Size,
-			ModTime: n.ModTime.UTC().Format(time.RFC3339),
-			Pending: cached && entry.Dirty,
+			Path:     n.Path,
+			Name:     n.Name,
+			Display:  n.DisplayName,
+			Size:     n.Size,
+			ModTime:  n.ModTime.UTC().Format(time.RFC3339),
+			Pending:  cached && entry.Dirty,
+			ReadOnly: notes.IsDocument(n.Name),
 		})
 	}
 	return toJSON(out)
@@ -522,12 +529,13 @@ func (a *App) listFromCache(dir string) (folderListing, bool) {
 		}
 
 		out.Entries = append(out.Entries, folderEntry{
-			Path:    entry.Path,
-			Name:    rest,
-			Display: notes.DisplayName(rest),
-			Size:    entry.Size,
-			ModTime: entry.LocalMod.UTC().Format(time.RFC3339),
-			Pending: entry.Dirty,
+			Path:     entry.Path,
+			Name:     rest,
+			Display:  notes.DisplayName(rest),
+			Size:     entry.Size,
+			ModTime:  entry.LocalMod.UTC().Format(time.RFC3339),
+			Pending:  entry.Dirty,
+			ReadOnly: notes.IsDocument(rest),
 		})
 	}
 
@@ -1216,10 +1224,6 @@ func (a *App) RenderFileJSON(filePath string) (string, error) {
 }
 
 // versNoteBlocks convertit les blocs du cœur vers la forme sérialisée.
-//
-// Extraite parce que deux entrées de la façade en ont besoin — RenderNoteJSON
-// pour un document entier, SectionsJSON pour chaque tranche — et qu'un champ
-// ajouté à markdown.Block ne doit pas avoir deux endroits où être oublié.
 func versNoteBlocks(blocks []markdown.Block) []noteBlock {
 	out := make([]noteBlock, 0, len(blocks))
 	for _, b := range blocks {
@@ -1246,51 +1250,6 @@ func versNoteBlocks(blocks []markdown.Block) []noteBlock {
 		out = append(out, converti)
 	}
 	return out
-}
-
-// noteSection est une tranche éditable et ses blocs d'affichage.
-//
-// Le **texte** de la tranche n'y figure pas, et c'est délibéré : Start et End
-// sont en unités de code UTF-16, l'unité de String.substring en Kotlin, donc
-// l'interface découpe elle-même le contenu qu'elle a déjà en main. Le faire
-// traverser reviendrait à recopier la note une fois de plus.
-type noteSection struct {
-	Start  int         `json:"start"`
-	End    int         `json:"end"`
-	Blocks []noteBlock `json:"blocks"`
-}
-
-// SectionsJSON découpe une note en tranches éditables et rend chacune d'elles.
-//
-// C'est ce que l'interface appelle à l'ouverture d'une note : chaque tranche
-// tient dans un champ de saisie sans que le coût de dessin dépende de la taille
-// du document. Voir docs/CHANTIER-EDITEUR.md et la section 7 bis de
-// docs/ARCHITECTURE.md pour les mesures qui l'imposent.
-//
-// Fonction pure : ni réseau, ni cache, ni session. Comme RenderNoteJSON, le
-// **nom** décide si le texte est interprété comme du Markdown ou découpé tel
-// quel.
-func (a *App) SectionsJSON(name, content string) (string, error) {
-	// Même refus que RenderNoteJSON, et pour la même raison de format : un
-	// .docx ressortirait truffé de caractères de remplacement.
-	if notes.IsDocument(name) {
-		return "", fmt.Errorf("mobile: [%s] un fichier %s ne traverse pas la frontière en chaîne", CodeUnsupported, path.Ext(name))
-	}
-
-	sections, blocs, err := notes.Sections(name, []byte(content))
-	if err != nil {
-		return "", err
-	}
-
-	out := make([]noteSection, 0, len(sections))
-	for i, s := range sections {
-		out = append(out, noteSection{
-			Start:  s.Start,
-			End:    s.End,
-			Blocks: versNoteBlocks(blocs[i]),
-		})
-	}
-	return toJSON(out)
 }
 
 // --- Préparation de l'édition -----------------------------------------------

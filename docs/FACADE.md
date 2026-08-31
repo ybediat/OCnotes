@@ -115,7 +115,6 @@ sur l'instance : `app.stateJSON()`. La première lettre passe en minuscule.
 | `FormatActionsJSON() (string, error)` | liste des actions de la barre d'outils |
 | `RenderNoteJSON(name, content string) (string, error)` | blocs d'affichage pour l'aperçu en lecture seule |
 | `RenderFileJSON(filePath string) (string, error)` | blocs d'affichage d'un document lu côté Go |
-| `SectionsJSON(name, content string) (string, error)` | tranches éditables et leurs blocs, pour l'éditeur |
 | `PrepareEditJSON(name, content string) (string, error)` | allège une note avant de l'ouvrir en saisie |
 | `RestoreImages(text, imagesJSON string) (string, error)` | **obligatoire avant toute écriture** d'une note allégée |
 | `ErrorCode(message string) string` | code d'une erreur |
@@ -280,7 +279,9 @@ L'espace `virtual` nommé « Shares » est un agrégat de partages, pas un stock
     {"path": "Notes/Projets/Archives", "name": "Archives", "display": "Archives",
      "isDir": true,  "size": 0, "modTime": "", "pending": false},
     {"path": "Notes/Projets/a.md", "name": "a.md", "display": "a",
-     "isDir": false, "size": 42, "modTime": "2026-08-28T09:00:00Z", "pending": true}
+     "isDir": false, "size": 42, "modTime": "2026-08-28T09:00:00Z", "pending": true},
+    {"path": "Notes/Projets/bilan.docx", "name": "bilan.docx", "display": "bilan.docx",
+     "isDir": false, "size": 6956, "modTime": "2026-08-28T09:00:00Z", "readOnly": true}
   ]
 }
 ```
@@ -291,6 +292,14 @@ Markdown**, à afficher tel quel. Un fichier texte garde la sienne
 deux lignes « liste » désigneraient alors deux fichiers différents.
 `pending: true` signale une modification locale pas encore synchronisée — un
 bon endroit pour une pastille.
+
+`readOnly: true` désigne un format que l'application sait lire mais jamais
+écrire (`.docx`, `.odt`) — la même réponse que `IsDocument`, servie avec le
+listing pour qu'une liste n'ait pas à interroger la façade ligne par ligne. Le
+champ est **omis quand il est faux**, d'où la valeur par défaut côté Kotlin.
+Une ligne ainsi marquée mérite d'être distinguée autrement que par la seule
+couleur — icône et description d'accessibilité — parce qu'une teinte ne se voit
+ni en daltonisme ni pour un lecteur d'écran.
 
 > **`entries` et `conflicts` sont toujours des tableaux, jamais `null`.** Go
 > sérialiserait naturellement une slice vide en `null` ; la façade les
@@ -507,54 +516,6 @@ Un document invalide ou trop gros retourne l'un des codes locaux suivants :
 | `DOC_TOO_LARGE` | une partie XML décompressée dépasse 8 Mo |
 | `FILE_TOO_LARGE` | le fichier entier dépasse 20 Mo |
 
-
-### `SectionsJSON`
-
-Découpe une note en **tranches éditables** et rend chacune d'elles. C'est ce que
-l'éditeur appelle à l'ouverture. Fonction pure, comme `RenderNoteJSON`.
-
-```kotlin
-app.sectionsJSON("Projets/a.md", texteComplet)
-```
-
-```json
-[
-  {"start": 0,   "end": 412, "blocks": [{"kind": "heading", "text": "Titre", "level": 1}]},
-  {"start": 412, "end": 998, "blocks": [{"kind": "paragraph", "text": "…"}]}
-]
-```
-
-Les `blocks` ont exactement la forme décrite pour `RenderNoteJSON`.
-
-> **Le texte d'une tranche ne traverse pas la frontière.** `start` et `end` sont
-> en unités de code UTF-16 — l'unité de `String.substring` en Kotlin — donc
-> l'interface découpe elle-même le contenu qu'elle a déjà en main :
-> `texte.substring(start, end)`. Le faire traverser reviendrait à recopier la
-> note deux fois de plus à chaque ouverture.
-
-Trois propriétés sur lesquelles l'éditeur s'appuie, chacune testée :
-
-1. **Les tranches pavent le document.** La première commence à 0, la fin de
-   chacune est le début de la suivante, la dernière finit à la fin du texte.
-   Aucun trou, aucun recouvrement.
-2. **Le recollage est exact.** `texte.substring(0, start) + tranche +
-   texte.substring(end)` rend le document d'origine. C'est de cette propriété
-   que dépend l'enregistrement : l'interface garde **un seul texte complet** et
-   y réinsère la tranche éditée.
-3. **Une tranche tient dans un champ de saisie.** Quelques dizaines de lignes,
-   sauf quand la structure interdit de couper — une liste de 500 lignes reste
-   d'un seul tenant, parce qu'un rendu juste passe avant une tranche rapide.
-
-> **Pourquoi tout ça.** Un `TextField` ré-enregistre sa display list entière à
-> chaque image, à 0,14–0,24 ms par ligne. Au-delà de ~80 lignes le budget de
-> 16 ms est dépassé ; sur une note de 295 ko, le défilement coûte 500 ms par
-> image et la frappe 750 ms par caractère. Mesures et protocole en section
-> 7 bis de `docs/ARCHITECTURE.md`, banc dans `scripts/banc-editeur.ps1`.
-
-Un `.docx` ou un `.odt` est **refusé** avec le code `[UNSUPPORTED]` : un
-document n'a pas de tranche éditable, l'application ne sait que le lire.
-
----
 
 ### `PrepareEditJSON` et `RestoreImages`
 

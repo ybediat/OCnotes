@@ -6,6 +6,13 @@ import (
 	"testing"
 )
 
+func nombreDeLignes(s string) int {
+	if s == "" {
+		return 0
+	}
+	return strings.Count(strings.TrimSuffix(s, "\n"), "\n") + 1
+}
+
 // bloc renvoie le n-ième bloc, ou fait échouer le test.
 func bloc(t *testing.T, blocks []Block, i int) Block {
 	t.Helper()

@@ -173,6 +173,7 @@
     <string name="browser_nouveau_dossier">Neuer Ordner</string>
     <string name="browser_type_dossier">Ordner</string>
     <string name="browser_type_note">Notiz</string>
+    <string name="browser_type_document">Schreibgeschütztes Dokument</string>
     <string name="browser_actions">Aktionen für „%1$s“</string>
 
     <!-- Suche. Sie bezieht sich nur auf den angezeigten Ordner: Die Eingabeaufforderung muss dies angeben,

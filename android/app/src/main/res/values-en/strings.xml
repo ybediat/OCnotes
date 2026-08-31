@@ -207,6 +207,7 @@
     <string name="browser_nouveau_dossier">New folder</string>
     <string name="browser_type_dossier">Folder</string>
     <string name="browser_type_note">Note</string>
+    <string name="browser_type_document">Read-only document</string>
     <string name="browser_actions">Actions for “%1$s”</string>
 
     <!-- Recherche. Elle ne porte que sur le dossier affiché : l'invite doit

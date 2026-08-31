@@ -26,8 +26,9 @@ internal const val MAX_UTF16_EDITEUR = 640
  * La fenêtre s'ouvre plus petite que sa limite dure. Cette marge absorbe la
  * frappe au bord d'une tranche sans rematérialiser le document à chaque touche.
  */
-private const val CIBLE_RETOURS_EDITEUR = 8
-private const val CIBLE_UTF16_EDITEUR = 384
+private const val CIBLE_RETOURS_EDITEUR = 4
+private const val CIBLE_UTF16_EDITEUR = 192
+private const val MAX_AJUSTEMENT_MOT = 64
 
 /** Résultat pur du montage d'une fenêtre autour d'une sélection globale. */
 internal data class FenetreMontee(
@@ -102,18 +103,120 @@ internal fun monterFenetre(
     val retoursAvant = CIBLE_RETOURS_EDITEUR / 2
     val retoursApres = CIBLE_RETOURS_EDITEUR - retoursAvant
 
-    val debutFenetre = etendreAvant(
+    val debutBrut = etendreAvant(
         document = document,
         position = debutSelection,
         maxUtf16 = margeAvant,
         maxRetours = retoursAvant,
     )
-    val finFenetre = etendreApres(
+    val finBrute = etendreApres(
         document = document,
         position = finSelection,
         maxUtf16 = margeApres,
         maxRetours = retoursApres,
     )
+    val debutFenetre = alignerDebutMot(document, debutBrut)
+    val finFenetre = alignerFinMot(document, finBrute)
+
+    return monterIntervalleActif(
+        document = document,
+        debutFenetre = debutFenetre,
+        finFenetre = finFenetre,
+        ancreDebut = ancreDebut,
+        ancreFin = ancreFin,
+    )
+}
+
+/**
+ * Agrandit le champ actif lorsqu'une poignée de sélection atteint son bord.
+ *
+ * La sélection reste exprimée avec ses offsets globaux et conserve son sens.
+ * Seul le contexte chargé autour d'elle grandit, jusqu'aux limites du champ.
+ */
+internal fun etendreFenetrePourSelection(
+    document: String,
+    debutActif: Int,
+    finActif: Int,
+    selectionDebut: Int,
+    selectionFin: Int,
+): FenetreMontee? {
+    require(debutActif in 0..finActif)
+    require(finActif <= document.length)
+
+    val ancreDebut = normaliserOffset(document, selectionDebut)
+        .coerceIn(debutActif, finActif)
+    val ancreFin = normaliserOffset(document, selectionFin)
+        .coerceIn(debutActif, finActif)
+    val debutSelection = min(ancreDebut, ancreFin)
+    val finSelection = max(ancreDebut, ancreFin)
+    if (debutSelection == finSelection) return null
+
+    val toucheDebut = debutSelection == debutActif
+    val toucheFin = finSelection == finActif
+    if (!toucheDebut && !toucheFin) return null
+
+    val longueurActuelle = finActif - debutActif
+    val budgetUtf16 = (MAX_UTF16_EDITEUR - longueurActuelle).coerceAtLeast(0)
+    val retoursActuels = document.substring(debutActif, finActif).count { it == '\n' }
+    val budgetRetours = (MAX_RETOURS_EDITEUR - retoursActuels).coerceAtLeast(0)
+
+    val budgetAvantUtf16 = when {
+        toucheDebut && toucheFin -> budgetUtf16 / 2
+        toucheDebut -> budgetUtf16
+        else -> 0
+    }
+    val budgetApresUtf16 = when {
+        toucheDebut && toucheFin -> budgetUtf16 - budgetAvantUtf16
+        toucheFin -> budgetUtf16
+        else -> 0
+    }
+    val budgetAvantRetours = when {
+        toucheDebut && toucheFin -> budgetRetours / 2
+        toucheDebut -> budgetRetours
+        else -> 0
+    }
+    val budgetApresRetours = when {
+        toucheDebut && toucheFin -> budgetRetours - budgetAvantRetours
+        toucheFin -> budgetRetours
+        else -> 0
+    }
+
+    val debutBrut = etendreAvant(
+        document = document,
+        position = debutActif,
+        maxUtf16 = budgetAvantUtf16,
+        maxRetours = budgetAvantRetours,
+    )
+    val finBrute = etendreApres(
+        document = document,
+        position = finActif,
+        maxUtf16 = budgetApresUtf16,
+        maxRetours = budgetApresRetours,
+    )
+    val debutFenetre = alignerDebutMotVersInterieur(document, debutBrut, debutActif)
+    val finFenetre = alignerFinMotVersInterieur(document, finBrute, finActif)
+    if (debutFenetre == debutActif && finFenetre == finActif) return null
+
+    return monterIntervalleActif(
+        document = document,
+        debutFenetre = debutFenetre,
+        finFenetre = finFenetre,
+        ancreDebut = ancreDebut,
+        ancreFin = ancreFin,
+    )
+}
+
+private fun monterIntervalleActif(
+    document: String,
+    debutFenetre: Int,
+    finFenetre: Int,
+    ancreDebut: Int,
+    ancreFin: Int,
+): FenetreMontee {
+    require(debutFenetre in 0..finFenetre)
+    require(finFenetre <= document.length)
+    require(ancreDebut in debutFenetre..finFenetre)
+    require(ancreFin in debutFenetre..finFenetre)
 
     val avant = decouperIntervalle(
         document = document,
@@ -252,6 +355,58 @@ private fun etendreApres(
         fin = suivant
     }
     return fin
+}
+
+/** Recule au début du mot si une frontière naturelle est proche. */
+private fun alignerDebutMot(document: String, borne: Int): Int {
+    if (borne <= 0 || document[borne - 1].isWhitespace()) return borne
+
+    val limite = max(0, borne - MAX_AJUSTEMENT_MOT)
+    for (i in borne - 1 downTo limite) {
+        if (document[i].isWhitespace()) return i + 1
+    }
+    return borne
+}
+
+/** Avance après le mot et son séparateur si cette frontière reste proche. */
+private fun alignerFinMot(document: String, borne: Int): Int {
+    if (borne >= document.length || document[borne - 1].isWhitespace()) return borne
+
+    val limite = min(document.length - 1, borne + MAX_AJUSTEMENT_MOT)
+    for (i in borne..limite) {
+        if (document[i].isWhitespace()) return i + 1
+    }
+    return borne
+}
+
+/** Avance la borne extérieure sans rogner le champ déjà chargé. */
+private fun alignerDebutMotVersInterieur(
+    document: String,
+    borne: Int,
+    limite: Int,
+): Int {
+    if (borne <= 0 || document[borne - 1].isWhitespace()) return borne
+
+    val finRecherche = min(limite, borne + MAX_AJUSTEMENT_MOT)
+    for (i in borne until finRecherche) {
+        if (document[i].isWhitespace()) return i + 1
+    }
+    return borne
+}
+
+/** Recule la borne extérieure sans rogner le champ déjà chargé. */
+private fun alignerFinMotVersInterieur(
+    document: String,
+    borne: Int,
+    limite: Int,
+): Int {
+    if (borne >= document.length || document[borne - 1].isWhitespace()) return borne
+
+    val debutRecherche = max(limite - 1, borne - MAX_AJUSTEMENT_MOT)
+    for (i in borne - 1 downTo debutRecherche) {
+        if (document[i].isWhitespace()) return i + 1
+    }
+    return borne
 }
 
 private fun borneApresRetours(

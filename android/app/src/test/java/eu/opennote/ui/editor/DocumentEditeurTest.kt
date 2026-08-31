@@ -93,9 +93,20 @@ class DocumentEditeurTest {
         val montage = monterFenetre(document, 1_000)
         val active = montage.tranches[montage.focus]
 
-        assertEquals(384, active.fin - active.debut)
-        assertEquals(192, montage.selectionDebut)
-        assertEquals(192, montage.selectionFin)
+        assertEquals(192, active.fin - active.debut)
+        assertEquals(96, montage.selectionDebut)
+        assertEquals(96, montage.selectionFin)
+        assertPavage(document, montage.tranches)
+    }
+
+    @Test
+    fun fenetreNaturelleNeCoupePasLesMots() {
+        val document = "alpha anticonstitutionnel bravo charlie delta echo foxtrot ".repeat(30)
+        val montage = monterFenetre(document, 215)
+        val active = montage.tranches[montage.focus]
+
+        assertTrue(active.debut == 0 || document[active.debut - 1].isWhitespace())
+        assertTrue(active.fin == document.length || document[active.fin - 1].isWhitespace())
         assertPavage(document, montage.tranches)
     }
 
@@ -207,7 +218,7 @@ class DocumentEditeurTest {
             focus = montage.focus,
             valeur = TextFieldValue(active.texteDe(document), TextRange(montage.selectionFin)),
         )
-        val insertion = "y".repeat(400)
+        val insertion = "y".repeat(500)
         val texte = etat.valeur.text
         val curseur = etat.valeur.selection.end
         val apres = modifierFenetre(
@@ -219,8 +230,8 @@ class DocumentEditeurTest {
         )
 
         assertEquals(1, apres.revision)
-        assertEquals(1, apres.activation)
-        assertTrue(apres.valeur.text.length <= 384)
+        assertEquals(0, apres.activation)
+        assertTrue(apres.valeur.text.length <= 256)
         assertEquals(document.length + insertion.length, materialiser(apres).length)
         assertPavage(apres.document, apres.tranches)
     }
@@ -236,7 +247,7 @@ class DocumentEditeurTest {
             focus = montage.focus,
             valeur = TextFieldValue(active.texteDe(document), TextRange(montage.selectionFin)),
         )
-        val tropLong = etat.valeur.text + "z".repeat(400)
+        val tropLong = etat.valeur.text + "z".repeat(500)
         val enComposition = modifierFenetre(
             etat,
             TextFieldValue(
@@ -251,10 +262,87 @@ class DocumentEditeurTest {
         )
 
         assertTrue(enComposition.valeur.text.length > MAX_UTF16_EDITEUR)
-        assertTrue(compositionTerminee.valeur.text.length <= 384)
+        assertTrue(compositionTerminee.valeur.text.length <= 256)
         assertEquals(enComposition.revision, compositionTerminee.revision)
-        assertEquals(1, compositionTerminee.activation)
-        assertEquals(document.length + 400, materialiser(compositionTerminee).length)
+        assertEquals(0, compositionTerminee.activation)
+        assertEquals(document.length + 500, materialiser(compositionTerminee).length)
+    }
+
+    @Test
+    fun selectionAuBordDroitChargeLeContexteJusquAuBudget() {
+        val document = "alpha bravo charlie delta echo foxtrot golf hotel ".repeat(80)
+        val montage = monterFenetre(document, 1_000)
+        val active = montage.tranches[montage.focus]
+        val valeur = TextFieldValue(
+            text = active.texteDe(document),
+            selection = TextRange(40, active.fin - active.debut),
+        )
+        val etat = EditorUiState(
+            document = document,
+            tranches = montage.tranches,
+            focus = montage.focus,
+            valeur = TextFieldValue(active.texteDe(document), TextRange(40)),
+            activation = 7,
+        )
+        val apres = modifierFenetre(etat, valeur)
+        val nouvelleActive = apres.tranches[apres.focus]
+
+        assertTrue(apres.valeur.text.length > valeur.text.length)
+        assertTrue(apres.valeur.text.length <= MAX_UTF16_EDITEUR)
+        assertEquals(active.debut + 40, nouvelleActive.debut + apres.valeur.selection.start)
+        assertEquals(active.fin, nouvelleActive.debut + apres.valeur.selection.end)
+        assertEquals(7, apres.activation)
+        assertEquals(0, apres.revision)
+        assertEquals(document, materialiser(apres))
+        assertTrue(document[nouvelleActive.fin - 1].isWhitespace())
+    }
+
+    @Test
+    fun selectionAuBordGaucheChargeLeContexteSansChangerLesOffsetsGlobaux() {
+        val document = "alpha bravo charlie delta echo foxtrot golf hotel ".repeat(80)
+        val montage = monterFenetre(document, 1_000)
+        val active = montage.tranches[montage.focus]
+        val valeur = TextFieldValue(
+            text = active.texteDe(document),
+            selection = TextRange(active.fin - active.debut - 30, 0),
+        )
+        val etat = EditorUiState(
+            document = document,
+            tranches = montage.tranches,
+            focus = montage.focus,
+            valeur = TextFieldValue(active.texteDe(document), TextRange(80)),
+            activation = 3,
+        )
+        val apres = modifierFenetre(etat, valeur)
+        val nouvelleActive = apres.tranches[apres.focus]
+
+        assertTrue(nouvelleActive.debut < active.debut)
+        assertTrue(apres.valeur.text.length <= MAX_UTF16_EDITEUR)
+        assertEquals(active.fin - 30, nouvelleActive.debut + apres.valeur.selection.start)
+        assertEquals(active.debut, nouvelleActive.debut + apres.valeur.selection.end)
+        assertEquals(3, apres.activation)
+        assertEquals(document, materialiser(apres))
+        assertTrue(nouvelleActive.debut == 0 || document[nouvelleActive.debut - 1].isWhitespace())
+    }
+
+    @Test
+    fun selectionInterieureNeChangePasLaFenetre() {
+        val document = "mot ".repeat(1_000)
+        val montage = monterFenetre(document, 1_000)
+        val active = montage.tranches[montage.focus]
+        val etat = EditorUiState(
+            document = document,
+            tranches = montage.tranches,
+            focus = montage.focus,
+            valeur = TextFieldValue(active.texteDe(document), TextRange(50)),
+        )
+        val apres = modifierFenetre(
+            etat,
+            etat.valeur.copy(selection = TextRange(50, 80)),
+        )
+
+        assertEquals(etat.tranches, apres.tranches)
+        assertEquals(TextRange(50, 80), apres.valeur.selection)
     }
 
     private fun assertPavage(document: String, tranches: List<TrancheEditeur>) {

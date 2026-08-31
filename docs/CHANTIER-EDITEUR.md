@@ -4,13 +4,16 @@ Ordre de travail pour reprendre le sujet à froid. Lire d'abord `CLAUDE.md`, pui
 **la section 7 bis de `docs/ARCHITECTURE.md`**, qui porte les mesures, et
 `docs/FACADE.md`, qui décrit la frontière Go ↔ Kotlin.
 
-**État au 30 août 2026 :** le diagnostic, le découpage Go et la façade existent
-et sont testés. Le modèle d'état Kotlin est amorcé, mais l'écran utilise encore
-le `TextField` monolithique : aucun gain de performance n'est livré à ce stade.
+**État au 31 août 2026 : intégré dans l'éditeur de production.** Le champ
+monolithique et le prototype debug ont été retirés. L'éditeur réel utilise une
+`LazyColumn` de source brute et une seule fenêtre active ; sauvegarde, aperçu,
+mise en forme et sortie passent tous par le document matérialisé.
 
-Ce document a été révisé avant le prototype Compose. Le premier montage rendait
-les sections inactives comme l'aperçu Markdown. La révision retient du **texte
-source brut** dans l'éditeur et garde l'aperçu rendu comme mode séparé.
+Le premier retour sur appareil a conduit à réduire le contexte initial, aligner
+ses bords sur les mots et conserver l'identité Compose du champ pendant son
+rééquilibrage. Une sélection qui atteint un bord agrandit maintenant ce même
+champ jusqu'à sa limite dure. L'ancienne voie de sections Markdown rendues côté
+Go a été supprimée avec sa façade : il ne reste qu'un découpage d'édition.
 
 ---
 
@@ -129,7 +132,107 @@ dans l'usage.
 
 ---
 
-## 3. Ce qui existe déjà
+## 3. État intégré
+
+### 3.1 Découpage et fenêtre glissante
+
+`DocumentEditeur.kt` porte la machine pure testée sur la JVM :
+
+- tranches inactives bornées à 640 unités UTF-16 ou 12 retours à la ligne ;
+- fenêtre initiale ciblée à 192 unités ou 4 retours, centrée sur le curseur ;
+- bords avancés ou reculés jusqu'à un séparateur proche pour ne pas couper un
+  mot en usage normal ;
+- marge entre cible et limite dure, afin de laisser plusieurs centaines de
+  caractères de frappe avant un rééquilibrage ;
+- agrandissement du champ actif jusqu'à 640 unités ou 12 retours lorsqu'une
+  poignée de sélection atteint son bord, sans sélectionner automatiquement le
+  contexte nouvellement chargé ;
+- conservation exacte des caractères et des paires de substitution UTF-16.
+
+Un mot de plus de 64 unités autour d'une borne autorise encore la coupure dure.
+Ce cas ne parvient normalement pas à l'éditeur : `PrepareEditJSON` ouvre en
+lecture seule les mots démesurés qui menacent le moteur de mise en page.
+
+### 3.2 État, données et opérations
+
+`EditorUiState.document` est l'instantané complet ; `valeur` est uniquement le
+brouillon actif. Les transitions `activerFenetre`, `modifierFenetre` et
+`materialiser` sont pures. Le `ViewModel` utilise le texte matérialisé pour :
+
+- l'enregistrement différé et l'enregistrement de sortie ;
+- `restoreImages`, puis `writeNote` ;
+- le rendu de l'aperçu complet ;
+- le changement de fenêtre.
+
+La mise en forme travaille sur la fenêtre et sa sélection relative. Une
+révision empêche un résultat asynchrone ancien d'écraser une frappe plus récente
+ou de faire disparaître prématurément l'indicateur de brouillon.
+
+### 3.3 Continuité du clavier
+
+La ligne active garde la clé Compose constante `active` pendant le glissement.
+Un rééquilibrage ne change plus le compteur `activation` : le
+`BasicTextField`, son `FocusRequester` et la connexion IME sont conservés. Une
+vraie activation par toucher incrémente toujours ce compteur et place le
+curseur à l'offset obtenu par `TextLayoutResult.getOffsetForPosition`.
+
+L'agrandissement pendant une sélection suit la même règle : la clé active et
+le compteur restent stables. Les deux ancres sont converties en offsets globaux
+avant le remontage, puis replacées relativement au champ agrandi, y compris
+pour une sélection effectuée de droite à gauche.
+
+La mise au point ne laisse plus le comportement Android par défaut recentrer
+agressivement le champ. La liste applique une zone de confort : aucune demande
+de défilement tant que le curseur reste dans les deux tiers supérieurs de la
+hauteur disponible ; dans le dernier tiers, elle ne remonte que jusqu'à cette
+frontière. Une demande portant sur toute la grande fenêtre éditable est ignorée
+afin de ne pas faire sortir son début par le haut.
+
+### 3.4 Nettoyage effectué
+
+Le prototype sous `src/debug`, son processus spécial et son application debug
+ont été retirés. `SectionsJSON`, `notes.Sections`, `SectionDto`,
+`OpenNoteRepository.sections()` et l'ancien découpage sémantique
+`internal/markdown/sections.go` ont également été retirés : ils appartenaient
+au montage abandonné qui rendait chaque tranche comme un document Markdown.
+
+### 3.5 Validation
+
+- 24 tests JVM couvrent le pavage, les deux budgets, les emoji, les mots, la
+  fenêtre glissante, la matérialisation, les changements de fenêtre, les
+  sélections inversées, l'agrandissement aux deux bords, la composition IME et
+  les quatre cas de défilement automatique ;
+- cinq groupes de tests ont été vus échouer avant correction : sens de sélection perdu,
+  rééquilibrage absent à la fin d'une composition, puis agrandissement absent
+  aux bords gauche et droit, et enfin politique de défilement absente ;
+- compilation debug, compilation release et lint passent ;
+- l'APK intégrée a été installée sur le Redmi Note 12.
+
+Le dernier contrôle manuel consiste à confirmer sur cette APK que le clavier
+reste ouvert pendant un rééquilibrage réel, puis qu'une poignée peut continuer
+son glissé après l'agrandissement sans saut visuel gênant.
+
+### 3.6 Limite encore assumée : sélection globale
+
+Ce palier rend la sélection transverse aux petits contextes initiaux, mais pas
+encore au document entier : elle s'arrête à la fenêtre dure de 640 unités
+UTF-16 ou 12 retours. L'action système « Tout sélectionner » ne voit elle aussi
+que le texte porté par le `BasicTextField` actif.
+
+Ce comportement est une étape, pas la cible définitive d'un logiciel de texte.
+La prochaine expérimentation devra porter une sélection globale indépendante
+du champ — notamment pour « Tout sélectionner », copier et supprimer — tout en
+ne composant toujours qu'une petite fenêtre éditable. Le présent palier prépare
+ce travail : les deux ancres ont déjà une représentation globale stable et la
+matérialisation du document complet reste unique.
+
+---
+
+## Annexe — état antérieur à l'intégration
+
+La suite est conservée comme journal de décision. Elle décrit le prototype et
+les étapes qui ont mené à l'intégration ; **ce n'est plus un ordre de travail à
+exécuter**.
 
 ### 3.1 Découpage sémantique Go — fait et vérifié
 

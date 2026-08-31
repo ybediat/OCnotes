@@ -188,6 +188,7 @@
     <string name="browser_nouveau_dossier">Nouveau dossier</string>
     <string name="browser_type_dossier">Dossier</string>
     <string name="browser_type_note">Note</string>
+    <string name="browser_type_document">Document en lecture seule</string>
     <string name="browser_actions">Actions sur « %1$s »</string>
 
     <!-- Recherche. Elle ne porte que sur le dossier affiché : l'invite doit

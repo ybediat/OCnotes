@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
@@ -469,20 +470,31 @@ private fun LigneEntree(
             }
         },
         leadingContent = {
+            // Un document ne se distingue pas par la seule teinte : une couleur
+            // ne se voit ni en daltonisme, ni sous un écran au soleil, ni pour
+            // TalkBack. L'icône et la description changent donc avec elle.
+            //
+            // Le format se demande au cœur, qui l'a mis dans le listing : la
+            // liste des extensions reconnues ne vit qu'à un endroit.
+            val document = !entree.isDir && entree.readOnly
             Icon(
-                imageVector = if (entree.isDir) {
-                    Icons.Default.Folder
-                } else {
-                    Icons.Default.Description
+                imageVector = when {
+                    entree.isDir -> Icons.Default.Folder
+                    document -> Icons.AutoMirrored.Filled.Article
+                    else -> Icons.Default.Description
                 },
                 contentDescription = stringResource(
-                    if (entree.isDir) {
-                        R.string.browser_type_dossier
-                    } else {
-                        R.string.browser_type_note
+                    when {
+                        entree.isDir -> R.string.browser_type_dossier
+                        document -> R.string.browser_type_document
+                        else -> R.string.browser_type_note
                     },
                 ),
-                tint = MaterialTheme.colorScheme.primary,
+                tint = if (document) {
+                    MaterialTheme.colorScheme.tertiary
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
             )
         },
         trailingContent = {

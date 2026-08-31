@@ -1,6 +1,7 @@
 package mobile
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -167,4 +168,67 @@ func TestIsDocumentEstExposeSansDupliquerLesExtensions(t *testing.T) {
 	if IsDocument("rapport.md") {
 		t.Error("IsDocument reconnaît à tort un Markdown")
 	}
+}
+
+// TestListFolderJSONMarqueLesDocumentsEnLectureSeule couvre les *deux* chemins
+// de listing.
+//
+// `ListFolderJSON` construit ses entrées à deux endroits — depuis le serveur,
+// et depuis le cache quand le réseau manque — et un champ ajouté à un seul des
+// deux ne se voit pas : la liste est correcte en ligne et ment hors connexion,
+// là où personne ne regarde. C'est la divergence que ce test existe pour
+// attraper.
+func TestListFolderJSONMarqueLesDocumentsEnLectureSeule(t *testing.T) {
+	app, server, _ := prepare(t)
+
+	document, err := os.ReadFile(filepath.Join("..", "internal", "documents", "testdata", "exemple.docx"))
+	if err != nil {
+		t.Fatalf("lecture de la fixture: %v", err)
+	}
+
+	server.mu.Lock()
+	server.files["Notes/rapport.docx"] = document
+	server.etags["Notes/rapport.docx"] = server.nextETag()
+	server.files["Notes/carnet.md"] = []byte("# Carnet")
+	server.etags["Notes/carnet.md"] = server.nextETag()
+	server.mu.Unlock()
+
+	verifie := func(t *testing.T, contexte string) {
+		t.Helper()
+
+		raw, err := app.ListFolderJSON("")
+		if err != nil {
+			t.Fatalf("ListFolderJSON %s: %v", contexte, err)
+		}
+		var listing folderListing
+		if err := json.Unmarshal([]byte(raw), &listing); err != nil {
+			t.Fatalf("désérialisation %s: %v", contexte, err)
+		}
+
+		vus := map[string]bool{}
+		for _, e := range listing.Entries {
+			vus[e.Name] = true
+			attendu := e.Name == "rapport.docx"
+			if e.ReadOnly != attendu {
+				t.Errorf("%s: readOnly de %q = %v, attendu %v", contexte, e.Name, e.ReadOnly, attendu)
+			}
+		}
+		for _, nom := range []string{"rapport.docx", "carnet.md"} {
+			if !vus[nom] {
+				t.Errorf("%s: %q absent du listing", contexte, nom)
+			}
+		}
+	}
+
+	verifie(t, "en ligne")
+
+	// Le repli hors connexion ne connaît que ce que le cache a vu passer.
+	if _, err := app.RenderFileJSON("rapport.docx"); err != nil {
+		t.Fatalf("RenderFileJSON: %v", err)
+	}
+	if _, err := app.ReadNote("carnet.md"); err != nil {
+		t.Fatalf("ReadNote: %v", err)
+	}
+	server.setOffline(true)
+	verifie(t, "hors connexion")
 }

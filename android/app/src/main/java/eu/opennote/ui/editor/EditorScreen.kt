@@ -1,8 +1,11 @@
 package eu.opennote.ui.editor
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -31,6 +34,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -220,6 +224,7 @@ fun EditorScreen(
 }
 
 /** Une liste verticale unique ; jamais plus d'un champ de saisie composé. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EditeurVirtualise(
     document: String,
@@ -231,30 +236,66 @@ private fun EditeurVirtualise(
     onValeurChangee: (TextFieldValue) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LazyColumn(
-        contentPadding = PaddingValues(vertical = 8.dp),
-        modifier = modifier,
-    ) {
-        itemsIndexed(
-            items = tranches,
-            key = { _, tranche -> tranche.debut },
-        ) { index, tranche ->
-            if (index == focus) {
-                FenetreActive(
-                    valeur = valeur,
-                    activation = activation,
-                    onValeurChangee = onValeurChangee,
-                )
-            } else {
-                TrancheInactive(
-                    texte = tranche.texteDe(document),
-                    onOffsetTouche = { offsetLocal ->
-                        onActiver(tranche.debut + offsetLocal)
-                    },
-                )
+    val miseEnVue = remember {
+        object : BringIntoViewSpec {
+            override fun calculateScrollDistance(
+                offset: Float,
+                size: Float,
+                containerSize: Float,
+            ): Float = calculerDistanceMiseEnVue(offset, size, containerSize)
+        }
+    }
+
+    CompositionLocalProvider(LocalBringIntoViewSpec provides miseEnVue) {
+        LazyColumn(
+            contentPadding = PaddingValues(vertical = 8.dp),
+            modifier = modifier,
+        ) {
+            itemsIndexed(
+                items = tranches,
+                // La clé du champ reste identique quand sa fenêtre glisse : Compose
+                // conserve alors le nœud focalisé et l'IME ne se ferme pas.
+                key = { index, tranche ->
+                    if (index == focus) "active" else "tranche-${tranche.debut}"
+                },
+            ) { index, tranche ->
+                if (index == focus) {
+                    FenetreActive(
+                        valeur = valeur,
+                        activation = activation,
+                        onValeurChangee = onValeurChangee,
+                    )
+                } else {
+                    TrancheInactive(
+                        texte = tranche.texteDe(document),
+                        onOffsetTouche = { offsetLocal ->
+                            onActiver(tranche.debut + offsetLocal)
+                        },
+                    )
+                }
             }
         }
     }
+}
+
+/**
+ * Laisse le curseur tranquille dans les deux tiers supérieurs de la liste.
+ *
+ * Une grande demande correspond au champ entier : la recentrer ferait sortir
+ * son début de l'écran. Seules les petites demandes du curseur sont donc
+ * ramenées, au minimum, sur la frontière des deux tiers.
+ */
+internal fun calculerDistanceMiseEnVue(
+    offset: Float,
+    taille: Float,
+    tailleConteneur: Float,
+): Float {
+    if (tailleConteneur <= 0f) return 0f
+    if (offset < 0f) return offset
+
+    val seuil = tailleConteneur * (2f / 3f)
+    if (taille >= seuil) return 0f
+    return (offset + taille - seuil).coerceAtLeast(0f)
 }
 
 /** Traduit le premier toucher en offset source avant de remplacer le `Text`. */
