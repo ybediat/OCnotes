@@ -206,7 +206,17 @@ au montage abandonné qui rendait chaque tranche comme un document Markdown.
   rééquilibrage absent à la fin d'une composition, puis agrandissement absent
   aux bords gauche et droit, et enfin politique de défilement absente ;
 - compilation debug, compilation release et lint passent ;
-- l'APK intégrée a été installée sur le Redmi Note 12.
+- l'APK intégrée a été installée sur le Redmi Note 12 ;
+- **mesurée sur cet appareil le 31 août 2026** : défilement acquis et reproduit
+  sur deux passes, frappe encore au-dessus de sa cible — section 6, relevés en
+  7 bis de `docs/ARCHITECTURE.md`.
+
+Distinguer ce que chaque ligne établit : les tests JVM disent que le découpage
+est juste, la compilation qu'il tient, l'appareil qu'il s'affiche, et le banc
+seul qu'il est rapide. Les quatre cas de sûreté et la relecture du fichier
+écrit — section 6 — restent à faire ; le seul aller-retour vérifié à ce jour
+l'a été incidemment, cinq caractères écrits puis retirés rendant un fichier
+identique à l'octet près.
 
 Le dernier contrôle manuel consiste à confirmer sur cette APK que le clavier
 reste ouvert pendant un rééquilibrage réel, puis qu'une poignée peut continuer
@@ -225,6 +235,9 @@ du champ — notamment pour « Tout sélectionner », copier et supprimer — to
 ne composant toujours qu'une petite fenêtre éditable. Le présent palier prépare
 ce travail : les deux ancres ont déjà une représentation globale stable et la
 matérialisation du document complet reste unique.
+
+Le périmètre, les paliers et les conditions d'arrêt de cette expérimentation
+sont décrits dans [CHANTIER-SELECTION-GLOBALE.md](CHANTIER-SELECTION-GLOBALE.md).
 
 ---
 
@@ -477,16 +490,48 @@ Après validation et seulement après :
 Le chantier n'est pas fini tant que l'écran intégré a été mesuré sur le même
 appareil, avec la même note, le même geste et le réseau coupé.
 
-| Grandeur | Avant | Attendu après |
-|---|---:|---:|
-| Dessin moyen par image, note de 295 ko | 360,8 ms | ≤ 16 ms |
-| Médiane par image | 500 ms | ≤ 20 ms |
-| Frappe, médiane par image, note de 205 ko | 750 ms | ≤ 20 ms |
+**Fait le 31 août 2026.** Relevés complets en section 7 bis de
+`docs/ARCHITECTURE.md`.
+
+| Grandeur | Avant | Attendu | Mesuré |
+|---|---:|---:|---:|
+| Dessin moyen par image, note de 295 ko | 360,8 ms | ≤ 16 ms | **0,75 à 1,34 ms** (8 passes) ✅ |
+| Médiane par image | 500 ms | ≤ 20 ms | **11 à 14 ms** (8 passes) ✅ |
+| Frappe, dessin moyen | 424,7 ms (205 ko) | ≤ 16 ms | **4,4 à 5,5 ms** (295 ko) ✅ |
+| Frappe, médiane par image | 750 ms (205 ko) | ≤ 20 ms | **23 à 26 ms** (7 passes) ❌ |
+
+Le défilement est acquis, reproduit sur huit passes, avec plus d'un ordre de
+grandeur de marge.
+
+La frappe demande une lecture en deux temps. Les colonnes que cette section
+désigne elle-même comme décisives — `PerformTraversalsStart → DrawStart` et
+`DrawStart → SyncQueued` — valent 0,11 ms et 4,46 ms, contre 0,11 et 424,7 ms
+avant : **l'objectif du chantier est atteint.** Mais la médiane par image reste
+à 23-26 ms, et ce n'est pas un défaut d'échantillon : le protocole a été porté
+de 5 à 40 caractères, l'échantillon est passé de 18 à 105 images, et le chiffre
+n'a pas bougé.
+
+Ce qui reste se lit dans la décomposition complète (7 bis) : 6,45 ms s'écoulent
+avant qu'une ligne de l'application ne s'exécute, et le GPU tient 9 à 10 ms.
+Deux postes que ce chantier n'a jamais prétendu traiter, et dont le premier est
+gonflé par l'injection ADB des touches. **Trancher demande une frappe à la
+main ; ce banc ne sait pas la produire.**
 
 ```powershell
 ./scripts/banc-editeur.ps1 -Note "scolarisation des enfants rrom"
 ./scripts/banc-editeur.ps1 -Note "une note jetable" -Frappe
 ```
+
+Le banc a dû être adapté à l'éditeur virtualisé : ses marqueurs d'écran
+désignaient le champ monolithique, qui n'existe plus. Ne pas rejouer une
+version antérieure du script — celle qui prenait la fenêtre active pour la
+barre de recherche a détruit deux cents caractères dans une vraie note, les a
+enregistrés et poussés sur le serveur.
+
+**Les notes `bench-*` de l'ancien banc n'existent plus sur le serveur.** Les
+mesures ci-dessus portent donc toutes sur la note réelle de 295 ko ; la ligne
+« frappe » n'est plus comparable ligne à ligne avec l'ancienne, qui portait sur
+205 ko. En recréer un jeu gradué avant la prochaine campagne.
 
 Les colonnes décisives sont `PerformTraversalsStart → DrawStart` et
 `DrawStart → SyncQueued`. Vérifier l'écran avant et après chaque mesure : un tap

@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -196,6 +197,7 @@ fun EditorScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddings)
+                .consumeWindowInsets(paddings)
                 .imePadding(),
         ) {
             EditeurVirtualise(

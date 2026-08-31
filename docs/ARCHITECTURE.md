@@ -715,6 +715,88 @@ nominal.
 **La virtualisation n'est pas une optimisation de l'éditeur : c'est la seule
 chose qui tienne.**
 
+### Après la virtualisation — même appareil, même note, même geste
+
+Mesuré le 31 août 2026 sur l'écran intégré, Redmi Note 12, réseau coupé, la
+note réelle de 294 576 octets. **Huit passes de défilement et sept de frappe**,
+dont les fourchettes disent la dispersion.
+
+| défilement, 6 balayages | avant | après (8 passes) |
+|---|---:|---:|
+| images rendues | 18 | **221 à 283** |
+| images en retard | 67 % | 12 à 32 % |
+| médiane par image | 500 ms | **11 à 14 ms** |
+| 90e percentile | — | 17 à 18 ms |
+| dessin moyen | 360,8 ms | **0,75 à 1,34 ms** |
+| dessin max | — | 2,45 à 4,29 ms |
+| mesure + layout | 0,11 ms | 0,13 à 0,14 ms |
+| dessin à l'ouverture | 1 366 ms | 1,63 à 4,45 ms |
+
+Le dessin ne suit plus la taille du document, et le chiffre qui le dit le mieux
+n'est pas le rapport de 340 : **moins d'une milliseconde sur 295 ko, contre
+4,08 ms mesurés dans l'ancien éditeur sur une note de 445 octets.** L'éditeur
+virtualisé dessine la note entière moins cher que le monolithique ne dessinait
+vingt lignes.
+
+Les passes tardives sont systématiquement meilleures que les premières — 0,75
+contre 1,34 ms de dessin, 12 % d'images en retard contre 32 %. L'écart n'a pas
+été instruit ; il ne change pas la conclusion, les deux extrémités tenant le
+budget avec plus d'un ordre de grandeur de marge.
+
+**La frappe est trente fois moins chère, et reste au-dessus de sa cible.**
+
+Cinq caractères ne produisent que 17 à 21 images : à 750 ms l'image, une médiane
+sur vingt valeurs suffisait à conclure ; à 25 ms, non. Le protocole a donc été
+porté à quarante caractères, soit une centaine d'images — et la médiane n'a pas
+bougé. **Ce n'est pas un artefact d'échantillonnage.**
+
+| frappe | avant, 205 ko | après, 295 ko, 5 car. | après, 40 car. |
+|---|---:|---:|---:|
+| images rendues | — | 17 à 21 | **95 à 108** |
+| médiane par image | 750 ms | 24 à 36 ms | **23 à 26 ms** |
+| 90e percentile | — | 31 à 48 ms | 27 à 32 ms |
+| dessin moyen | 424,7 ms | 5,0 à 6,4 ms | **4,4 à 5,5 ms** |
+| dessin max | 678,6 ms | 14,5 à 30,5 ms | 11,3 à 13,1 ms |
+
+Décomposition d'une passe de 105 images, la seule instrumentée sur toutes les
+phases :
+
+| phase | frappe | défilement |
+|---|---:|---:|
+| avant `PerformTraversalsStart` | 6,45 ms | 2,91 ms |
+| mesure + layout | 0,11 ms | 0,14 ms |
+| enregistrement de la display list | **4,46 ms** | 0,75 ms |
+| `RenderThread` | 2,61 ms | 2,07 ms |
+| image complète | 22,52 ms | 3,85 ms |
+
+**Les deux colonnes que la section 6 du chantier désigne comme décisives sont
+tenues avec deux ordres de grandeur de marge** : 0,11 ms de mesure et layout,
+4,46 ms de display list, contre 424,7 ms avant. Ce qui reste tient dans deux
+postes que le chantier n'a jamais prétendu traiter : 6,45 ms avant qu'une seule
+ligne de l'application ne s'exécute — attente du vsync et remise de l'événement
+d'entrée, gonflée par l'injection ADB — et 9 à 10 ms de GPU au 50e percentile.
+
+Deux conclusions, à ne pas confondre :
+
+- l'objectif du chantier est atteint : **le coût de dessin ne dépend plus de la
+  taille du document**, ni en défilement ni en frappe ;
+- le critère de recette tel qu'il est écrit — « frappe, médiane par image
+  ≤ 20 ms » — **ne l'est pas**, à 23-26 ms, de façon stable et reproduite. Il
+  avait été rédigé quand le dessin faisait toute l'image ; il mesure désormais
+  surtout des phases étrangères au sujet. Le trancher demande une frappe à la
+  main, sans `adb input` — ce banc ne sait pas la produire.
+
+**Le banc lui-même a dû être adapté, et une négligence sur ce point a détruit
+des données.** Ses deux marqueurs d'écran désignaient l'ancien champ
+monolithique : « un `EditText` haut » pour l'éditeur, « le seul `EditText`
+mince » pour la barre de recherche. Le premier ne reconnaissait plus un éditeur
+pourtant ouvert ; le second, corrigé trop tard, a pris la petite fenêtre active
+de l'éditeur pour la barre de recherche et a envoyé « tout sélectionner,
+supprimer, taper » dans une vraie note. Les deux critères sont désormais
+relatifs à la zone défilante — au-dessus, c'est la recherche ; dedans, c'est le
+contenu — et `Enter-Note` refuse de taper tant qu'il n'a pas vérifié *quel*
+champ a le focus. Le détail est dans l'en-tête de `scripts/banc-editeur.ps1`.
+
 ---
 
 ## 8. Risques identifiés
@@ -728,4 +810,4 @@ chose qui tienne.**
 | `gomobile bind` : friction sur les types | ralentit l'intégration | frontière JSON, façade mince, décidé dès le départ |
 | Sync bidirectionnelle plus complexe que prévu | dérapage planning | conflit non destructif, aucune fusion auto en v1 |
 | Poids de l'APK (runtime Go + Compose) | critère « légère » | mesurer tôt ; `-ldflags="-s -w"`, ABI `arm64-v8a` seule |
-| Éditeur non virtualisé sur une grande note | inutilisable en saisie dès ~200 lignes ; plantage `Constraints` au-delà de ~1 300 | mesuré, section 7 bis ; aucun correctif local — demande des champs bornés à un écran |
+| ~~Éditeur non virtualisé sur une grande note~~ | — | **écarté** : éditeur virtualisé intégré et mesuré le 2026-08-31 — 1,1 ms de dessin sur 295 ko contre 360,8. La frappe, à 25 ms de médiane, reste au-dessus des 20 ms visés sur un échantillon court (section 7 bis) |
