@@ -1,0 +1,439 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Textes de l'interface.
+
+    Ce fichier est la langue de référence, le français. Une traduction se fait
+    en copiant le fichier dans `values-<langue>/` et en n'y traduisant que les
+    valeurs : jamais les `name`, jamais les `%1$s`.
+
+    Trois règles à ne pas perdre de vue :
+
+      - une apostrophe doit s'écrire \' , sinon la compilation des ressources
+        échoue ;
+      - un texte qui compte quelque chose est un <plurals>, jamais un
+        `if (n > 1)` : le nombre de formes dépend de la langue ;
+      - `translatable="false"` marque ce qui ne doit pas être traduit.
+-->
+<resources>
+    <string name="app_name" translatable="false">OpenNote</string>
+
+    <!-- ================================================================
+         Éléments communs
+
+         Les libellés que plusieurs écrans partagent vivent ici. Les
+         dupliquer par écran ferait diverger deux boutons qui portent le
+         même geste — une traduction sur deux, et rien pour le signaler.
+         ================================================================ -->
+    <string name="action_annuler">Annuler</string>
+    <string name="action_supprimer">Supprimer</string>
+    <string name="action_deplacer">Déplacer</string>
+    <string name="action_copier">Copier</string>
+    <string name="action_renommer">Renommer</string>
+    <string name="action_creer">Créer</string>
+    <string name="action_retour">Retour</string>
+
+    <!-- Valeur absente dans une fiche de réglages : un tiret cadratin, le
+         même dans toutes les langues. -->
+    <string name="commun_valeur_vide" translatable="false">—</string>
+
+    <!-- Un constat, pas une erreur : la vue vient du cache, elle est
+         utilisable, elle peut simplement être incomplète. -->
+    <string name="commun_bandeau_cache">Serveur injoignable — vue reconstituée depuis le cache. Elle peut être incomplète.</string>
+
+    <!-- ================================================================
+         Erreurs
+
+         Les catégories de transport ([AUTH], [CONFLICT]…) sont reformulées
+         plutôt que relayées : « HTTP 502 » sur une URL WebDAV n\'apprend rien
+         à personne. Les codes locaux ([NAME_*], [STORAGE_IO]…) viennent du
+         cœur Go, qui refuse de créer un nom que le cache ne saurait écrire.
+         ================================================================ -->
+    <string name="err_auth">Identifiants refusés. Vérifiez le nom d\'utilisateur et l\'App Token, qui a pu expirer.</string>
+    <string name="err_conflit">Cette note a été modifiée ailleurs entre-temps.</string>
+    <string name="err_introuvable">Introuvable sur le serveur. La note ou le dossier a peut-être été supprimé depuis un autre appareil.</string>
+    <string name="err_http">Le serveur est injoignable pour le moment.</string>
+    <string name="err_hors_ligne">Serveur injoignable. Réessayez une fois le réseau revenu.</string>
+    <string name="err_inconnue">Opération impossible.</string>
+
+    <string name="err_nom_vide">Le nom ne peut pas être vide.</string>
+    <string name="err_nom_reserve">Ce nom est réservé par le système.</string>
+    <!-- %1$d vient de Mobile.maxNameBytes() : la borne n\'est pas recopiée ici. -->
+    <string name="err_nom_trop_long">Le nom est trop long : %1$d octets au maximum.</string>
+    <!-- %1$s vient de Mobile.forbiddenNameChars(), pour la même raison. -->
+    <string name="err_nom_caracteres_interdits">Le nom ne peut pas contenir ces caractères : %1$s</string>
+    <string name="err_nom_caractere_controle">Le nom contient un caractère invisible.</string>
+    <string name="err_nom_espaces">Le nom ne peut pas commencer ni finir par une espace.</string>
+    <string name="err_nom_point_final">Le nom ne peut pas finir par un point.</string>
+    <string name="err_nom_point_initial">Le nom ne peut pas commencer par un point.</string>
+    <string name="err_nom_reserve_windows">Ce nom est réservé par Windows et ne peut pas être utilisé.</string>
+    <string name="err_nom_aucun_libre">Trop de notes portent déjà ce nom.</string>
+    <string name="err_racine_protegee">Le dossier de notes lui-même ne peut être ni renommé, ni déplacé, ni supprimé.</string>
+    <string name="err_deplacement_dans_soi">Un dossier ne peut pas être déplacé dans lui-même.</string>
+    <string name="err_chemin_vide">Aucun élément désigné.</string>
+    <string name="err_dossier_hors_ligne">Un dossier ne peut pas être renommé, déplacé ou supprimé hors connexion. Reconnectez-vous d\'abord.</string>
+    <string name="err_lecture_seule">Ce document ne peut pas être modifié ici.</string>
+    <string name="err_format_non_pris_en_charge">Cette opération ne convient pas à ce format de fichier.</string>
+    <string name="err_document_invalide">Ce document est invalide ou incomplet.</string>
+    <string name="err_document_trop_volumineux">Le contenu de ce document est trop volumineux à afficher.</string>
+    <string name="err_fichier_trop_volumineux">Ce document est trop volumineux à ouvrir.</string>
+    <string name="err_stockage">Impossible d\'écrire sur le stockage de l\'appareil. Vérifiez l\'espace disponible ou synchronisez d\'abord vos modifications locales.</string>
+    <string name="err_contenu_a_telecharger">Le contenu de cette note n\'est pas disponible hors connexion. Téléchargez-la une fois le réseau revenu.</string>
+    <string name="err_url_serveur_manquante">Indiquez l\'adresse du serveur.</string>
+    <string name="err_url_serveur_invalide">Adresse de serveur invalide. Elle doit commencer par http:// ou https://</string>
+    <string name="err_utilisateur_manquant">Indiquez votre nom d\'utilisateur.</string>
+
+    <!-- ================================================================
+         Démarrage
+         ================================================================ -->
+    <string name="demarrage_token_refuse">Votre App Token n\'est plus accepté par le serveur. Il a sans doute expiré : créez-en un nouveau et saisissez-le.</string>
+    <string name="demarrage_espace_hors_ligne">Il reste un espace de notes à choisir, et cette étape demande une connexion au serveur. Réessayez une fois le réseau revenu.</string>
+
+    <!-- ================================================================
+         Connexion
+
+         L'aide sur les App Tokens n'est pas décorative : personne ne devine
+         qu'il faut créer un jeton dédié plutôt que saisir son mot de passe,
+         et c'est le premier point de blocage d'une application auto-hébergée.
+         Le chemin de menu doit rester celui d'OpenCloud, dans la langue où
+         OpenCloud l'affiche.
+         ================================================================ -->
+    <string name="login_accroche">Vos notes Markdown, sur votre serveur OpenCloud.</string>
+    <string name="login_serveur_label">Adresse du serveur</string>
+    <string name="login_serveur_exemple">https://cloud.exemple.fr</string>
+    <string name="login_utilisateur_label">Nom d\'utilisateur</string>
+    <string name="login_token_label">App Token</string>
+    <string name="login_token_afficher">Afficher le token</string>
+    <string name="login_token_masquer">Masquer le token</string>
+    <!-- Un échec réseau ne demande aucune correction : le libellé invite à
+         réessayer, pas à recommencer la saisie. -->
+    <string name="login_connecter">Se connecter</string>
+    <string name="login_reessayer">Réessayer</string>
+    <string name="login_aide_titre">Pas encore d\'App Token ?</string>
+    <string name="login_aide_chemin">Dans OpenCloud : Réglages du compte → App Tokens → + New. Donnez-lui un nom et une date d\'expiration. Le jeton n\'est affiché qu\'une seule fois, copiez-le tout de suite.</string>
+    <string name="login_aide_revocation">Ce n\'est pas votre mot de passe : un App Token se révoque sans changer vos identifiants.</string>
+
+    <!-- ================================================================
+         Choix de l'espace
+
+         Un espace inutilisable reste visible mais grisé, avec l'explication
+         de son inaptitude : l'utilisateur le voit dans son navigateur web et
+         se demanderait où il est passé.
+         ================================================================ -->
+    <string name="espace_titre">Où ranger vos notes ?</string>
+    <string name="espace_stockage">Espace de stockage</string>
+    <string name="espace_dossier_titre">Dossier de notes</string>
+    <string name="espace_chemin_label">Chemin dans l\'espace</string>
+    <string name="espace_chemin_aide">Le dossier est créé s\'il n\'existe pas. Laissez le champ vide pour utiliser la racine de l\'espace, par exemple si vos notes y sont déjà.</string>
+    <string name="espace_continuer">Continuer</string>
+    <string name="espace_preparation">Préparation…</string>
+    <string name="espace_virtuel">Agrégat des dossiers partagés avec vous, pas un espace de stockage : on ne peut pas y créer de dossier de notes.</string>
+    <string name="espace_inutilisable">Cet espace ne peut pas héberger de notes.</string>
+    <string name="espace_personnel">Votre espace personnel</string>
+    <string name="espace_projet">Espace de projet partagé</string>
+    <string name="espace_monte">Dossier monté</string>
+
+    <!-- ================================================================
+         Synchronisation
+
+         Le résumé décrit ce qui s\'est passé plutôt que de conclure. Une
+         panne réseau donne un état partiel, pas un échec : « 3 notes
+         envoyées, 2 en attente » est exact, là où « échec » ferait croire
+         à une perte.
+         ================================================================ -->
+    <plurals name="sync_notes_envoyees">
+        <item quantity="one">%d note envoyée</item>
+        <item quantity="other">%d notes envoyées</item>
+    </plurals>
+    <plurals name="sync_deplacements">
+        <item quantity="one">%d déplacement</item>
+        <item quantity="other">%d déplacements</item>
+    </plurals>
+    <plurals name="sync_suppressions">
+        <item quantity="one">%d suppression</item>
+        <item quantity="other">%d suppressions</item>
+    </plurals>
+    <plurals name="sync_en_attente">
+        <item quantity="one">%d en attente</item>
+        <item quantity="other">%d en attente</item>
+    </plurals>
+    <!-- Séparateur d\'énumération : il change de forme selon la langue. -->
+    <string name="sync_separateur">", "</string>
+    <string name="sync_resume">%1$s.</string>
+    <string name="sync_resume_partiel">%1$s. Le serveur a cessé de répondre en cours de route.</string>
+    <string name="sync_a_jour">Tout est à jour.</string>
+    <string name="sync_hors_ligne">Serveur injoignable. Rien à envoyer pour l\'instant.</string>
+
+    <string name="sync_channel_name">Synchronisation</string>
+    <string name="sync_channel_description">Conflits et incidents de synchronisation des notes</string>
+    <plurals name="sync_conflits_titre">
+        <item quantity="one">Une note modifiée sur deux appareils</item>
+        <item quantity="other">%d notes modifiées sur deux appareils</item>
+    </plurals>
+    <string name="sync_conflits_rassurance">Votre version a été conservée à côté, rien n\'est perdu.</string>
+    <string name="sync_conflits_ligne">\n• %1$s</string>
+    <plurals name="sync_conflits_reste">
+        <item quantity="one">\n• …et %d autre</item>
+        <item quantity="other">\n• …et %d autres</item>
+    </plurals>
+
+    <!-- ================================================================
+         Navigateur
+         ================================================================ -->
+    <string name="browser_supprime">« %1$s » supprimé.</string>
+    <string name="browser_deplace">« %1$s » déplacé.</string>
+    <!-- Titre de la boîte de déplacement, avec le nom de la note concernée. -->
+    <string name="browser_deplacer_titre">Déplacer « %1$s »</string>
+    <string name="browser_dossier_parent">Dossier parent</string>
+    <string name="browser_rafraichir">Rafraîchir et synchroniser</string>
+    <string name="browser_nouvelle_note">Nouvelle note</string>
+    <string name="browser_nouveau_dossier">Nouveau dossier</string>
+    <string name="browser_type_dossier">Dossier</string>
+    <string name="browser_type_note">Note</string>
+    <string name="browser_type_document">Document en lecture seule</string>
+    <string name="browser_actions">Actions sur « %1$s »</string>
+
+    <!-- Sélection multiple : appui long sur une ligne, puis actions groupées
+         dans une barre de titre contextuelle. Le déplacement groupé ne
+         concerne que les notes ; la suppression accepte aussi les dossiers,
+         comme le menu par ligne. -->
+    <plurals name="browser_selection_compte">
+        <item quantity="one">%d sélectionné</item>
+        <item quantity="other">%d sélectionnés</item>
+    </plurals>
+    <string name="browser_selection_demarrer">Sélectionner</string>
+    <string name="browser_selection_quitter">Quitter la sélection</string>
+    <plurals name="browser_deplacer_lot_titre">
+        <item quantity="one">Déplacer %d élément</item>
+        <item quantity="other">Déplacer %d éléments</item>
+    </plurals>
+    <plurals name="browser_copier_lot_titre">
+        <item quantity="one">Copier %d élément</item>
+        <item quantity="other">Copier %d éléments</item>
+    </plurals>
+    <!-- Morceaux d'un résumé assemblé : sans ponctuation finale, joints par
+         sync_separateur et clos par sync_resume, comme le résumé de synchro. -->
+    <plurals name="browser_lot_deplaces">
+        <item quantity="one">%d élément déplacé</item>
+        <item quantity="other">%d éléments déplacés</item>
+    </plurals>
+    <plurals name="browser_lot_copies">
+        <item quantity="one">%d élément copié</item>
+        <item quantity="other">%d éléments copiés</item>
+    </plurals>
+    <plurals name="browser_lot_supprimes">
+        <item quantity="one">%d élément supprimé</item>
+        <item quantity="other">%d éléments supprimés</item>
+    </plurals>
+    <plurals name="browser_lot_echecs">
+        <item quantity="one">%d en échec</item>
+        <item quantity="other">%d en échec</item>
+    </plurals>
+
+    <!-- Recherche. Elle ne porte que sur le dossier affiché : l'invite doit
+         le dire, sinon un résultat manquant passe pour une note perdue. -->
+    <string name="browser_recherche_invite">Rechercher dans ce dossier</string>
+    <string name="browser_recherche_invite_tout">Rechercher dans toutes les notes</string>
+    <string name="browser_recherche_effacer">Effacer la recherche</string>
+    <string name="browser_recherche_vide_titre">Aucun résultat</string>
+    <string name="browser_recherche_vide_detail">Aucun nom ne correspond à votre recherche.</string>
+
+    <!-- Créer une note demande désormais où la ranger. L\'application le
+         choisissait déjà, mais sans le dire. -->
+    <string name="browser_note_dossier">Dossier</string>
+
+    <!-- Choix de la forme de la page d\'accueil, dans le tiroir. -->
+    <string name="menu_affichage">Affichage</string>
+    <string name="menu_mode_arborescence">Par dossiers</string>
+    <string name="menu_mode_liste">Toutes les notes</string>
+
+    <!-- La liste plate n\'a pas de dossier courant : l\'invitation à créer une
+         note ne peut pas parler « de ce dossier ». -->
+    <string name="browser_liste_vide_titre">Aucune note</string>
+    <string name="browser_liste_vide_detail">Créez votre première note avec le bouton en bas de l\'écran.</string>
+
+    <!-- Bouton de tri : son icône montre l'ordre en cours, sa description dit
+         ce qu'un appui ferait — c'est ce dont TalkBack a besoin. -->
+    <string name="browser_tri_par_nom">Trier par nom</string>
+    <string name="browser_tri_par_date">Trier par date</string>
+
+    <!-- Un dossier vide n'est pas une panne : le dire, et dire quoi faire. -->
+    <string name="browser_vide_titre">Ce dossier est vide</string>
+    <string name="browser_vide_detail">Créez une note avec le bouton en bas de l\'écran.</string>
+    <string name="browser_vide_cache">Rien en cache pour ce dossier. Vous pouvez quand même créer une note : elle partira à la prochaine connexion.</string>
+
+    <string name="browser_note_label">Titre</string>
+    <string name="browser_note_aide">Le nom de fichier est dérivé du titre ; un suffixe est ajouté si le nom est déjà pris.</string>
+    <string name="browser_dossier_label">Nom du dossier</string>
+    <string name="browser_renommer_label">Nouveau nom</string>
+
+    <!-- Sous-titre d'une ligne : date, taille, état d'envoi. La date et la
+         taille sont mises en forme par la plateforme, dans la langue et les
+         unités du téléphone ; seul leur assemblage est ici. -->
+    <string name="browser_soustitre_separateur">" · "</string>
+    <string name="browser_en_attente">en attente d\'envoi</string>
+
+    <!-- Un dossier part avec tout ce qu'il contient : le dire, parce que
+         c'est la seule action de l'application qui détruise des données. -->
+    <string name="dialogue_supprimer_titre">Supprimer « %1$s » ?</string>
+    <string name="dialogue_supprimer_dossier">Le dossier et toutes les notes qu\'il contient seront supprimés du serveur. Cette action est définitive.</string>
+    <string name="dialogue_supprimer_note">La note sera supprimée du serveur. Cette action est définitive.</string>
+    <plurals name="dialogue_supprimer_lot_titre">
+        <item quantity="one">Supprimer %d élément ?</item>
+        <item quantity="other">Supprimer %d éléments ?</item>
+    </plurals>
+    <string name="dialogue_supprimer_lot_notes">Les éléments sélectionnés seront supprimés du serveur. Cette action est définitive.</string>
+    <string name="dialogue_supprimer_lot_dossiers">Les éléments sélectionnés seront supprimés du serveur, y compris les dossiers avec tout ce qu\'ils contiennent. Cette action est définitive.</string>
+
+    <!-- ================================================================
+         Menu latéral
+         ================================================================ -->
+    <string name="menu_reglages">Réglages</string>
+    <string name="menu_a_propos">À propos</string>
+    <string name="a_propos_titre">À propos d\'OpenNote</string>
+    <string name="a_propos_description">Gestionnaire de notes stockées sur un serveur OpenCloud. Créé par Yannis Bediat. V1.0 Aout 2026</string>
+    <string name="a_propos_licence">Licence : MIT https://github.com/ybediat/OpenNote/tree/main?tab=MIT-1-ov-file</string>
+    <string name="a_propos_depot">Dépôt Git</string>
+    <string name="a_propos_depot_url" translatable="false">https://github.com/ybediat/OpenNote</string>
+
+    <!-- ================================================================
+         Réglages
+         ================================================================ -->
+    <string name="reglages_compte">Compte</string>
+    <string name="reglages_serveur">Serveur</string>
+    <string name="reglages_utilisateur">Utilisateur</string>
+    <!-- La session a pu être remontée hors connexion : l'application est
+         utilisable, mais le serveur n'a encore rien confirmé. -->
+    <string name="reglages_token_non_confirme">Le serveur n\'a pas encore confirmé votre App Token depuis le lancement. Vos notes restent consultables et modifiables en attendant.</string>
+
+    <string name="reglages_espace_titre">Espace de notes</string>
+    <string name="reglages_espace">Espace</string>
+    <string name="reglages_dossier">Dossier</string>
+    <string name="reglages_racine_espace">racine de l\'espace</string>
+
+    <string name="reglages_edition_titre">Édition</string>
+    <string name="reglages_edition_explication">Le choix s\'applique à la prochaine ouverture d\'une note.</string>
+    <string name="reglages_moteur_virtualise">Éditeur actuel</string>
+    <string name="reglages_moteur_virtualise_detail">Moteur virtualisé stable, utilisé par défaut.</string>
+    <string name="reglages_moteur_natif">Éditeur natif expérimental</string>
+    <string name="reglages_moteur_natif_detail">Facilite la sélection de texte long. Ce moteur reste expérimental.</string>
+
+    <string name="reglages_sync_titre">Synchronisation</string>
+    <string name="reglages_en_attente">Opérations en attente</string>
+    <string name="reglages_aucune">aucune</string>
+    <string name="reglages_sync_explication">Une passe automatique a lieu au retour dans l\'application, peu après chaque modification, et toutes les heures si le réseau est disponible.</string>
+    <string name="reglages_sync_en_cours">Synchronisation…</string>
+    <string name="reglages_sync_maintenant">Synchroniser maintenant</string>
+
+    <string name="reglages_cache_titre">Cache hors ligne</string>
+    <string name="reglages_cache_quota">Limite d\'espace</string>
+    <string name="reglages_cache_utilisation">Utilisation</string>
+    <string name="reglages_cache_usage">%1$s utilisés sur %2$s</string>
+    <string name="reglages_cache_explication">Les brouillons locaux, les copies de conflit et les opérations en attente ne sont jamais supprimés automatiquement.</string>
+    <string name="reglages_cache_modifier_quota">Modifier la limite</string>
+    <string name="reglages_cache_liberer">Libérer l\'espace</string>
+    <string name="reglages_cache_choix_titre">Limite du cache hors ligne</string>
+    <string name="reglages_cache_50_mo">50 Mo</string>
+    <string name="reglages_cache_250_mo">250 Mo</string>
+    <string name="reglages_cache_1_go">1 Go</string>
+    <string name="reglages_cache_5_go">5 Go</string>
+    <string name="reglages_cache_illimite">Illimité</string>
+
+    <string name="reglages_deconnexion">Se déconnecter</string>
+    <string name="reglages_deconnexion_explication">La déconnexion efface le token, la configuration et le cache local de cet appareil. Les notes restent sur le serveur.</string>
+    <string name="reglages_deconnexion_titre">Se déconnecter ?</string>
+    <string name="reglages_deconnexion_confirmation">Le token, la configuration et le cache local seront effacés. Vos notes restent sur le serveur.</string>
+    <!-- Des modifications non envoyées seraient perdues : c'est la seule mise
+         en garde de l'écran, elle compte ce qui est en jeu. -->
+    <plurals name="reglages_deconnexion_attente">
+        <item quantity="one">Attention : %d modification locale n\'a pas encore été envoyée au serveur. La déconnexion efface le cache et elle sera perdue. Synchronisez d\'abord.</item>
+        <item quantity="other">Attention : %d modifications locales n\'ont pas encore été envoyées au serveur. La déconnexion efface le cache et elles seront perdues. Synchronisez d\'abord.</item>
+    </plurals>
+
+    <!-- Le seul événement de synchronisation qui mérite d'interrompre : la
+         version de l'utilisateur a été mise de côté, il doit savoir où la
+         retrouver. -->
+    <string name="reglages_conflits_titre">Modifiée sur deux appareils</string>
+    <string name="reglages_conflits_ouvrir">Résoudre les conflits (%1$d)</string>
+    <string name="reglages_conflits_reste">%1$d autre(s) conflit(s) à traiter ensuite.</string>
+    <string name="reglages_conflits_garder_serveur">Garder le serveur</string>
+    <string name="reglages_conflits_garder_local">Garder le local</string>
+    <string name="reglages_conflits_garder_deux">Garder les deux</string>
+    <string name="reglages_conflits_explication">La version du serveur était plus récente. Votre version a été conservée à côté, sous un nouveau nom — rien n\'est perdu :</string>
+    <string name="reglages_conflits_ligne">• %1$s</string>
+    <string name="reglages_compris">Compris</string>
+
+    <!-- ================================================================
+         Éditeur
+         ================================================================ -->
+    <!-- Un état, pas une alerte : dit ce qui se passe sans laisser croire
+         à une perte. -->
+    <string name="editeur_brouillon">Brouillon local, envoi programmé</string>
+    <string name="editeur_saisie_vide">Écrivez ici…</string>
+    <string name="editeur_illisible_titre">Note non chargée</string>
+    <string name="editeur_illisible_detail">Son contenu n\'a pas pu être lu. Rien n\'a été modifié : rouvrez-la une fois la connexion revenue.</string>
+    <string name="editeur_defilement_rapide">Défilement rapide du document</string>
+    <string name="editeur_ouverture_longue">Ouverture d\'une grande note…</string>
+
+    <!-- ================================================================
+         Barre de mise en forme
+
+         Chaque action porte deux textes : le libellé écrit sur le bouton et
+         la description lue par TalkBack. Un libellé qui est une lettre
+         mnémonique se traduit — « G » pour gras devient « B » pour bold —
+         là où un symbole est le même partout et porte translatable="false".
+
+         La liste des actions vient du cœur Go : une action qu'il ajoute
+         sans clé ici s'affiche avec son identifiant brut, pas d'erreur.
+         ================================================================ -->
+    <string name="format_gras_libelle">G</string>
+    <string name="format_gras">Gras</string>
+    <string name="format_italique_libelle">I</string>
+    <string name="format_italique">Italique</string>
+    <string name="format_barre_libelle">S</string>
+    <string name="format_barre">Barré</string>
+    <string name="format_code_libelle" translatable="false">&lt; &gt;</string>
+    <string name="format_code">Code en ligne</string>
+    <!-- Le bouton porte le mot lui-même : libellé et description confondus. -->
+    <string name="format_lien">Lien</string>
+    <string name="format_titre1_libelle">H1</string>
+    <string name="format_titre1">Titre de niveau 1</string>
+    <string name="format_titre2_libelle">H2</string>
+    <string name="format_titre2">Titre de niveau 2</string>
+    <string name="format_titre3_libelle">H3</string>
+    <string name="format_titre3">Titre de niveau 3</string>
+    <string name="format_puces_libelle" translatable="false">•</string>
+    <string name="format_puces">Liste à puces</string>
+    <string name="format_numerotee_libelle" translatable="false">1.</string>
+    <string name="format_numerotee">Liste numérotée</string>
+    <string name="format_case_libelle" translatable="false">[ ]</string>
+    <string name="format_case">Case à cocher</string>
+    <string name="format_citation_libelle" translatable="false">&gt;</string>
+    <string name="format_citation">Citation</string>
+    <string name="format_bloc_code_libelle" translatable="false">```</string>
+    <string name="format_bloc_code">Bloc de code</string>
+
+    <!-- ================================================================
+         Aperçu
+
+         Lecture seule : la note s'affiche mise en forme, sans champ de
+         saisie. Un fichier texte, lui, n'est jamais interprété.
+         ================================================================ -->
+    <string name="apercu_activer">Aperçu</string>
+    <string name="apercu_quitter">Modifier</string>
+    <!-- Repère posé à la place d'une image : la source n'est pas affichée. -->
+    <string name="apercu_image">Image</string>
+    <!-- Repère posé à la place d'un saut de page d'un document .docx ou .odt. -->
+    <string name="apercu_saut_de_page">Saut de page</string>
+    <string name="apercu_vide">Cette note est vide.</string>
+    <!--
+        Affiché quand la note contient une suite de caractères sans espace trop
+        longue pour un champ de saisie — typiquement une image collée par
+        l'interface web. Le message dit la cause, pas la mécanique.
+    -->
+    <string name="apercu_lecture_seule">Cette note contient un élément trop long pour être modifié ici. Elle est ouverte en lecture seule.</string>
+    <string name="apercu_document_lecture_seule">Ce document est ouvert en lecture seule.</string>
+    <string name="sync_conflits_suppression">\n• suppression annulée : %1$s a changé à distance</string>
+    <string name="sync_conflits_deplacement">\n• déplacement annulé ; copie conservée : %1$s</string>
+    <string name="reglages_conflits_suppression">• Suppression annulée : %1$s a changé à distance</string>
+    <string name="reglages_conflits_deplacement">• Déplacement annulé ; copie conservée : %1$s</string>
+</resources>

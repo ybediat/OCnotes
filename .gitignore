@@ -1,0 +1,54 @@
+# Go
+/bin/
+*.exe
+*.test
+*.out
+
+# gomobile
+*.aar
+*.jar
+/mobile/mobile.aar
+
+# Android / Gradle
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/local.properties
+/android/.idea/
+/android/.kotlin/
+*.apk
+*.aab
+*.keystore
+*.jks
+*.p12
+*.pfx
+*.pem
+*.key
+*.idsig
+/dist/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Spike : contient des noms de fichiers et identifiants du serveur reel
+/scripts/out/
+
+# Documentation et instructions de travail internes (conservées localement)
+/docs/ARCHITECTURE.md
+/docs/CHANTIER-*.md
+/docs/FACADE.md
+/docs/SETUP.md
+/docs/SIGNING.md
+/android/README.md
+
+# Outils et paramètres locaux
+.DS_Store
+Thumbs.db
+/.idea/
+/.vscode/
+
+# Claude Code (parametres locaux a la machine)
+/.claude/
+/CLAUDE.md

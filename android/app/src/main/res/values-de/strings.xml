@@ -1,0 +1,362 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Traduction Allemande.
+
+    La référence est `values/strings.xml`, en français : elle seule fait foi,
+    elle seule est touchée par le code. Les règles de traduction — clés
+    recopiées telles quelles, paramètres de format conservés, apostrophe
+    échappée, formes de pluriel propres à la langue — sont écrites en tête de
+    `values-en/strings.xml`, qui sert de modèle.
+-->
+<resources>
+    <!-- ================================================================
+         Gemeinsame Elemente
+
+         Beschriftungen, die von mehreren Bildschirmen gemeinsam genutzt werden, leben hier.
+         Sie zu duplizieren würde dazu führen, dass zwei Schaltflächen mit derselben Aktion
+         unterschiedlich übersetzt werden – eine Übersetzung fehlt, und es gibt keine Warnung.
+         ================================================================ -->
+    <string name="action_annuler">Abbrechen</string>
+    <string name="action_supprimer">Löschen</string>
+    <string name="action_deplacer">Verschieben</string>
+    <string name="action_renommer">Umbenennen</string>
+    <string name="action_creer">Erstellen</string>
+    <string name="action_retour">Zurück</string>
+
+    <!-- Wert, der in einem Einstellungsfeld fehlt: ein Gedankenstrich, in allen Sprachen gleich. -->
+
+    <!-- Eine Feststellung, kein Fehler: Die Ansicht stammt aus dem Cache, ist nutzbar, kann aber unvollständig sein. -->
+    <string name="commun_bandeau_cache">Server nicht erreichbar – Ansicht aus dem Cache wiederhergestellt. Sie kann unvollständig sein.</string>
+
+    <!-- ================================================================
+         Fehler
+
+         Die Transportkategorien ([AUTH], [CONFLICT] usw.) werden umformuliert,
+         anstatt weitergegeben zu werden: „HTTP 502“ auf einer WebDAV-URL hilft niemandem weiter.
+         Die lokalen Codes ([NAME_*], [STORAGE_IO] usw.) stammen aus dem Go-Kern und weigern sich,
+         einen Namen zu erstellen, den der Cache nicht schreiben kann.
+         ================================================================ -->
+    <string name="err_auth">Anmeldedaten abgelehnt. Überprüfen Sie den Benutzernamen und das App-Token, das möglicherweise abgelaufen ist.</string>
+    <string name="err_conflit">Diese Notiz wurde in der Zwischenzeit woanders geändert.</string>
+    <string name="err_introuvable">Auf dem Server nicht auffindbar. Die Notiz oder der Ordner wurde möglicherweise von einem anderen Gerät aus gelöscht.</string>
+    <string name="err_http">Der Server ist derzeit nicht erreichbar.</string>
+    <string name="err_hors_ligne">Server nicht erreichbar. Versuchen Sie es erneut, sobald die Netzwerkverbindung wiederhergestellt ist.</string>
+    <string name="err_inconnue">Vorgang nicht möglich.</string>
+
+    <string name="err_nom_vide">Der Name darf nicht leer sein.</string>
+    <string name="err_nom_reserve">Dieser Name ist vom System reserviert.</string>
+    <!-- %1$d stammt von Mobile.maxNameBytes(): Die Grenze wird hier nicht kopiert. -->
+    <string name="err_nom_trop_long">Der Name ist zu lang: maximal %1$d Bytes.</string>
+    <!-- %1$s stammt von Mobile.forbiddenNameChars(), aus demselben Grund. -->
+    <string name="err_nom_caracteres_interdits">Der Name darf diese Zeichen nicht enthalten: %1$s</string>
+    <string name="err_nom_caractere_controle">Der Name enthält ein unsichtbares Zeichen.</string>
+    <string name="err_nom_espaces">Der Name darf nicht mit einem Leerzeichen beginnen oder enden.</string>
+    <string name="err_nom_point_final">Der Name darf nicht mit einem Punkt enden.</string>
+    <string name="err_nom_point_initial">Der Name darf nicht mit einem Punkt beginnen.</string>
+    <string name="err_nom_reserve_windows">Dieser Name ist von Windows reserviert und kann nicht verwendet werden.</string>
+    <string name="err_nom_aucun_libre">Zu viele Notizen haben bereits diesen Namen.</string>
+    <string name="err_racine_protegee">Der Notizordner selbst kann weder umbenannt, verschoben noch gelöscht werden.</string>
+    <string name="err_deplacement_dans_soi">Ein Ordner kann nicht in sich selbst verschoben werden.</string>
+    <string name="err_chemin_vide">Kein Element ausgewählt.</string>
+    <string name="err_dossier_hors_ligne">Ein Ordner kann offline nicht umbenannt, verschoben oder gelöscht werden. Stellen Sie zuerst eine Verbindung her.</string>
+    <string name="err_lecture_seule">Dieses Dokument kann hier nicht geändert werden.</string>
+    <string name="err_format_non_pris_en_charge">Diese Operation ist für dieses Dateiformat nicht geeignet.</string>
+    <string name="err_document_invalide">Dieses Dokument ist ungültig oder unvollständig.</string>
+    <string name="err_document_trop_volumineux">Der Inhalt dieses Dokuments ist zu groß, um angezeigt zu werden.</string>
+    <string name="err_fichier_trop_volumineux">Dieses Dokument ist zu groß, um geöffnet zu werden.</string>
+    <string name="err_stockage">Es kann nicht auf den Gerätespeicher geschrieben werden. Überprüfen Sie den verfügbaren Speicherplatz oder synchronisieren Sie zunächst Ihre lokalen Änderungen.</string>
+    <string name="err_contenu_a_telecharger">Der Inhalt dieser Notiz ist offline nicht verfügbar. Laden Sie sie herunter, sobald die Netzwerkverbindung wiederhergestellt ist.</string>
+    <string name="err_url_serveur_manquante">Geben Sie die Serveradresse an.</string>
+    <string name="err_url_serveur_invalide">Ungültige Serveradresse. Sie muss mit http:// oder https:// beginnen.</string>
+    <string name="err_utilisateur_manquant">Geben Sie Ihren Benutzernamen an.</string>
+
+    <!-- ================================================================
+         Start
+         ================================================================ -->
+    <string name="demarrage_token_refuse">Ihr App-Token wird vom Server nicht mehr akzeptiert. Es ist wahrscheinlich abgelaufen: Erstellen Sie ein neues und geben Sie es ein.</string>
+    <string name="demarrage_espace_hors_ligne">Es muss noch ein Notizspeicherort ausgewählt werden, und dieser Schritt erfordert eine Verbindung zum Server. Versuchen Sie es erneut, sobald die Netzwerkverbindung wiederhergestellt ist.</string>
+
+    <!-- ================================================================
+         Anmeldung
+
+         Die Hilfe zu App-Tokens ist nicht nur dekorativ: Niemand errät,
+         dass ein dediziertes Token erstellt werden muss, anstatt das Passwort einzugeben.
+         Dies ist der erste Blockierungspunkt einer selbstgehosteten Anwendung.
+         Der Menüpfad sollte der von OpenCloud bleiben, in der Sprache, in der OpenCloud ihn anzeigt.
+         ================================================================ -->
+    <string name="login_accroche">Ihre Markdown-Notizen auf Ihrem OpenCloud-Server.</string>
+    <string name="login_serveur_label">Serveradresse</string>
+    <string name="login_serveur_exemple">https://cloud.beispiel.de</string>
+    <string name="login_utilisateur_label">Benutzername</string>
+    <string name="login_token_label">App-Token</string>
+    <string name="login_token_afficher">Token anzeigen</string>
+    <string name="login_token_masquer">Token ausblenden</string>
+    <!-- Ein Netzwerkfehler erfordert keine Korrektur: Die Beschreibung lädt zum erneuten Versuch ein, nicht zur erneuten Eingabe. -->
+    <string name="login_connecter">Anmelden</string>
+    <string name="login_reessayer">Erneut versuchen</string>
+    <string name="login_aide_titre">Noch kein App-Token?</string>
+    <string name="login_aide_chemin">In OpenCloud: Kontteinstellungen → App-Tokens → + Neu. Geben Sie ihm einen Namen und ein Ablaufdatum. Das Token wird nur einmal angezeigt – kopieren Sie es sofort.</string>
+    <string name="login_aide_revocation">Dies ist nicht Ihr Passwort: Ein App-Token kann widerrufen werden, ohne Ihre Anmeldedaten zu ändern.</string>
+
+    <!-- ================================================================
+         Speicherortauswahl
+
+         Ein nicht nutzbarer Speicherort bleibt sichtbar, aber ausgegraut, mit einer Erklärung,
+         warum er nicht geeignet ist: Der Benutzer sieht ihn in seinem Webbrowser und würde sich sonst fragen, wo er geblieben ist.
+         ================================================================ -->
+    <string name="espace_titre">Wo sollen Ihre Notizen gespeichert werden?</string>
+    <string name="espace_stockage">Speicherort</string>
+    <string name="espace_dossier_titre">Notizordner</string>
+    <string name="espace_chemin_label">Pfad im Speicherort</string>
+    <string name="espace_chemin_aide">Der Ordner wird erstellt, falls er nicht existiert. Lassen Sie das Feld leer, um das Stammverzeichnis des Speicherorts zu verwenden, z. B. wenn Ihre Notizen bereits dort sind.</string>
+    <string name="espace_continuer">Weiter</string>
+    <string name="espace_preparation">Vorbereitung…</string>
+    <string name="espace_virtuel">Zusammenschluss der mit Ihnen geteilten Ordner, kein Speicherort: Hier können keine Notizordner erstellt werden.</string>
+    <string name="espace_inutilisable">Dieser Speicherort kann keine Notizen hosten.</string>
+    <string name="espace_personnel">Ihr persönlicher Speicherort</string>
+    <string name="espace_projet">Gemeinsam genutzter Projektspeicherort</string>
+    <string name="espace_monte">Eingehängter Ordner</string>
+
+    <!-- ================================================================
+         Synchronisation
+
+         Die Zusammenfassung beschreibt, was passiert ist, anstatt ein Fazit zu ziehen.
+         Ein Netzwerkausfall ergibt einen teilweisen Zustand, keinen Fehler:
+         „3 Notizen gesendet, 2 ausstehend“ ist korrekt, während „Fehler“ den Eindruck erwecken würde, dass Daten verloren gegangen sind.
+         ================================================================ -->
+    <plurals name="sync_notes_envoyees">
+        <item quantity="one">%d Notiz gesendet</item>
+        <item quantity="other">%d Notizen gesendet</item>
+    </plurals>
+    <plurals name="sync_deplacements">
+        <item quantity="one">%d Verschiebung</item>
+        <item quantity="other">%d Verschiebungen</item>
+    </plurals>
+    <plurals name="sync_suppressions">
+        <item quantity="one">%d Löschung</item>
+        <item quantity="other">%d Löschungen</item>
+    </plurals>
+    <plurals name="sync_en_attente">
+        <item quantity="one">%d ausstehend</item>
+        <item quantity="other">%d ausstehend</item>
+    </plurals>
+    <!-- Trennzeichen für Aufzählungen: Es ändert seine Form je nach Sprache. -->
+    <string name="sync_separateur" translatable="false">", "</string>
+    <string name="sync_resume">%1$s.</string>
+    <string name="sync_resume_partiel">%1$s. Der Server hat unterwegs aufgehört zu antworten.</string>
+    <string name="sync_a_jour">Alles ist aktuell.</string>
+    <string name="sync_hors_ligne">Server nicht erreichbar. Derzeit nichts zum Senden.</string>
+
+    <string name="sync_channel_name">Synchronisation</string>
+    <string name="sync_channel_description">Konflikte und Synchronisationsprobleme der Notizen</string>
+    <plurals name="sync_conflits_titre">
+        <item quantity="one">Eine Notiz auf zwei Geräten geändert</item>
+        <item quantity="other">%d Notizen auf zwei Geräten geändert</item>
+    </plurals>
+    <string name="sync_conflits_rassurance">Ihre Version wurde daneben gespeichert – nichts ist verloren.</string>
+    <string name="sync_conflits_ligne">\n• %1$s</string>
+    <plurals name="sync_conflits_reste">
+        <item quantity="one">\n• …und %d weitere</item>
+        <item quantity="other">\n• …und %d weitere</item>
+    </plurals>
+
+    <!-- ================================================================
+         Dateibrowser
+         ================================================================ -->
+    <string name="browser_supprime">„%1$s“ gelöscht.</string>
+    <string name="browser_deplace">„%1$s“ verschoben.</string>
+    <!-- Titel des Verschiebe-Dialogs mit dem Namen der betroffenen Notiz. -->
+    <string name="browser_deplacer_titre">„%1$s“ verschieben</string>
+    <string name="browser_dossier_parent">Übergeordneter Ordner</string>
+    <string name="browser_rafraichir">Aktualisieren und synchronisieren</string>
+    <string name="browser_nouvelle_note">Neue Notiz</string>
+    <string name="browser_nouveau_dossier">Neuer Ordner</string>
+    <string name="browser_type_dossier">Ordner</string>
+    <string name="browser_type_note">Notiz</string>
+    <string name="browser_type_document">Schreibgeschütztes Dokument</string>
+    <string name="browser_actions">Aktionen für „%1$s“</string>
+
+    <!-- Suche. Sie bezieht sich nur auf den angezeigten Ordner: Die Eingabeaufforderung muss dies angeben,
+         sonst könnte ein fehlendes Ergebnis als verlorene Notiz interpretiert werden. -->
+    <string name="browser_recherche_invite">In diesem Ordner suchen</string>
+    <string name="browser_recherche_invite_tout">In allen Notizen suchen</string>
+    <string name="browser_recherche_effacer">Suche löschen</string>
+    <string name="browser_recherche_vide_titre">Keine Ergebnisse</string>
+    <string name="browser_recherche_vide_detail">Kein Name entspricht Ihrer Suche.</string>
+
+    <!-- Beim Erstellen einer Notiz muss nun der Speicherort ausgewählt werden.
+         Die Anwendung hat dies bereits gewählt, aber ohne es mitzuteilen. -->
+    <string name="browser_note_dossier">Ordner</string>
+
+    <!-- Auswahl der Startseitenansicht im Menü. -->
+    <string name="menu_affichage">Anzeige</string>
+    <string name="menu_mode_arborescence">Nach Ordnern</string>
+    <string name="menu_mode_liste">Alle Notizen</string>
+
+    <!-- Die flache Liste hat keinen aktuellen Ordner: Die Aufforderung zum Erstellen einer Notiz kann nicht „in diesem Ordner“ lauten. -->
+    <string name="browser_liste_vide_titre">Keine Notizen</string>
+    <string name="browser_liste_vide_detail">Erstellen Sie Ihre erste Notiz mit der Schaltfläche unten auf dem Bildschirm.</string>
+
+    <!-- Sortierschaltfläche: Ihr Symbol zeigt die aktuelle Sortierreihenfolge an, ihre Beschreibung gibt an,
+         was ein Druck darauf bewirken würde – das ist das, was TalkBack benötigt. -->
+    <string name="browser_tri_par_nom">Nach Namen sortieren</string>
+    <string name="browser_tri_par_date">Nach Datum sortieren</string>
+
+    <!-- Ein leerer Ordner ist kein Fehler: Dies angeben und erklären, was zu tun ist. -->
+    <string name="browser_vide_titre">Dieser Ordner ist leer</string>
+    <string name="browser_vide_detail">Erstellen Sie eine Notiz mit der Schaltfläche unten auf dem Bildschirm.</string>
+    <string name="browser_vide_cache">Nichts im Cache für diesen Ordner. Sie können trotzdem eine Notiz erstellen: Sie wird bei der nächsten Verbindung gesendet.</string>
+
+    <string name="browser_note_label">Titel</string>
+    <string name="browser_note_aide">Der Dateiname wird vom Titel abgeleitet. Ein Suffix wird hinzugefügt, wenn der Name bereits vergeben ist.</string>
+    <string name="browser_dossier_label">Ordnername</string>
+    <string name="browser_renommer_label">Neuer Name</string>
+
+    <!-- Untertitel einer Zeile: Datum, Größe, Sendezustand. Datum und Größe werden von der Plattform formatiert,
+         in der Sprache und den Einheiten des Telefons; nur ihre Kombination ist hier angegeben. -->
+    <string name="browser_soustitre_separateur" translatable="false">" · "</string>
+    <string name="browser_en_attente">wartet auf das Senden</string>
+
+    <!-- Ein Ordner wird mit allem, was er enthält, gelöscht: Dies angeben, da es die einzige Aktion in der Anwendung ist, die Daten zerstört. -->
+    <string name="dialogue_supprimer_titre">„%1$s“ löschen?</string>
+    <string name="dialogue_supprimer_dossier">Der Ordner und alle Notizen, die er enthält, werden vom Server gelöscht. Diese Aktion ist endgültig.</string>
+    <string name="dialogue_supprimer_note">Die Notiz wird vom Server gelöscht. Diese Aktion ist endgültig.</string>
+
+    <!-- ================================================================
+         Seitenmenü
+         ================================================================ -->
+    <string name="menu_reglages">Einstellungen</string>
+    <string name="menu_a_propos">Über</string>
+    <string name="a_propos_titre">Über OpenNote</string>
+    <string name="a_propos_description">Notizenmanager für Notizen, die auf einem OpenCloud-Server gespeichert sind. Erstellt von Yannis Bediat. V1.0 August 2026</string>
+    <string name="a_propos_licence">Lizenz: MIT https://github.com/ybediat/OpenNote/tree/main?tab=MIT-1-ov-file</string>
+    <string name="a_propos_depot">Git-Repository</string>
+
+    <!-- ================================================================
+         Einstellungen
+         ================================================================ -->
+    <string name="reglages_compte">Konto</string>
+    <string name="reglages_serveur">Server</string>
+    <string name="reglages_utilisateur">Benutzer</string>
+    <!-- Die Sitzung konnte offline wiederhergestellt werden: Die Anwendung ist nutzbar,
+         aber der Server hat noch nichts bestätigt. -->
+    <string name="reglages_token_non_confirme">Der Server hat Ihr App-Token seit dem Start noch nicht bestätigt. Ihre Notizen bleiben dennoch einsehbar und bearbeitbar.</string>
+
+    <string name="reglages_espace_titre">Notizspeicherort</string>
+    <string name="reglages_espace">Speicherort</string>
+    <string name="reglages_dossier">Ordner</string>
+    <string name="reglages_racine_espace">Stammverzeichnis des Speicherorts</string>
+
+    <string name="reglages_sync_titre">Synchronisation</string>
+    <string name="reglages_en_attente">Ausstehende Operationen</string>
+    <string name="reglages_aucune">keine</string>
+    <string name="reglages_sync_explication">Eine automatische Synchronisation erfolgt beim Zurückkehren in die Anwendung, kurz nach jeder Änderung und alle Stunden, wenn das Netzwerk verfügbar ist.</string>
+    <string name="reglages_sync_en_cours">Synchronisierung…</string>
+    <string name="reglages_sync_maintenant">Jetzt synchronisieren</string>
+
+    <string name="reglages_cache_titre">Offline-Cache</string>
+    <string name="reglages_cache_quota">Speicherlimit</string>
+    <string name="reglages_cache_utilisation">Nutzung</string>
+    <string name="reglages_cache_usage">%1$s von %2$s verwendet</string>
+    <string name="reglages_cache_explication">Lokale Entwürfe, Konfliktkopien und ausstehende Operationen werden niemals automatisch gelöscht.</string>
+    <string name="reglages_cache_modifier_quota">Limit ändern</string>
+    <string name="reglages_cache_liberer">Speicherplatz freigeben</string>
+    <string name="reglages_cache_choix_titre">Offline-Cache-Limit</string>
+    <string name="reglages_cache_50_mo">50 MB</string>
+    <string name="reglages_cache_250_mo">250 MB</string>
+    <string name="reglages_cache_1_go">1 GB</string>
+    <string name="reglages_cache_5_go">5 GB</string>
+    <string name="reglages_cache_illimite">Unbegrenzt</string>
+
+    <string name="reglages_deconnexion">Abmelden</string>
+    <string name="reglages_deconnexion_explication">Das Abmelden löscht das Token, die Konfiguration und den lokalen Cache dieses Geräts. Die Notizen bleiben auf dem Server.</string>
+    <string name="reglages_deconnexion_titre">Abmelden?</string>
+    <string name="reglages_deconnexion_confirmation">Das Token, die Konfiguration und der lokale Cache werden gelöscht. Ihre Notizen bleiben auf dem Server.</string>
+    <!-- Nicht gesendete Änderungen würden verloren gehen: Dies ist die einzige Warnung auf dem Bildschirm,
+         die angibt, was auf dem Spiel steht. -->
+    <plurals name="reglages_deconnexion_attente">
+        <item quantity="one">Achtung: %d lokale Änderung wurde noch nicht an den Server gesendet. Das Abmelden löscht den Cache, und sie geht verloren. Synchronisieren Sie zuerst.</item>
+        <item quantity="other">Achtung: %d lokale Änderungen wurden noch nicht an den Server gesendet. Das Abmelden löscht den Cache, und sie gehen verloren. Synchronisieren Sie zuerst.</item>
+    </plurals>
+
+    <!-- Das einzige Synchronisationsereignis, das eine Unterbrechung wert ist:
+         Die Version des Benutzers wurde beiseitegelegt, er muss wissen, wo er sie wiederfindet. -->
+    <string name="reglages_conflits_titre">Auf zwei Geräten geändert</string>
+    <string name="reglages_conflits_ouvrir">Konflikte lösen (%1$d)</string>
+    <string name="reglages_conflits_reste">%1$d weitere Konflikt(e) müssen anschließend behandelt werden.</string>
+    <string name="reglages_conflits_garder_serveur">Serverversion behalten</string>
+    <string name="reglages_conflits_garder_local">Lokale Version behalten</string>
+    <string name="reglages_conflits_garder_deux">Beide behalten</string>
+    <string name="reglages_conflits_explication">Die Serverversion war aktueller. Ihre Version wurde daneben unter einem neuen Namen gespeichert – nichts ist verloren:</string>
+    <string name="reglages_conflits_ligne">• %1$s</string>
+    <string name="reglages_compris">Verstanden</string>
+
+    <!-- ================================================================
+         Editor
+         ================================================================ -->
+    <!-- Ein Zustand, keine Warnung: Beschreibt, was passiert, ohne den Eindruck zu erwecken,
+         dass etwas verloren geht. -->
+    <string name="editeur_brouillon">Lokaler Entwurf, Senden geplant</string>
+    <string name="editeur_saisie_vide">Hier schreiben…</string>
+    <string name="editeur_illisible_titre">Notiz nicht geladen</string>
+    <string name="editeur_illisible_detail">Ihr Inhalt konnte nicht gelesen werden. Nichts wurde geändert: Öffnen Sie sie erneut, sobald die Verbindung wiederhergestellt ist.</string>
+    <string name="editeur_defilement_rapide">Schneller Dokumentbildlauf</string>
+    <string name="editeur_ouverture_longue">Große Notiz wird geöffnet…</string>
+
+    <!-- ================================================================
+         Formatierungsleiste
+
+         Jede Aktion hat zwei Texte: die Beschriftung auf der Schaltfläche und
+         die Beschreibung, die von TalkBack vorgelesen wird. Eine Beschriftung,
+         die ein mnemonisches Zeichen ist, wird übersetzt – „G“ für fett wird zu „F“ für Fett –,
+         während ein Symbol in allen Sprachen gleich bleibt und `translatable="false"` hat.
+
+         Die Liste der Aktionen stammt aus dem Go-Kern: Eine Aktion, die er ohne Schlüssel hier hinzufügt,
+         wird mit ihrer Roh-ID angezeigt, nicht mit einem Fehler.
+         ================================================================ -->
+    <string name="format_gras_libelle">F</string>
+    <string name="format_gras">Fett</string>
+    <string name="format_italique_libelle">K</string>
+    <string name="format_italique">Kursiv</string>
+    <string name="format_barre_libelle">D</string>
+    <string name="format_barre">Durchgestrichen</string>
+    <string name="format_code">Inline-Code</string>
+    <!-- Die Schaltfläche trägt das Wort selbst: Beschriftung und Beschreibung fallen zusammen. -->
+    <string name="format_lien">Link</string>
+    <string name="format_titre1_libelle">Ü1</string>
+    <string name="format_titre1">Überschrift 1</string>
+    <string name="format_titre2_libelle">Ü2</string>
+    <string name="format_titre2">Überschrift 2</string>
+    <string name="format_titre3_libelle">Ü3</string>
+    <string name="format_titre3">Überschrift 3</string>
+    <string name="format_puces">Aufzählungsliste</string>
+    <string name="format_numerotee">Numerierte Liste</string>
+    <string name="format_case">Kontrollkästchen</string>
+    <string name="format_citation">Zitat</string>
+    <string name="format_bloc_code">Codeblock</string>
+
+    <!-- ================================================================
+         Vorschau
+
+         Nur Lesen: Die Notiz wird formatiert angezeigt, ohne Eingabefeld.
+         Eine Textdatei wird niemals interpretiert.
+         ================================================================ -->
+    <string name="apercu_activer">Vorschau</string>
+    <string name="apercu_quitter">Bearbeiten</string>
+    <!-- Platzhalter für ein Bild: Die Quelle wird nicht angezeigt. -->
+    <string name="apercu_image">Bild</string>
+    <!-- Platzhalter für einen Seitenumbruch aus einem .docx- oder .odt-Dokument. -->
+    <string name="apercu_saut_de_page">Seitenumbruch</string>
+    <string name="apercu_vide">Diese Notiz ist leer.</string>
+    <!--
+        Wird angezeigt, wenn die Notiz eine zu lange Zeichenfolge ohne Leerzeichen enthält,
+        um sie in ein Eingabefeld zu schreiben – typischerweise ein über die Weboberfläche eingefügtes Bild.
+        Die Meldung gibt den Grund an, nicht den Mechanismus.
+    -->
+    <string name="apercu_lecture_seule">Diese Notiz enthält ein Element, das zu lang ist, um hier bearbeitet zu werden. Sie wird schreibgeschützt geöffnet.</string>
+    <string name="apercu_document_lecture_seule">Dieses Dokument wird schreibgeschützt geöffnet.</string>
+    <string name="sync_conflits_suppression">\n• Löschung abgebrochen: %1$s wurde remote geändert</string>
+    <string name="sync_conflits_deplacement">\n• Verschiebung abgebrochen; Kopie beibehalten: %1$s</string>
+    <string name="reglages_conflits_suppression">• Löschung abgebrochen: %1$s wurde remote geändert</string>
+    <string name="reglages_conflits_deplacement">• Verschiebung abgebrochen; Kopie beibehalten: %1$s</string>
+</resources>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pendant sombre de values/themes.xml : même rôle, fond sombre au
+         lancement pour éviter un éclair clair avant que Compose ne peigne. -->
+    <style name="Theme.OpenNote" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">?android:attr/colorBackground</item>
+    </style>
+</resources>

@@ -1,0 +1,395 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Traduction anglaise.
+
+    La référence est `values/strings.xml`, en français : elle seule fait foi,
+    elle seule est touchée par le code. Ce fichier-ci est le modèle des
+    langues suivantes. Ce qu'il montre, dans l'ordre où l'on s'y trompe :
+
+      - les `name` sont recopiés à l'identique, jamais traduits ;
+      - les entrées `translatable="false"` de la référence ne sont **pas**
+        reprises — une clé en trop est une erreur de lint au même titre
+        qu'une clé manquante ;
+      - un `%1$s` ou un `%d` se déplace dans la phrase mais ne disparaît
+        jamais : les indices `%1$`, `%2$` servent justement à réordonner ce
+        que la grammaire d'une langue impose de réordonner ;
+      - une apostrophe s'écrit \' , sinon la compilation des ressources
+        échoue sur « Invalid unicode escape sequence », un message qui ne
+        désigne pas sa cause ;
+      - une chaîne dont les espaces de bord comptent est encadrée de
+        guillemets droits — voir le séparateur de sous-titre plus bas.
+        Sans eux, aapt les supprime sans rien dire ;
+      - un `<plurals>` porte les formes de SA langue : deux en anglais,
+        trois en polonais, six en arabe, une seule en japonais. Ce n'est pas
+        une copie des deux formes françaises.
+
+    Une langue s'ajoute par deux gestes solidaires : ce fichier, et une ligne
+    dans `res/xml/locales_config.xml`. L'un sans l'autre donne soit un choix
+    qui ne change rien, soit des ressources qu'Android n'annonce pas.
+--><resources>
+    <!-- ================================================================
+         Éléments communs
+
+         Les libellés que plusieurs écrans partagent vivent ici. Les
+         dupliquer par écran ferait diverger deux boutons qui portent le
+         même geste — une traduction sur deux, et rien pour le signaler.
+         ================================================================ -->
+    <string name="action_annuler">Cancel</string>
+    <string name="action_supprimer">Delete</string>
+    <string name="action_deplacer">Move</string>
+    <string name="action_renommer">Rename</string>
+    <string name="action_creer">Create</string>
+    <string name="action_retour">Back</string>
+
+    <!-- Un constat, pas une erreur : la vue vient du cache, elle est
+         utilisable, elle peut simplement être incomplète. -->
+    <string name="commun_bandeau_cache">Server unreachable — view reconstructed from cache. It may be incomplete.</string>
+
+    <!-- ================================================================
+         Erreurs
+
+         Les catégories de transport ([AUTH], [CONFLICT]…) sont reformulées
+         plutôt que relayées : « HTTP 502 » sur une URL WebDAV n\'apprend rien
+         à personne. Les codes locaux ([NAME_*], [STORAGE_IO]…) viennent du
+         cœur Go, qui refuse de créer un nom que le cache ne saurait écrire.
+         ================================================================ -->
+    <string name="err_auth">Credentials rejected. Check the username and App Token, which may have expired.</string>
+    <string name="err_conflit">This note was modified elsewhere in the meantime.</string>
+    <string name="err_introuvable">Not found on the server. The note or folder may have been deleted from another device.</string>
+    <string name="err_http">The server is currently unreachable.</string>
+    <string name="err_hors_ligne">Server unreachable. Try again once the network is back.</string>
+    <string name="err_inconnue">Operation failed.</string>
+
+    <string name="err_nom_vide">The name cannot be empty.</string>
+    <string name="err_nom_reserve">This name is reserved by the system.</string>
+    <!-- %1$d vient de Mobile.maxNameBytes() : la borne n\'est pas recopiée ici. -->
+    <string name="err_nom_trop_long">The name is too long: %1$d bytes maximum.</string>
+    <!-- %1$s vient de Mobile.forbiddenNameChars(), pour la même raison. -->
+    <string name="err_nom_caracteres_interdits">The name cannot contain these characters: %1$s</string>
+    <string name="err_nom_caractere_controle">The name contains an invisible character.</string>
+    <string name="err_nom_espaces">The name cannot begin or end with a space.</string>
+    <string name="err_nom_point_final">The name cannot end with a period.</string>
+    <string name="err_nom_point_initial">The name cannot begin with a period.</string>
+    <string name="err_nom_reserve_windows">This name is reserved by Windows and cannot be used.</string>
+    <string name="err_nom_aucun_libre">Too many notes already have this name.</string>
+    <string name="err_racine_protegee">The notes folder itself cannot be renamed, moved, or deleted.</string>
+    <string name="err_deplacement_dans_soi">A folder cannot be moved into itself.</string>
+    <string name="err_chemin_vide">No item specified.</string>
+    <string name="err_dossier_hors_ligne">A folder cannot be renamed, moved, or deleted while offline. Reconnect first.</string>
+    <string name="err_lecture_seule">This document cannot be edited here.</string>
+    <string name="err_format_non_pris_en_charge">This operation does not support this file format.</string>
+    <string name="err_document_invalide">This document is invalid or incomplete.</string>
+    <string name="err_document_trop_volumineux">This document’s contents are too large to display.</string>
+    <string name="err_fichier_trop_volumineux">This document is too large to open.</string>
+    <string name="err_stockage">Unable to write to the device storage. Check the available space or sync local changes first.</string>
+    <string name="err_contenu_a_telecharger">This note is not available offline. Download it again once the network is back.</string>
+    <string name="err_url_serveur_manquante">Enter the server address.</string>
+    <string name="err_url_serveur_invalide">Invalid server address. It must start with http:// or https://</string>
+    <string name="err_utilisateur_manquant">Enter your username.</string>
+
+    <!-- ================================================================
+         Démarrage
+         ================================================================ -->
+    <string name="demarrage_token_refuse">Your App Token is no longer accepted by the server. It has probably expired: create a new one and enter it.</string>
+    <string name="demarrage_espace_hors_ligne">There is still a notes space to choose, and this step requires a connection to the server. Try again once the network is back.</string>
+
+    <!-- ================================================================
+         Connexion
+
+         L'aide sur les App Tokens n'est pas décorative : personne ne devine
+         qu'il faut créer un jeton dédié plutôt que saisir son mot de passe,
+         et c'est le premier point de blocage d'une application auto-hébergée.
+         Le chemin de menu doit rester celui d'OpenCloud, dans la langue où
+         OpenCloud l'affiche.
+         ================================================================ -->
+    <string name="login_accroche">Your Markdown notes, on your OpenCloud server.</string>
+    <string name="login_serveur_label">Server address</string>
+    <string name="login_serveur_exemple">https://cloud.example.com</string>
+    <string name="login_utilisateur_label">Username</string>
+    <string name="login_token_label">App Token</string>
+    <string name="login_token_afficher">Show token</string>
+    <string name="login_token_masquer">Hide token</string>
+    <!-- Un échec réseau ne demande aucune correction : le libellé invite à
+         réessayer, pas à recommencer la saisie. -->
+    <string name="login_connecter">Sign in</string>
+    <string name="login_reessayer">Try again</string>
+    <string name="login_aide_titre">Don\'t have an App Token yet?</string>
+    <string name="login_aide_chemin">In OpenCloud: Account Settings → App Tokens → + New. Give it a name and an expiration date. The token is shown only once, so copy it immediately.</string>
+    <string name="login_aide_revocation">It is not your password: an App Token can be revoked without changing your credentials.</string>
+
+    <!-- ================================================================
+         Choix de l'espace
+
+         Un espace inutilisable reste visible mais grisé, avec l'explication
+         de son inaptitude : l'utilisateur le voit dans son navigateur web et
+         se demanderait où il est passé.
+         ================================================================ -->
+    <string name="espace_titre">Where should your notes go?</string>
+    <string name="espace_stockage">Storage space</string>
+    <string name="espace_dossier_titre">Notes folder</string>
+    <string name="espace_chemin_label">Path in the space</string>
+    <string name="espace_chemin_aide">The folder is created if it does not exist. Leave the field empty to use the root of the space, for example if your notes are already there.</string>
+    <string name="espace_continuer">Continue</string>
+    <string name="espace_preparation">Preparing…</string>
+    <string name="espace_virtuel">A collection of folders shared with you, not a storage space: you cannot create a notes folder here.</string>
+    <string name="espace_inutilisable">This space cannot host notes.</string>
+    <string name="espace_personnel">Your personal space</string>
+    <string name="espace_projet">Shared project space</string>
+    <string name="espace_monte">Mounted folder</string>
+
+    <!-- ================================================================
+         Synchronisation
+
+         Le résumé décrit ce qui s\'est passé plutôt que de conclure. Une
+         panne réseau donne un état partiel, pas un échec : « 3 notes
+         envoyées, 2 en attente » est exact, là où « échec » ferait croire
+         à une perte.
+         ================================================================ -->
+    <plurals name="sync_notes_envoyees">
+        <item quantity="one">%d note sent</item>
+        <item quantity="other">%d notes sent</item>
+    </plurals>
+    <plurals name="sync_deplacements">
+        <item quantity="one">%d move</item>
+        <item quantity="other">%d moves</item>
+    </plurals>
+    <plurals name="sync_suppressions">
+        <item quantity="one">%d deletion</item>
+        <item quantity="other">%d deletions</item>
+    </plurals>
+    <plurals name="sync_en_attente">
+        <item quantity="one">%d pending</item>
+        <item quantity="other">%d pending</item>
+    </plurals>
+    <!-- Séparateur d\'énumération : il change de forme selon la langue. -->
+    <string name="sync_separateur">", "</string>
+    <string name="sync_resume">%1$s.</string>
+    <string name="sync_resume_partiel">%1$s. The server stopped responding partway through.</string>
+    <string name="sync_a_jour">Everything is up to date.</string>
+    <string name="sync_hors_ligne">Server unreachable. Nothing to send for now.</string>
+
+    <string name="reglages_cache_titre">Offline cache</string>
+    <string name="reglages_cache_quota">Storage limit</string>
+    <string name="reglages_cache_utilisation">Usage</string>
+    <string name="reglages_cache_usage">%1$s used out of %2$s</string>
+    <string name="reglages_cache_explication">Local drafts, conflict copies, and pending operations are never deleted automatically.</string>
+    <string name="reglages_cache_modifier_quota">Change limit</string>
+    <string name="reglages_cache_liberer">Free up space</string>
+    <string name="reglages_cache_choix_titre">Offline cache limit</string>
+    <string name="reglages_cache_50_mo">50 MB</string>
+    <string name="reglages_cache_250_mo">250 MB</string>
+    <string name="reglages_cache_1_go">1 GB</string>
+    <string name="reglages_cache_5_go">5 GB</string>
+    <string name="reglages_cache_illimite">Unlimited</string>
+
+    <string name="sync_channel_name">Synchronization</string>
+    <string name="sync_channel_description">Note synchronization conflicts and incidents</string>
+    <plurals name="sync_conflits_titre">
+        <item quantity="one">One note modified on two devices</item>
+        <item quantity="other">%d notes modified on two devices</item>
+    </plurals>
+    <string name="sync_conflits_rassurance">Your version was kept alongside it; nothing was lost.</string>
+    <string name="sync_conflits_ligne">\n• %1$s</string>
+    <plurals name="sync_conflits_reste">
+        <item quantity="one">\n• …and %d other</item>
+        <item quantity="other">\n• …and %d others</item>
+    </plurals>
+
+    <!-- ================================================================
+         Navigateur
+         ================================================================ -->
+    <string name="browser_supprime">“%1$s” deleted.</string>
+    <string name="browser_deplace">“%1$s” moved.</string>
+    <string name="browser_deplacer_titre">Move “%1$s”</string>
+    <string name="browser_dossier_parent">Parent folder</string>
+    <string name="browser_rafraichir">Refresh and sync</string>
+    <string name="browser_nouvelle_note">New note</string>
+    <string name="browser_nouveau_dossier">New folder</string>
+    <string name="browser_type_dossier">Folder</string>
+    <string name="browser_type_note">Note</string>
+    <string name="browser_type_document">Read-only document</string>
+    <string name="browser_actions">Actions for “%1$s”</string>
+
+    <!-- Recherche. Elle ne porte que sur le dossier affiché : l'invite doit
+         le dire, sinon un résultat manquant passe pour une note perdue. -->
+    <string name="browser_recherche_invite">Search this folder</string>
+    <string name="browser_recherche_invite_tout">Search all notes</string>
+    <string name="browser_recherche_effacer">Clear search</string>
+    <string name="browser_recherche_vide_titre">No results</string>
+    <string name="browser_recherche_vide_detail">No names match your search.</string>
+
+    <!-- Créer une note demande désormais où la ranger. L\'application le
+         choisissait déjà, mais sans le dire. -->
+    <string name="browser_note_dossier">Folder</string>
+
+    <!-- Choix de la forme de la page d\'accueil, dans le tiroir. -->
+    <string name="menu_affichage">View</string>
+    <string name="menu_mode_arborescence">By folder</string>
+    <string name="menu_mode_liste">All notes</string>
+
+    <!-- La liste plate n\'a pas de dossier courant : l\'invitation à créer une
+         note ne peut pas parler « de ce dossier ». -->
+    <string name="browser_liste_vide_titre">No notes</string>
+    <string name="browser_liste_vide_detail">Create your first note with the button at the bottom of the screen.</string>
+
+    <!-- Bouton de tri : son icône montre l'ordre en cours, sa description dit
+         ce qu'un appui ferait — c'est ce dont TalkBack a besoin. -->
+    <string name="browser_tri_par_nom">Sort by name</string>
+    <string name="browser_tri_par_date">Sort by date</string>
+
+    <!-- Un dossier vide n'est pas une panne : le dire, et dire quoi faire. -->
+    <string name="browser_vide_titre">This folder is empty</string>
+    <string name="browser_vide_detail">Create a note with the button at the bottom of the screen.</string>
+    <string name="browser_vide_cache">Nothing is cached for this folder. You can still create a note: it will be sent the next time you connect.</string>
+
+    <string name="browser_note_label">Title</string>
+    <string name="browser_note_aide">The file name is derived from the title; a suffix is added if the name is already taken.</string>
+    <string name="browser_dossier_label">Folder name</string>
+    <string name="browser_renommer_label">New name</string>
+
+    <!-- Sous-titre d'une ligne : date, taille, état d'envoi. La date et la
+         taille sont mises en forme par la plateforme, dans la langue et les
+         unités du téléphone ; seul leur assemblage est ici. -->
+    <string name="browser_soustitre_separateur">" · "</string>
+    <string name="browser_en_attente">waiting to be sent</string>
+
+    <!-- Un dossier part avec tout ce qu'il contient : le dire, parce que
+         c'est la seule action de l'application qui détruise des données. -->
+    <string name="dialogue_supprimer_titre">Delete “%1$s”?</string>
+    <string name="dialogue_supprimer_dossier">The folder and all notes it contains will be deleted from the server. This action is permanent.</string>
+    <string name="dialogue_supprimer_note">The note will be deleted from the server. This action is permanent.</string>
+
+    <!-- ================================================================
+         Menu latéral
+         ================================================================ -->
+    <string name="menu_reglages">Settings</string>
+    <string name="menu_a_propos">About</string>
+    <string name="a_propos_titre">About OpenNote</string>
+    <string name="a_propos_description">A lightweight Android app for writing Markdown notes stored on an OpenCloud server.</string>
+    <string name="a_propos_licence">License: to be filled in.</string>
+    <string name="a_propos_depot">Git repository</string>
+
+    <!-- ================================================================
+         Réglages
+         ================================================================ -->
+    <string name="reglages_compte">Account</string>
+    <string name="reglages_serveur">Server</string>
+    <string name="reglages_utilisateur">User</string>
+    <!-- La session a pu être remontée hors connexion : l'application est
+         utilisable, mais le serveur n'a encore rien confirmé. -->
+    <string name="reglages_token_non_confirme">The server has not yet confirmed your App Token since launch. Your notes remain available to view and edit in the meantime.</string>
+
+    <string name="reglages_espace_titre">Notes space</string>
+    <string name="reglages_espace">Space</string>
+    <string name="reglages_dossier">Folder</string>
+    <string name="reglages_racine_espace">space root</string>
+
+    <string name="reglages_edition_titre">Editing</string>
+    <string name="reglages_edition_explication">The choice applies the next time a note is opened.</string>
+    <string name="reglages_moteur_virtualise">Current editor</string>
+    <string name="reglages_moteur_virtualise_detail">Stable virtualized engine, used by default.</string>
+    <string name="reglages_moteur_natif">Experimental native editor</string>
+    <string name="reglages_moteur_natif_detail">Makes long-text selection easier. This engine remains experimental.</string>
+
+    <string name="reglages_sync_titre">Synchronization</string>
+    <string name="reglages_en_attente">Pending operations</string>
+    <string name="reglages_aucune">none</string>
+    <string name="reglages_sync_explication">An automatic sync runs when you return to the app, shortly after each change, and every hour when the network is available.</string>
+    <string name="reglages_sync_en_cours">Synchronizing…</string>
+    <string name="reglages_sync_maintenant">Sync now</string>
+
+    <string name="reglages_deconnexion">Sign out</string>
+    <string name="reglages_deconnexion_explication">Signing out clears the token, configuration, and local cache from this device. Your notes remain on the server.</string>
+    <string name="reglages_deconnexion_titre">Sign out?</string>
+    <string name="reglages_deconnexion_confirmation">The token, configuration, and local cache will be cleared. Your notes remain on the server.</string>
+    <!-- Des modifications non envoyées seraient perdues : c'est la seule mise
+         en garde de l'écran, elle compte ce qui est en jeu. -->
+    <plurals name="reglages_deconnexion_attente">
+        <item quantity="one">Warning: %d local change has not yet been sent to the server. Signing out clears the cache and it will be lost. Sync first.</item>
+        <item quantity="other">Warning: %d local changes have not yet been sent to the server. Signing out clears the cache and they will be lost. Sync first.</item>
+    </plurals>
+
+    <!-- Le seul événement de synchronisation qui mérite d'interrompre : la
+         version de l'utilisateur a été mise de côté, il doit savoir où la
+         retrouver. -->
+    <string name="reglages_conflits_titre">Modified on two devices</string>
+    <string name="reglages_conflits_ouvrir">Resolve conflicts (%1$d)</string>
+    <string name="reglages_conflits_reste">%1$d more conflict(s) to resolve next.</string>
+    <string name="reglages_conflits_garder_serveur">Keep server version</string>
+    <string name="reglages_conflits_garder_local">Keep local version</string>
+    <string name="reglages_conflits_garder_deux">Keep both</string>
+    <string name="reglages_conflits_explication">The server version was newer. Your version was kept alongside it, under a new name — nothing was lost:</string>
+    <string name="reglages_conflits_ligne">• %1$s</string>
+    <string name="reglages_compris">Got it</string>
+
+    <!-- ================================================================
+         Éditeur
+         ================================================================ -->
+    <!-- Un état, pas une alerte : dit ce qui se passe sans laisser croire
+         à une perte. -->
+    <string name="editeur_brouillon">Local draft, upload scheduled</string>
+    <string name="editeur_saisie_vide">Write here…</string>
+    <string name="editeur_illisible_titre">Note not loaded</string>
+    <string name="editeur_illisible_detail">Its contents could not be read. Nothing was changed: reopen it once the connection is back.</string>
+    <string name="editeur_defilement_rapide">Fast document scroll</string>
+    <string name="editeur_ouverture_longue">Opening a large note…</string>
+
+    <!-- ================================================================
+         Barre de mise en forme
+
+         Chaque action porte deux textes : le libellé écrit sur le bouton et
+         la description lue par TalkBack. Seuls les libellés qui sont des
+         lettres mnémoniques apparaissent ici — « G » pour gras devient « B »
+         pour bold. Les symboles (« • », « [ ] », « ``` ») sont absents : la
+         référence les marque translatable="false", et les reprendre serait
+         une erreur de lint.
+
+         La liste des actions vient du cœur Go : une action qu'il ajoute
+         sans clé ici s'affiche avec son identifiant brut, pas d'erreur.
+         ================================================================ -->
+    <string name="format_gras_libelle">B</string>
+    <string name="format_gras">Bold</string>
+    <string name="format_italique_libelle">I</string>
+    <string name="format_italique">Italic</string>
+    <string name="format_barre_libelle">S</string>
+    <string name="format_barre">Strikethrough</string>
+    <string name="format_code">Inline code</string>
+    <!-- Le bouton porte le mot lui-même : libellé et description confondus. -->
+    <string name="format_lien">Link</string>
+    <string name="format_titre1_libelle">H1</string>
+    <string name="format_titre1">Heading level 1</string>
+    <string name="format_titre2_libelle">H2</string>
+    <string name="format_titre2">Heading level 2</string>
+    <string name="format_titre3_libelle">H3</string>
+    <string name="format_titre3">Heading level 3</string>
+    <string name="format_puces">Bulleted list</string>
+    <string name="format_numerotee">Numbered list</string>
+    <string name="format_case">Checkbox</string>
+    <string name="format_citation">Quote</string>
+    <string name="format_bloc_code">Code block</string>
+
+    <!-- ================================================================
+         Aperçu
+
+         Lecture seule : la note s'affiche mise en forme, sans champ de
+         saisie. Un fichier texte, lui, n'est jamais interprété.
+         ================================================================ -->
+    <string name="apercu_activer">Preview</string>
+    <string name="apercu_quitter">Edit</string>
+    <!-- Repère posé à la place d'une image : la source n'est pas affichée. -->
+    <string name="apercu_image">Image</string>
+    <!-- Repère posé à la place d'un saut de page d'un document .docx ou .odt. -->
+    <string name="apercu_saut_de_page">Page break</string>
+    <string name="apercu_vide">This note is empty.</string>
+    <!--
+        Affiché quand la note contient une suite de caractères sans espace trop
+        longue pour un champ de saisie — typiquement une image collée par
+        l'interface web. Le message dit la cause, pas la mécanique.
+    -->
+    <string name="apercu_lecture_seule">This note contains an element that is too long to edit here. It is open in read-only mode.</string>
+    <string name="apercu_document_lecture_seule">This document is open in read-only mode.</string>
+    <string name="sync_conflits_suppression">\n• deletion cancelled: %1$s changed remotely</string>
+    <string name="sync_conflits_deplacement">\n• move cancelled; copy kept: %1$s</string>
+    <string name="reglages_conflits_suppression">• Deletion cancelled: %1$s changed remotely</string>
+    <string name="reglages_conflits_deplacement">• Move cancelled; copy kept: %1$s</string>
+</resources>

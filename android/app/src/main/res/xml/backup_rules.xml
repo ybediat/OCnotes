@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aucune sauvegarde : le token est chiffré par une clé Android Keystore qui
+     ne quitte pas l'appareil. Restaurer le texte chiffré ailleurs ne le rendrait
+     pas lisible. Le cache, lui, se reconstruit depuis le serveur. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="file" path="." />
+</full-backup-content>
