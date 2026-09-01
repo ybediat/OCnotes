@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Les quatre cas de sûreté de la section 6 de `docs/CHANTIER-EDITEUR.md`.
+ * Cas de sûreté de l'éditeur pour les interactions critiques.
  *
  * **Ce qu'ils prouvent :** le découpage, l'activation d'une fenêtre et la
  * matérialisation rendent le document au caractère près, quelle que soit la

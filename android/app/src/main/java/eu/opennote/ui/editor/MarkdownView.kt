@@ -57,7 +57,7 @@ import eu.opennote.ui.theme.StyleEditeur
  * # Pourquoi du Compose natif, et pas un WebView
  *
  * Tout le travail d'analyse est fait en Go et arrive ici sous forme d'une
- * liste plate de blocs (voir `RenderNoteJSON` dans `docs/FACADE.md`). Ce
+ * liste plate de blocs produite par `RenderNoteJSON`. Ce
  * fichier ne fait que choisir un style par bloc : il n'y a aucune règle de
  * Markdown ici, donc rien qui mériterait un test instrumenté.
  *

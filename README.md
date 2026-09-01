@@ -83,6 +83,18 @@ Les choix techniques, l'organisation du code, le cycle de construction et les
 consignes de sécurité sont regroupés dans la
 [documentation technique](docs/TECHNICAL.md).
 
+## Documentation
+
+- [Documentation technique](docs/TECHNICAL.md) — architecture, données et
+  synchronisation.
+- [Guide de développement](docs/DEVELOPMENT.md) — environnement, builds et
+  itérations locales.
+- [Guide de test](docs/TESTING.md) — tests rapides, intégration et CLI.
+- [Guide de publication](docs/RELEASING.md) — signature et préparation d'une
+  release Android.
+- [Contribuer](CONTRIBUTING.md) — règles de contribution et validation d'une
+  pull request.
+
 ## Construire depuis les sources
 
 ### Prérequis
@@ -102,7 +114,7 @@ bash scripts/build-android-linux.sh
 ```
 
 Il exige Go 1.26.0, JDK 17, Gradle 8.9, les plateformes Android 26 et 35,
-ainsi que le NDK stable 29.0.14206865. La CI Ubuntu installe et vérifie exactement ces
+ainsi que le NDK 27.3.13750724. La CI Ubuntu installe et vérifie exactement ces
 versions. `OPENNOTE_GRADLE_BIN` permet d'indiquer un exécutable Gradle 8.9 si
 le wrapper n'est pas présent. Après chaque build CI, l'APK release non signé,
 l'AAR régénéré et le rapport lint restent téléchargeables pendant 14 jours dans

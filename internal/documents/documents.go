@@ -23,8 +23,8 @@
 //
 // Le relevé de ce que les fichiers contiennent réellement — noms de style
 // localisés, listes qui ne disent pas leur genre, titre de niveau 1 qui n'est
-// pas un titre — est dans docs/CHANTIER-DOCUMENTS.md, section 6. Il a été fait
-// sur des fichiers produits par LibreOffice, pas sur la spécification.
+// pas un titre — vient de fichiers produits par LibreOffice, pas seulement de
+// la spécification.
 package documents
 
 import (

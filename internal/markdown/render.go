@@ -122,7 +122,7 @@ func Render(source string) []Block {
 //     mesure chaque bloc en IntrinsicSize.Min pour donner leur hauteur aux
 //     barres de citation.
 //
-// Relevés et trace complète en section 7 bis de docs/ARCHITECTURE.md.
+// Cette limite garde l'aperçu utilisable pour les fichiers texte volumineux.
 const maxPlainLines = 40
 
 // RenderPlain renvoie un fichier non-Markdown tel quel, découpé en blocs.

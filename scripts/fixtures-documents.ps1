@@ -119,7 +119,7 @@ page.</p>
 # La fixture du piège du mot sans espace. Un document réel peut porter une
 # suite de caractères qu'aucun moteur de retour à la ligne ne sait couper ;
 # sans `markdown.ShortenLongWords`, elle fait tuer l'application par le
-# système — constaté sur appareil, voir CLAUDE.md.
+# système — constaté sur appareil.
 #
 # 5 000 caractères : bien au-delà de `maxEditableWord` (2 000), bien en deçà
 # d'une image en base64. Le mot doit traverser la conversion intact.

@@ -5,8 +5,8 @@
 .DESCRIPTION
     Ce script existe parce qu'un chiffre de performance sans protocole ne vaut
     rien, et parce que le protocole a sept pièges qui produisent des résultats
-    faux mais plausibles. Les relevés qu'il produit sont ceux de la section
-    7 bis de docs/ARCHITECTURE.md.
+    faux mais plausibles. Les relevés produits servent à analyser les phases
+    de rendu de l'éditeur.
 
     Ce qu'il mesure, et pourquoi ces colonnes-là :
 
@@ -16,8 +16,8 @@
         IntendedVsync          -> FrameCompleted          l'image entière
 
     Avant la virtualisation, la troisième était tout : 0,11 ms de layout contre
-    505 ms de display list sur une note de 295 ko — d'où le chantier
-    docs/CHANTIER-EDITEUR.md. Après, elle tient 4,5 ms en frappe et 0,8 ms en
+    505 ms de display list sur une note de 295 ko. Après optimisation, elle
+    tient 4,5 ms en frappe et 0,8 ms en
     défilement, et ce sont les deux autres qui décident. D'où la première et la
     dernière, ajoutées le 31 août 2026 : sans elles, on lit « 25 ms par image »
     sans pouvoir dire si l'application y est pour quelque chose.
@@ -206,6 +206,14 @@ function Test-SurEcranEditeur {
     if ($null -ne (Get-ChampRecherche -Xml $Xml -Hauteur $Hauteur)) { return $false }
     $motif = '<node[^>]*scrollable="true"[^>]*bounds="\[\d+,(\d+)\]\[\d+,(\d+)\]"'
     foreach ($m in [regex]::Matches($Xml, $motif)) {
+        $h = [int]$m.Groups[2].Value - [int]$m.Groups[1].Value
+        if ($h -gt ($Hauteur * 0.4)) { return $true }
+    }
+    # Moteur natif : un android.widget.EditText plein cadre qui defile en
+    # interne, donc sans conteneur scrollable. Get-ChampRecherche l'a deja
+    # ecarte (il est trop haut pour une barre de recherche).
+    $champ = '<node[^>]*class="android\.widget\.EditText"[^>]*bounds="\[\d+,(\d+)\]\[\d+,(\d+)\]"'
+    foreach ($m in [regex]::Matches($Xml, $champ)) {
         $h = [int]$m.Groups[2].Value - [int]$m.Groups[1].Value
         if ($h -gt ($Hauteur * 0.4)) { return $true }
     }
