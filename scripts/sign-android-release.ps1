@@ -19,6 +19,7 @@ param(
 
     [string] $Alias = 'opennote-release',
 
+    [Alias('Source')]
     [string] $UnsignedApk,
 
     [string] $OutputApk

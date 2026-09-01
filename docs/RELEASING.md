@@ -40,6 +40,17 @@ Sur une machine qui possède la clé et les Android Build Tools 34.0.0 :
 .\scripts\sign-android-release.ps1 -Keystore "C:\chemin\vers\opennote-release.p12"
 ```
 
+Pour signer l'APK non signé téléchargé depuis un artefact de CI, indiquez son
+chemin avec `-Source` :
+
+```powershell
+.\scripts\sign-android-release.ps1 `
+  -Keystore "C:\chemin\vers\opennote-release.p12" `
+  -Source "C:\telechargements\app-release-unsigned.apk"
+```
+
+`-Source` est un alias de `-UnsignedApk`, conservé pour compatibilité.
+
 Le script produit par défaut :
 
 ```text
