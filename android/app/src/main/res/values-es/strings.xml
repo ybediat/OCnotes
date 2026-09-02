@@ -18,6 +18,8 @@
     <string name="action_annuler">Cancelar</string>
     <string name="action_supprimer">Eliminar</string>
     <string name="action_deplacer">Mover</string>
+    <string name="action_copier">Copiar</string>
+    <string name="action_partager">Compartir</string>
     <string name="action_renommer">Renombrar</string>
     <string name="action_creer">Crear</string>
     <string name="action_retour">Volver</string>
@@ -190,6 +192,51 @@
     <string name="browser_type_note">Nota</string>
     <string name="browser_type_document">Documento de solo lectura</string>
     <string name="browser_actions">Acciones para «%1$s»</string>
+    <!-- Titre du sélecteur d'application ouvert par « Partager » : mail,
+         messagerie, stockage… Android moderne l'ignore souvent, mais un
+         libellé en dur ferait échouer ChainesEnDurTest. -->
+    <string name="browser_partager_via">Compartir la nota</string>
+    <plurals name="browser_partager_echecs">
+        <item quantity="one">%d nota no disponible sin conexión, no adjuntada.</item>
+        <item quantity="other">%d notas no disponibles sin conexión, no adjuntadas.</item>
+    </plurals>
+
+    <!-- Sélection multiple : appui long sur une ligne, puis actions groupées
+         dans une barre de titre contextuelle. Le déplacement groupé ne
+         concerne que les notes ; la suppression accepte aussi les dossiers,
+         comme le menu par ligne. -->
+    <plurals name="browser_selection_compte">
+        <item quantity="one">%d seleccionado</item>
+        <item quantity="other">%d seleccionados</item>
+    </plurals>
+    <string name="browser_selection_demarrer">Seleccionar</string>
+    <string name="browser_selection_quitter">Salir de la selección</string>
+    <plurals name="browser_deplacer_lot_titre">
+        <item quantity="one">Mover %d elemento</item>
+        <item quantity="other">Mover %d elementos</item>
+    </plurals>
+    <plurals name="browser_copier_lot_titre">
+        <item quantity="one">Copiar %d elemento</item>
+        <item quantity="other">Copiar %d elementos</item>
+    </plurals>
+    <!-- Morceaux d'un résumé assemblé : sans ponctuation finale, joints par
+         sync_separateur et clos par sync_resume, comme le résumé de synchro. -->
+    <plurals name="browser_lot_deplaces">
+        <item quantity="one">%d elemento movido</item>
+        <item quantity="other">%d elementos movidos</item>
+    </plurals>
+    <plurals name="browser_lot_copies">
+        <item quantity="one">%d elemento copiado</item>
+        <item quantity="other">%d elementos copiados</item>
+    </plurals>
+    <plurals name="browser_lot_supprimes">
+        <item quantity="one">%d elemento eliminado</item>
+        <item quantity="other">%d elementos eliminados</item>
+    </plurals>
+    <plurals name="browser_lot_echecs">
+        <item quantity="one">%d con error</item>
+        <item quantity="other">%d con error</item>
+    </plurals>
 
     <!-- Recherche. Elle ne porte que sur le dossier affiché : l'invite doit
          le dire, sinon un résultat manquant passe pour une note perdue. -->
@@ -239,6 +286,12 @@
     <string name="dialogue_supprimer_titre">¿Eliminar «%1$s»?</string>
     <string name="dialogue_supprimer_dossier">La carpeta y todas las notas que contiene se eliminarán del servidor. Esta acción es permanente.</string>
     <string name="dialogue_supprimer_note">La nota se eliminará del servidor. Esta acción es permanente.</string>
+    <plurals name="dialogue_supprimer_lot_titre">
+        <item quantity="one">¿Eliminar %d elemento?</item>
+        <item quantity="other">¿Eliminar %d elementos?</item>
+    </plurals>
+    <string name="dialogue_supprimer_lot_notes">Los elementos seleccionados se eliminarán del servidor. Esta acción es permanente.</string>
+    <string name="dialogue_supprimer_lot_dossiers">Los elementos seleccionados se eliminarán del servidor, incluidas las carpetas con todo su contenido. Esta acción es permanente.</string>
 
     <!-- ================================================================
          Menu latéral
@@ -246,8 +299,8 @@
     <string name="menu_reglages">Ajustes</string>
     <string name="menu_a_propos">Acerca de</string>
     <string name="a_propos_titre">Acerca de OpenNote</string>
-    <string name="a_propos_description">Aplicación Android ligera para escribir notas Markdown almacenadas en un servidor OpenCloud.</string>
-    <string name="a_propos_licence">Licencia: pendiente de indicar.</string>
+    <string name="a_propos_description">Gestor de notas almacenadas en un servidor OpenCloud. Creado por Yannis Bediat. v1.0 agosto de 2026</string>
+    <string name="a_propos_licence">Licencia: MIT https://github.com/ybediat/OpenNote/tree/main?tab=MIT-1-ov-file</string>
     <string name="a_propos_depot">Repositorio Git</string>
 
     <!-- ================================================================

@@ -19,6 +19,8 @@
     <string name="action_annuler">Abbrechen</string>
     <string name="action_supprimer">Löschen</string>
     <string name="action_deplacer">Verschieben</string>
+    <string name="action_copier">Kopieren</string>
+    <string name="action_partager">Teilen</string>
     <string name="action_renommer">Umbenennen</string>
     <string name="action_creer">Erstellen</string>
     <string name="action_retour">Zurück</string>
@@ -175,6 +177,51 @@
     <string name="browser_type_note">Notiz</string>
     <string name="browser_type_document">Schreibgeschütztes Dokument</string>
     <string name="browser_actions">Aktionen für „%1$s“</string>
+    <!-- Titel der von „Teilen“ geöffneten App-Auswahl: E-Mail, Messenger,
+         Speicher … Modernes Android blendet ihn oft aus, aber eine fest
+         codierte Beschriftung würde ChainesEnDurTest fehlschlagen lassen. -->
+    <string name="browser_partager_via">Notiz teilen</string>
+    <plurals name="browser_partager_echecs">
+        <item quantity="one">%d Notiz offline nicht verfügbar, nicht angehängt.</item>
+        <item quantity="other">%d Notizen offline nicht verfügbar, nicht angehängt.</item>
+    </plurals>
+
+    <!-- Mehrfachauswahl: langer Druck auf eine Zeile, dann Sammelaktionen in
+         einer kontextbezogenen Titelleiste. Das Sammelverschieben betrifft nur
+         Notizen; das Löschen akzeptiert auch Ordner, wie das Zeilenmenü. -->
+    <plurals name="browser_selection_compte">
+        <item quantity="one">%d ausgewählt</item>
+        <item quantity="other">%d ausgewählt</item>
+    </plurals>
+    <string name="browser_selection_demarrer">Auswählen</string>
+    <string name="browser_selection_quitter">Auswahl beenden</string>
+    <plurals name="browser_deplacer_lot_titre">
+        <item quantity="one">%d Element verschieben</item>
+        <item quantity="other">%d Elemente verschieben</item>
+    </plurals>
+    <plurals name="browser_copier_lot_titre">
+        <item quantity="one">%d Element kopieren</item>
+        <item quantity="other">%d Elemente kopieren</item>
+    </plurals>
+    <!-- Teile einer zusammengesetzten Zusammenfassung: ohne Schlusszeichen,
+         verbunden durch sync_separateur und abgeschlossen durch sync_resume,
+         wie die Synchronisationszusammenfassung. -->
+    <plurals name="browser_lot_deplaces">
+        <item quantity="one">%d Element verschoben</item>
+        <item quantity="other">%d Elemente verschoben</item>
+    </plurals>
+    <plurals name="browser_lot_copies">
+        <item quantity="one">%d Element kopiert</item>
+        <item quantity="other">%d Elemente kopiert</item>
+    </plurals>
+    <plurals name="browser_lot_supprimes">
+        <item quantity="one">%d Element gelöscht</item>
+        <item quantity="other">%d Elemente gelöscht</item>
+    </plurals>
+    <plurals name="browser_lot_echecs">
+        <item quantity="one">%d fehlgeschlagen</item>
+        <item quantity="other">%d fehlgeschlagen</item>
+    </plurals>
 
     <!-- Suche. Sie bezieht sich nur auf den angezeigten Ordner: Die Eingabeaufforderung muss dies angeben,
          sonst könnte ein fehlendes Ergebnis als verlorene Notiz interpretiert werden. -->
@@ -221,6 +268,12 @@
     <string name="dialogue_supprimer_titre">„%1$s“ löschen?</string>
     <string name="dialogue_supprimer_dossier">Der Ordner und alle Notizen, die er enthält, werden vom Server gelöscht. Diese Aktion ist endgültig.</string>
     <string name="dialogue_supprimer_note">Die Notiz wird vom Server gelöscht. Diese Aktion ist endgültig.</string>
+    <plurals name="dialogue_supprimer_lot_titre">
+        <item quantity="one">%d Element löschen?</item>
+        <item quantity="other">%d Elemente löschen?</item>
+    </plurals>
+    <string name="dialogue_supprimer_lot_notes">Die ausgewählten Elemente werden vom Server gelöscht. Diese Aktion ist endgültig.</string>
+    <string name="dialogue_supprimer_lot_dossiers">Die ausgewählten Elemente werden vom Server gelöscht, einschließlich der Ordner mit ihrem gesamten Inhalt. Diese Aktion ist endgültig.</string>
 
     <!-- ================================================================
          Seitenmenü
@@ -246,6 +299,16 @@
     <string name="reglages_espace">Speicherort</string>
     <string name="reglages_dossier">Ordner</string>
     <string name="reglages_racine_espace">Stammverzeichnis des Speicherorts</string>
+
+    <!-- ================================================================
+         Bearbeitung
+         ================================================================ -->
+    <string name="reglages_edition_titre">Bearbeitung</string>
+    <string name="reglages_edition_explication">Die Auswahl gilt ab dem nächsten Öffnen einer Notiz.</string>
+    <string name="reglages_moteur_virtualise">Virtualisierter Editor</string>
+    <string name="reglages_moteur_virtualise_detail">Stabile Engine, als Rückfalloption erhalten.</string>
+    <string name="reglages_moteur_natif">Nativer Editor</string>
+    <string name="reglages_moteur_natif_detail">Standardmäßig verwendet. Erleichtert das Auswählen von langem Text.</string>
 
     <string name="reglages_sync_titre">Synchronisation</string>
     <string name="reglages_en_attente">Ausstehende Operationen</string>

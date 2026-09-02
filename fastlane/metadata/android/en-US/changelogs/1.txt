@@ -1,0 +1,4 @@
+Initial release of OpenNote.
+
+Create and edit Markdown notes stored on your OpenCloud server, work offline,
+and synchronise changes when a network connection returns.

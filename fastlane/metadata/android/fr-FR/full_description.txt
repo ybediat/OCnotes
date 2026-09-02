@@ -1,0 +1,18 @@
+OpenNote est un éditeur de notes Markdown pour votre serveur OpenCloud.
+
+Vos notes restent de simples fichiers .md dans votre espace OpenCloud personnel.
+Vous pouvez les lire depuis l’interface web, les synchroniser avec d’autres
+clients et conserver l’accès à vos fichiers sans dépendre d’OpenNote.
+
+<b>Fonctionnalités</b>
+<ul>
+<li>Créer, modifier, renommer, déplacer et organiser des notes Markdown.</li>
+<li>Travailler hors connexion et synchroniser au retour du réseau.</li>
+<li>Prévisualiser le Markdown avec une barre de mise en forme.</li>
+<li>Détecter les conflits ETag sans écraser les modifications distantes.</li>
+<li>Utiliser un App Token OpenCloud stocké dans Android.</li>
+</ul>
+
+OpenNote est disponible en français, anglais, espagnol et allemand.
+Configurez votre serveur OpenCloud vous-même.
+OpenNote exige Android 8.0 ou une version ultérieure.

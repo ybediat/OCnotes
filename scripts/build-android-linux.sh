@@ -3,7 +3,7 @@
 # Construit OpenNote depuis les sources sur Linux, sans AAR préexistant.
 #
 # Prérequis : JDK 17, Go 1.26.0, Android SDK 35, plateforme Android 26,
-# NDK 29.0.14206865 et Gradle 8.9. La CI du dépôt installe exactement cette
+# NDK 27.3.13750724 et Gradle 8.9. La CI du dépôt installe exactement cette
 # chaîne avant d'appeler ce script.
 
 set -Eeuo pipefail

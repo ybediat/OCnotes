@@ -82,12 +82,12 @@ $env:PATH = "C:\Program Files\Go\bin;$env:USERPROFILE\go\bin;$env:PATH"
 $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
 
 $ndkRacine = Join-Path $env:ANDROID_HOME "ndk"
-$ndk = Get-ChildItem $ndkRacine -Directory -ErrorAction SilentlyContinue |
-    Sort-Object Name -Descending | Select-Object -First 1
-if (-not $ndk) {
-    throw "Aucun NDK trouvé sous $ndkRacine. Installez-le via Android Studio."
+$ndkVersion = "27.3.13750724"
+$ndk = Join-Path $ndkRacine $ndkVersion
+if (-not (Test-Path -LiteralPath (Join-Path $ndk "source.properties") -PathType Leaf)) {
+    throw "NDK $ndkVersion introuvable sous $ndkRacine. Installez cette version via Android Studio."
 }
-$env:ANDROID_NDK_HOME = $ndk.FullName
+$env:ANDROID_NDK_HOME = $ndk
 Write-Host "NDK : $($env:ANDROID_NDK_HOME)" -ForegroundColor Cyan
 
 $adb = Join-Path $env:ANDROID_HOME "platform-tools\adb.exe"

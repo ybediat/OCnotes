@@ -1,0 +1,4 @@
+Première version d’OpenNote.
+
+Créez et modifiez des notes Markdown stockées sur votre serveur OpenCloud,
+travaillez hors connexion puis synchronisez vos modifications au retour du réseau.

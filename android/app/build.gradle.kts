@@ -8,7 +8,9 @@ plugins {
 android {
     namespace = "eu.opennote"
     compileSdk = 35
-    ndkVersion = "29.0.14206865"
+    // Doit rester aligné sur le script Linux, la CI et le build local :
+    // gomobile utilise ce NDK pour construire le cœur Go avant Gradle.
+    ndkVersion = "27.3.13750724"
 
     defaultConfig {
         applicationId = "eu.opennote"
