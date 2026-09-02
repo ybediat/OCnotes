@@ -6,9 +6,10 @@ import org.junit.Test
 class MoteurEditionTest {
 
     @Test
-    fun valeurAbsenteOuInconnueRetombeSurLeMoteurVirtualise() {
-        assertEquals(MoteurEdition.VIRTUALISE, MoteurEdition.depuis(null))
-        assertEquals(MoteurEdition.VIRTUALISE, MoteurEdition.depuis("futur-moteur"))
+    fun valeurAbsenteOuInconnueRetombeSurLeMoteurParDefaut() {
+        assertEquals(MoteurEdition.NATIF, MoteurEdition.DEFAUT)
+        assertEquals(MoteurEdition.NATIF, MoteurEdition.depuis(null))
+        assertEquals(MoteurEdition.NATIF, MoteurEdition.depuis("futur-moteur"))
     }
 
     @Test
@@ -22,12 +23,12 @@ class MoteurEditionTest {
     fun choixPersisteApresRecreationDesPreferences() {
         val stockage = StockageMemoire()
         val premieresPreferences = PreferencesAffichage(stockage)
-        assertEquals(MoteurEdition.VIRTUALISE, premieresPreferences.moteurEdition.value)
+        assertEquals(MoteurEdition.NATIF, premieresPreferences.moteurEdition.value)
 
-        premieresPreferences.definirMoteurEdition(MoteurEdition.NATIF)
+        premieresPreferences.definirMoteurEdition(MoteurEdition.VIRTUALISE)
 
         val preferencesRecreees = PreferencesAffichage(stockage)
-        assertEquals(MoteurEdition.NATIF, preferencesRecreees.moteurEdition.value)
+        assertEquals(MoteurEdition.VIRTUALISE, preferencesRecreees.moteurEdition.value)
     }
 }
 

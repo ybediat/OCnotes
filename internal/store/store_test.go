@@ -21,6 +21,11 @@ type fakeRemote struct {
 	folders map[string]bool
 	seq     int
 
+	// refuse simule un refus définitif du serveur sur un chemin : ni panne de
+	// transport, ni conflit, ni absence — le genre d'erreur qui ne passera
+	// jamais, quel que soit le nombre de tentatives.
+	refuse map[string]bool
+
 	offline bool
 	calls   []string
 }
@@ -30,10 +35,13 @@ func newFakeRemote() *fakeRemote {
 		files:   map[string]string{},
 		etags:   map[string]string{},
 		folders: map[string]bool{},
+		refuse:  map[string]bool{},
 	}
 }
 
-var errOffline = errors.New("fake: réseau indisponible")
+// Le serveur factice imite le client réel jusque dans ses erreurs : Push ne
+// distingue une panne de transport d'un refus que par opencloud.ErrOffline.
+var errOffline = fmt.Errorf("fake: réseau indisponible: %w", opencloud.ErrOffline)
 
 func (r *fakeRemote) nextETag() string {
 	r.seq++
@@ -55,6 +63,9 @@ func (r *fakeRemote) Read(_ context.Context, p string) ([]byte, string, error) {
 func (r *fakeRemote) Save(_ context.Context, p string, content []byte, ifMatch string) (string, error) {
 	if r.offline {
 		return "", errOffline
+	}
+	if r.refuse[p] {
+		return "", fmt.Errorf("fake: %s: refusé par le serveur", p)
 	}
 	r.calls = append(r.calls, "save "+p)
 
@@ -919,5 +930,278 @@ func TestClear(t *testing.T) {
 	}
 	if _, _, ok := s.Get("a.md"); ok {
 		t.Error("la note est encore lisible après Clear")
+	}
+}
+
+// Le renommage d'une note qui porte une écriture en attente. Le cas est arrivé
+// sur l'appareil de test : la note restait « en attente d'envoi » pour
+// toujours, et sa dernière version n'atteignait jamais le serveur.
+func TestRenommageEmporteLEcritureEnAttente(t *testing.T) {
+	s, remote := newStore(t), newFakeRemote()
+	ctx := context.Background()
+
+	if err := s.Put("ancienne.md", []byte("v1")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if _, err := s.Push(ctx, remote); err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+
+	// Une modification non encore synchronisée, puis un renommage que le
+	// serveur applique tout de suite : c'est le chemin d'App.Rename en ligne.
+	if err := s.Put("ancienne.md", []byte("v2")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if err := remote.MoveTo(ctx, "ancienne.md", "nouvelle.md"); err != nil {
+		t.Fatalf("MoveTo: %v", err)
+	}
+	if err := s.RenameLocal("ancienne.md", "nouvelle.md"); err != nil {
+		t.Fatalf("RenameLocal: %v", err)
+	}
+
+	pending := s.Pending()
+	if len(pending) != 1 || pending[0].Kind != OpWrite || pending[0].Path != "nouvelle.md" {
+		t.Fatalf("file = %+v, attendu une écriture sur nouvelle.md", pending)
+	}
+
+	if _, err := s.Push(ctx, remote); err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	if remote.files["nouvelle.md"] != "v2" {
+		t.Errorf("serveur = %q, la modification locale n'est pas partie", remote.files["nouvelle.md"])
+	}
+	if _, entry, _ := s.Get("nouvelle.md"); entry.Dirty {
+		t.Error("la note reste marquée « en attente d'envoi » après un envoi réussi")
+	}
+}
+
+// Un dossier renommé côté serveur emporte les notes qu'il contient : les
+// laisser sous l'ancien chemin décrirait des fichiers qui n'existent plus
+// là-bas, et l'écriture en attente de l'une d'elles viserait un chemin disparu.
+func TestRenommageDeDossierEmporteLaDescendance(t *testing.T) {
+	s, remote := newStore(t), newFakeRemote()
+	ctx := context.Background()
+
+	if err := s.RememberFolder("Ancien"); err != nil {
+		t.Fatalf("RememberFolder: %v", err)
+	}
+	if err := s.Put("Ancien/note.md", []byte("v1")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if _, err := s.Push(ctx, remote); err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	if err := s.Put("Ancien/note.md", []byte("v2")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	if err := remote.MoveTo(ctx, "Ancien/note.md", "Nouveau/note.md"); err != nil {
+		t.Fatalf("MoveTo: %v", err)
+	}
+	if err := s.RenameLocal("Ancien", "Nouveau"); err != nil {
+		t.Fatalf("RenameLocal: %v", err)
+	}
+
+	if content, _, ok := s.Get("Nouveau/note.md"); !ok || string(content) != "v2" {
+		t.Errorf("cache sous le nouveau chemin = %q (présente : %v)", content, ok)
+	}
+	if _, _, ok := s.Get("Ancien/note.md"); ok {
+		t.Error("l'ancien chemin est encore en cache")
+	}
+
+	if _, err := s.Push(ctx, remote); err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	if remote.files["Nouveau/note.md"] != "v2" {
+		t.Errorf("serveur = %q, la modification locale n'est pas partie", remote.files["Nouveau/note.md"])
+	}
+}
+
+// Le filet de sécurité : une entrée sale sans rien en file est remise en file
+// à l'ouverture de la passe. La file est vidée à la main parce que c'est
+// exactement l'état qu'un index déjà écrit sur l'appareil peut porter — quelle
+// qu'en soit la cause, elle ne se rejoue pas depuis l'API publique.
+func TestPushReinscritUneEcritureOrpheline(t *testing.T) {
+	s, remote := newStore(t), newFakeRemote()
+	ctx := context.Background()
+
+	if err := s.Accept("a.md", []byte("v1"), `"e0"`); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+	remote.files["a.md"], remote.etags["a.md"] = "v1", `"e0"`
+
+	if err := s.Put("a.md", []byte("v2")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	s.mu.Lock()
+	s.queue = nil
+	err := s.save()
+	s.mu.Unlock()
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	if _, err := s.Push(ctx, remote); err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	if remote.files["a.md"] != "v2" {
+		t.Errorf("serveur = %q, l'écriture orpheline n'a pas été rattrapée", remote.files["a.md"])
+	}
+	if _, entry, _ := s.Get("a.md"); entry.Dirty {
+		t.Error("la note reste sale après un envoi réussi")
+	}
+}
+
+// Même filet, au démarrage : l'appareil dont l'index porte déjà l'état fautif
+// doit se réparer sans attendre une passe.
+func TestOuvertureReinscritUneEcritureOrpheline(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := s.Put("a.md", []byte("v2")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	s.mu.Lock()
+	s.queue = nil
+	err = s.save()
+	s.mu.Unlock()
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	rouvert, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	pending := rouvert.Pending()
+	if len(pending) != 1 || pending[0].Kind != OpWrite || pending[0].Path != "a.md" {
+		t.Fatalf("file = %+v, attendu une écriture réinscrite sur a.md", pending)
+	}
+}
+
+// Une note créée hors connexion puis renommée hors connexion. Avant que les
+// écritures ne suivent l'entrée, les deux opérations se neutralisaient en
+// silence : l'écriture était retirée faute de contenu à son ancien chemin, le
+// déplacement faute de source sur le serveur, et la note n'était jamais
+// envoyée — sans la moindre erreur. Ordre attendu dans la file : le
+// déplacement d'abord, l'écriture ensuite.
+func TestCreationPuisRenommageHorsConnexion(t *testing.T) {
+	s, remote := newStore(t), newFakeRemote()
+	ctx := context.Background()
+
+	if err := s.Put("brouillon.md", []byte("texte")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if err := s.Rename("brouillon.md", "titre.md"); err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+
+	pending := s.Pending()
+	if len(pending) != 2 || pending[0].Kind != OpMove || pending[1].Kind != OpWrite {
+		t.Fatalf("file = %+v, attendu un déplacement puis une écriture", pending)
+	}
+
+	if _, err := s.Push(ctx, remote); err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	if remote.files["titre.md"] != "texte" {
+		t.Errorf("serveur = %+v, la note n'a jamais été envoyée", remote.files)
+	}
+	if _, entry, _ := s.Get("titre.md"); entry.Dirty {
+		t.Error("la note reste marquée « en attente d'envoi »")
+	}
+}
+
+// Une note supprimée ailleurs pendant qu'une modification locale attendait.
+// Le texte de l'utilisateur repart comme une création, et surtout : la file
+// continue. Avant, la lecture de la version serveur échouait en ErrNotFound,
+// l'erreur remontait, et l'opération restait en tête de file — toute la
+// synchronisation de l'appareil s'arrêtait là, définitivement.
+func TestSuppressionAilleursNeBloquePasLaFile(t *testing.T) {
+	s, remote := newStore(t), newFakeRemote()
+	ctx := context.Background()
+
+	if err := s.Put("a.md", []byte("v1")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if err := s.Put("autre.md", []byte("x")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if _, err := s.Push(ctx, remote); err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+
+	// La modification locale attend...
+	if err := s.Put("a.md", []byte("v2")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	// ...et la note disparaît du serveur, effacée depuis l'interface web.
+	delete(remote.files, "a.md")
+	delete(remote.etags, "a.md")
+	// Une autre note attend derrière elle.
+	if err := s.Put("autre.md", []byte("y")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	report, err := s.Push(ctx, remote)
+	if err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	if remote.files["a.md"] != "v2" {
+		t.Errorf("a.md = %q, le texte local aurait dû repartir", remote.files["a.md"])
+	}
+	if remote.files["autre.md"] != "y" {
+		t.Errorf("autre.md = %q, la note qui suivait est restée en otage", remote.files["autre.md"])
+	}
+	if report.Pushed != 2 || report.Remaining != 0 {
+		t.Errorf("rapport = %+v, attendu 2 envois et rien en attente", report)
+	}
+	if pending := s.Pending(); len(pending) != 0 {
+		t.Errorf("file = %+v", pending)
+	}
+}
+
+// Un refus qui ne vise qu'une opération — dossier parent disparu, partage en
+// lecture seule — ne doit pas retenir les suivantes. L'opération passe en fin
+// de file, la passe continue, et l'erreur est tout de même rendue : elle reste
+// visible à chaque passe et son message nomme la note.
+func TestOperationRefuseeNeRetientPasLesSuivantes(t *testing.T) {
+	s, remote := newStore(t), newFakeRemote()
+	ctx := context.Background()
+
+	remote.refuse["refusee.md"] = true
+	if err := s.Put("refusee.md", []byte("a")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if err := s.Put("suivante.md", []byte("b")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	report, err := s.Push(ctx, remote)
+	if err == nil {
+		t.Fatal("le refus du serveur aurait dû être rendu")
+	}
+	if !strings.Contains(err.Error(), "refusee.md") {
+		t.Errorf("erreur = %v, elle devrait nommer la note en cause", err)
+	}
+	if remote.files["suivante.md"] != "b" {
+		t.Errorf("suivante.md = %q, elle est restée derrière l'opération refusée", remote.files["suivante.md"])
+	}
+	if report.Pushed != 1 || report.Remaining != 1 {
+		t.Errorf("rapport = %+v, attendu 1 envoi et 1 en attente", report)
+	}
+
+	// Le refus levé, la passe suivante rattrape ce qui restait.
+	remote.refuse = map[string]bool{}
+	if _, err := s.Push(ctx, remote); err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	if remote.files["refusee.md"] != "a" {
+		t.Errorf("refusee.md = %q après levée du refus", remote.files["refusee.md"])
+	}
+	if pending := s.Pending(); len(pending) != 0 {
+		t.Errorf("file = %+v", pending)
 	}
 }

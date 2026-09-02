@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Chemins exposés par le FileProvider de partage.
+
+    Un seul dossier : cacheDir/partage/, vidé à chaque partage. Ces copies au
+    vrai nom ne vivent que le temps de l'envoi vers le mail ou la messagerie.
+-->
+<paths>
+    <cache-path name="partage" path="partage/" />
+</paths>

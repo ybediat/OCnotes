@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SortByAlpha
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -71,6 +72,7 @@ import eu.opennote.ui.common.BandeauCache
 import eu.opennote.ui.common.ChargementPleinEcran
 import eu.opennote.ui.common.EtatVide
 import eu.opennote.ui.common.PastilleEnAttente
+import eu.opennote.ui.common.partagerFichiers
 import eu.opennote.ui.common.resoudre
 import eu.opennote.ui.theme.CouleurSignatureClaire
 import eu.opennote.ui.theme.CouleurSignatureSombre
@@ -107,12 +109,14 @@ fun BrowserScreen(
     val etat by viewModel.uiState.collectAsStateWithLifecycle()
     val evenement by viewModel.evenements.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     var dialogue by remember { mutableStateOf<Dialogue?>(null) }
 
     // Rédigé ici, dans la composition : le `LaunchedEffect` ci-dessous est une
     // coroutine, et une coroutine ne peut pas lire de ressource.
     val messageEvenement = (evenement as? BrowserEvent.Message)?.texte?.resoudre()
+    val avertissementPartage = (evenement as? BrowserEvent.Partager)?.avertissement?.resoudre()
 
     LaunchedEffect(evenement) {
         when (val e = evenement) {
@@ -124,6 +128,12 @@ fun BrowserScreen(
             is BrowserEvent.Message -> {
                 viewModel.evenementConsomme()
                 messageEvenement?.let { snackbar.showSnackbar(it) }
+            }
+
+            is BrowserEvent.Partager -> {
+                viewModel.evenementConsomme()
+                partagerFichiers(context, e.fichiers)
+                avertissementPartage?.let { snackbar.showSnackbar(it) }
             }
 
             null -> Unit
@@ -153,9 +163,11 @@ fun BrowserScreen(
                     nombre = etat.selection.size,
                     peutDeplacer = etat.peutDeplacerSelection,
                     peutCopier = etat.peutCopierSelection,
+                    peutPartager = etat.peutPartagerSelection,
                     onQuitter = viewModel::viderSelection,
                     onDeplacer = { dialogue = Dialogue.DeplacerLot },
                     onCopier = { dialogue = Dialogue.CopierLot },
+                    onPartager = viewModel::partagerLot,
                     onSupprimer = { dialogue = Dialogue.SupprimerLot },
                 )
             } else {
@@ -285,6 +297,7 @@ fun BrowserScreen(
                     onBasculer = viewModel::basculerSelection,
                     onRenommer = { dialogue = Dialogue.Renommer(it) },
                     onDeplacer = { dialogue = Dialogue.Deplacer(it) },
+                    onPartager = { viewModel.partager(it) },
                     onSupprimer = { dialogue = Dialogue.Supprimer(it) },
                 )
             }
@@ -377,9 +390,9 @@ fun BrowserScreen(
  * Barre de titre contextuelle affichée pendant une sélection multiple.
  *
  * La croix vide la sélection — même geste que le retour système. « Déplacer »
- * disparaît dès qu'un dossier est coché, « Copier » dès qu'un dossier ou un
- * document l'est : ces gestes groupés ne valent que pour des notes. La
- * suppression, elle, reste toujours proposée.
+ * disparaît dès qu'un dossier est coché, « Copier » et « Partager » dès qu'un
+ * dossier ou un document l'est : ces gestes groupés ne valent que pour des
+ * notes. La suppression, elle, reste toujours proposée.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -387,9 +400,11 @@ private fun BarreSelection(
     nombre: Int,
     peutDeplacer: Boolean,
     peutCopier: Boolean,
+    peutPartager: Boolean,
     onQuitter: () -> Unit,
     onDeplacer: () -> Unit,
     onCopier: () -> Unit,
+    onPartager: () -> Unit,
     onSupprimer: () -> Unit,
 ) {
     TopAppBar(
@@ -418,6 +433,14 @@ private fun BarreSelection(
                     Icon(
                         imageVector = Icons.Default.ContentCopy,
                         contentDescription = stringResource(R.string.action_copier),
+                    )
+                }
+            }
+            if (peutPartager) {
+                IconButton(onClick = onPartager) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = stringResource(R.string.action_partager),
                     )
                 }
             }
@@ -451,6 +474,7 @@ private fun ListeEntrees(
     onBasculer: (FolderEntryDto) -> Unit,
     onRenommer: (FolderEntryDto) -> Unit,
     onDeplacer: (FolderEntryDto) -> Unit,
+    onPartager: (FolderEntryDto) -> Unit,
     onSupprimer: (FolderEntryDto) -> Unit,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -477,6 +501,14 @@ private fun ListeEntrees(
                     onBasculer = { onBasculer(entree) },
                     onRenommer = { onRenommer(entree) },
                     onDeplacer = if (entree.isDir) null else ({ onDeplacer(entree) }),
+                    // Partage réservé aux notes : ni dossier (pas de contenu),
+                    // ni document `.docx`/`.odt` (seul son texte extrait
+                    // traverse la façade, pas son binaire).
+                    onPartager = if (entree.isDir || entree.readOnly) {
+                        null
+                    } else {
+                        ({ onPartager(entree) })
+                    },
                     onSupprimer = { onSupprimer(entree) },
                 )
             }
@@ -590,6 +622,8 @@ private fun LigneEntree(
     // `null` retire l'action du menu plutôt que de l'y laisser inerte —
     // c'est le cas d'un dossier, que DeplacerDialog ne couvre pas.
     onDeplacer: (() -> Unit)?,
+    // `null` pour un dossier ou un document : le partage ne joint que des notes.
+    onPartager: (() -> Unit)?,
     onSupprimer: () -> Unit,
 ) {
     var menuOuvert by remember { mutableStateOf(false) }
@@ -676,6 +710,15 @@ private fun LigneEntree(
                                 onClick = {
                                     menuOuvert = false
                                     deplacer()
+                                },
+                            )
+                        }
+                        onPartager?.let { partager ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.action_partager)) },
+                                onClick = {
+                                    menuOuvert = false
+                                    partager()
                                 },
                             )
                         }

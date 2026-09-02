@@ -177,6 +177,13 @@ func Open(dir string) (*Store, error) {
 	if s.repairBlobsLocked() {
 		migrated = true
 	}
+
+	// Après la réparation des blobs : elle peut supprimer des entrées, et une
+	// entrée disparue n'a rien à envoyer.
+	if s.requeueOrphanWritesLocked() {
+		migrated = true
+	}
+
 	if migrated {
 		if err := s.save(); err != nil {
 			return nil, err
@@ -358,11 +365,12 @@ func (s *Store) Put(notePath string, content []byte) error {
 // unchangedLocked dit si réenregistrer ce contenu serait sans effet : le cache
 // le porte déjà, et l'état de la file correspond à celui de l'entrée.
 //
-// La seconde condition n'est pas de la superstition. Un renommage déplace
-// l'entrée sans déplacer l'écriture en attente, qui reste inscrite sous
-// l'ancien chemin : la note se retrouve sale sans rien en file. Repasser par
-// le chemin normal la remet en file, là où un raccourci l'y laisserait
-// indéfiniment.
+// La seconde condition n'est pas de la superstition : une note peut se trouver
+// sale sans rien avoir en file — la déduplication d'une frappe arrivée pendant
+// une passe de synchronisation y suffit. Repasser par le chemin normal la remet
+// en file, là où un raccourci l'y laisserait. Ce n'est qu'un demi-remède :
+// l'éditeur n'écrit pas ce qu'il n'a pas modifié, donc il n'appelle rien du tout
+// sur la note bloquée. requeueOrphanWritesLocked porte l'autre moitié.
 func (s *Store) unchangedLocked(notePath string, content []byte) bool {
 	entry, ok := s.entries[notePath]
 	if !ok || entry.Size != int64(len(content)) {
@@ -515,27 +523,73 @@ func (s *Store) rename(from, to string, enqueue bool) error {
 		s.rememberFolderLocked(to)
 	}
 
-	entry, ok := s.entries[from]
-	if ok {
+	// La descendance suit. Le cas ne se présente que pour un dossier renommé
+	// côté serveur — le renommage différé d'un dossier est refusé plus haut —
+	// et une note laissée sous l'ancien chemin décrirait alors un fichier qui
+	// n'existe plus là-bas : illisible hors connexion, et prétendant une
+	// version que le prochain envoi opposerait à un chemin disparu.
+	deplacees := make([]string, 0, 1)
+	for chemin := range s.entries {
+		if _, ok := sousChemin(chemin, from); ok {
+			deplacees = append(deplacees, chemin)
+		}
+	}
+	sort.Strings(deplacees)
+
+	for _, chemin := range deplacees {
+		suffixe, _ := sousChemin(chemin, from)
+		cible := to + suffixe
+		entry := s.entries[chemin]
 		content, err := os.ReadFile(s.blobPath(entry.Cache))
 		if err == nil {
-			if err := s.writeBlob(to, content); err != nil {
+			if err := s.writeBlob(cible, content); err != nil {
 				return err
 			}
 			_ = os.Remove(s.blobPath(entry.Cache))
 		}
-		entry.Path = to
-		entry.Cache = cacheName(to)
-		delete(s.entries, from)
-		s.entries[to] = entry
+		entry.Path = cible
+		entry.Cache = cacheName(cible)
+		delete(s.entries, chemin)
+		s.entries[cible] = entry
 	}
+
+	// Les écritures en attente suivent aussi, et c'est le cœur du correctif.
+	// Laissée sous l'ancien chemin, une écriture est perdue : la passe suivante
+	// n'y trouve plus de contenu à envoyer et la retire de la file, laissant la
+	// note marquée « en attente d'envoi » pour toujours et sa modification à
+	// quai. C'est arrivé en conditions réelles.
+	ecritures := s.dequeueWritesUnderLocked(from)
 
 	s.renameKnownLocked(from, to)
 
 	if enqueue {
 		s.enqueueLocked(Operation{Kind: OpMove, Path: from, Target: to, ExpectedETag: expectedETag})
 	}
+	// Réinscrites après le déplacement, jamais avant : tant que le serveur n'a
+	// pas vu le nouveau chemin, il n'y a rien à y écrire.
+	for _, chemin := range ecritures {
+		suffixe, _ := sousChemin(chemin, from)
+		s.enqueueLocked(Operation{Kind: OpWrite, Path: to + suffixe})
+	}
 	return s.save()
+}
+
+// dequeueWritesUnderLocked retire de la file les écritures visant un chemin ou
+// sa descendance, et renvoie ces chemins dans l'ordre où ils y figuraient.
+func (s *Store) dequeueWritesUnderLocked(base string) []string {
+	var retirees []string
+	restantes := s.queue[:0]
+	for _, op := range s.queue {
+		if op.Kind == OpWrite {
+			if _, ok := sousChemin(op.Path, base); ok {
+				retirees = append(retirees, op.Path)
+				continue
+			}
+		}
+		restantes = append(restantes, op)
+	}
+	s.queue = restantes
+	return retirees
 }
 
 // EnsureFolder retient un dossier et inscrit sa création en file d'attente.

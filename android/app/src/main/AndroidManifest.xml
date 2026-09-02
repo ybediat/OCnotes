@@ -30,5 +30,20 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Partage de notes en pièce jointe. Le cache local nomme ses
+             fichiers par empreinte : « Partager » recrée une copie au vrai
+             nom sous cacheDir/partage/, exposée à l'application cible par ce
+             fournisseur. L'autorité suit l'applicationId (suffixe .debug
+             compris) via le placeholder AGP. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/chemins_partage" />
+        </provider>
     </application>
 </manifest>

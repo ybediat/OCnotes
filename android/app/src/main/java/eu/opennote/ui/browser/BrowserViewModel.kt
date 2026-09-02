@@ -13,6 +13,7 @@ import eu.opennote.data.FolderRefDto
 import eu.opennote.data.OpenNoteException
 import eu.opennote.data.OpenNoteRepository
 import eu.opennote.data.PreferencesAffichage
+import eu.opennote.ui.common.FichierPartage
 import eu.opennote.ui.common.Texte
 import eu.opennote.ui.common.texte
 import eu.opennote.sync.SyncScheduler
@@ -92,6 +93,14 @@ data class BrowserUiState(
         get() = peutDeplacerSelection && !selectionContientDocument
 
     /**
+     * Le partage groupé est proposable dans les mêmes conditions que la copie :
+     * on ne joint en pièce jointe que des notes `.md` ou `.txt`. Un dossier n'a
+     * pas de contenu, et le binaire d'un document `.docx` ne traverse pas la
+     * façade — seul son texte extrait le fait.
+     */
+    val peutPartagerSelection: Boolean get() = peutCopierSelection
+
+    /**
      * Ce que la liste montre réellement : [entrees] filtré puis ordonné.
      *
      * Calculé une fois par état plutôt qu'à chaque accès — un état est
@@ -141,6 +150,19 @@ data class BrowserUiState(
 sealed interface BrowserEvent {
     data class OuvrirNote(val chemin: String) : BrowserEvent
     data class Message(val texte: Texte) : BrowserEvent
+
+    /**
+     * Ouvrir le sélecteur de partage avec ces notes en pièce jointe.
+     *
+     * Le contenu est déjà lu : l'écriture des fichiers et l'intent sont du
+     * ressort de la vue, qui seule a un `Context`. [avertissement] porte le cas
+     * d'un lot dont une partie n'a pas pu être lue hors connexion — les autres
+     * partent quand même, et le message le dit après coup.
+     */
+    data class Partager(
+        val fichiers: List<FichierPartage>,
+        val avertissement: Texte? = null,
+    ) : BrowserEvent
 }
 
 /**
@@ -450,6 +472,27 @@ class BrowserViewModel(
         }
     }
 
+    /**
+     * Partage une note en pièce jointe.
+     *
+     * La lecture passe par le cache (`readNote`) : elle aboutit hors connexion
+     * si la note a déjà été ouverte, et échoue proprement sinon —
+     * `[CONTENT_NOT_CACHED]`, formulé par la couche d'erreur. L'écriture du
+     * fichier et l'intent sont laissés à la vue.
+     */
+    fun partager(entree: FolderEntryDto) {
+        viewModelScope.launch {
+            try {
+                val contenu = repository.readNote(entree.path)
+                _evenements.value = BrowserEvent.Partager(
+                    listOf(FichierPartage(entree.name, contenu)),
+                )
+            } catch (e: OpenNoteException) {
+                _evenements.value = BrowserEvent.Message(e.texte())
+            }
+        }
+    }
+
     // --- Actions groupées ----------------------------------------------------
 
     /** Déplace toutes les entrées sélectionnées vers un même dossier. */
@@ -463,6 +506,45 @@ class BrowserViewModel(
     /** Supprime toutes les entrées sélectionnées. */
     fun supprimerLot() =
         executerLot(R.plurals.browser_lot_supprimes) { repository.delete(it) }
+
+    /**
+     * Lit chaque note sélectionnée et émet un [BrowserEvent.Partager].
+     *
+     * Ce n'est pas un [executerLot] : rien n'est écrit ni synchronisé, et le
+     * résultat n'est pas un résumé mais une liste de fichiers à joindre. Une
+     * note illisible hors connexion est retirée du lot — les autres partent, et
+     * l'avertissement porté par l'événement le signale. Si aucune n'a pu être
+     * lue, on ne montre que l'erreur.
+     */
+    fun partagerLot() {
+        val cibles = _uiState.value.selection.toList()
+        if (cibles.isEmpty()) return
+        viewModelScope.launch {
+            val fichiers = mutableListOf<FichierPartage>()
+            val echecs = mutableListOf<OpenNoteException>()
+            for (chemin in cibles) {
+                val entree = _uiState.value.entrees.firstOrNull { it.path == chemin } ?: continue
+                try {
+                    fichiers += FichierPartage(entree.name, repository.readNote(chemin))
+                } catch (e: OpenNoteException) {
+                    echecs += e
+                }
+            }
+            if (fichiers.isEmpty()) {
+                echecs.firstOrNull()?.let { _evenements.value = BrowserEvent.Message(it.texte()) }
+                return@launch
+            }
+            _evenements.value = BrowserEvent.Partager(
+                fichiers = fichiers,
+                avertissement = if (echecs.isEmpty()) {
+                    null
+                } else {
+                    Texte.pluriel(R.plurals.browser_partager_echecs, echecs.size)
+                },
+            )
+            viderSelection()
+        }
+    }
 
     /**
      * Rejoue une opération sur chaque entrée sélectionnée, une par une.

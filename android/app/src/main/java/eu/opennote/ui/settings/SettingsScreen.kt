@@ -155,16 +155,16 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             ChoixMoteur(
-                titre = stringResource(R.string.reglages_moteur_virtualise),
-                detail = stringResource(R.string.reglages_moteur_virtualise_detail),
-                selectionne = etat.moteurEdition == MoteurEdition.VIRTUALISE,
-                onClick = { viewModel.definirMoteurEdition(MoteurEdition.VIRTUALISE) },
-            )
-            ChoixMoteur(
                 titre = stringResource(R.string.reglages_moteur_natif),
                 detail = stringResource(R.string.reglages_moteur_natif_detail),
                 selectionne = etat.moteurEdition == MoteurEdition.NATIF,
                 onClick = { viewModel.definirMoteurEdition(MoteurEdition.NATIF) },
+            )
+            ChoixMoteur(
+                titre = stringResource(R.string.reglages_moteur_virtualise),
+                detail = stringResource(R.string.reglages_moteur_virtualise_detail),
+                selectionne = etat.moteurEdition == MoteurEdition.VIRTUALISE,
+                onClick = { viewModel.definirMoteurEdition(MoteurEdition.VIRTUALISE) },
             )
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))

@@ -28,6 +28,7 @@
     <string name="action_supprimer">Supprimer</string>
     <string name="action_deplacer">Déplacer</string>
     <string name="action_copier">Copier</string>
+    <string name="action_partager">Partager</string>
     <string name="action_renommer">Renommer</string>
     <string name="action_creer">Créer</string>
     <string name="action_retour">Retour</string>
@@ -191,6 +192,14 @@
     <string name="browser_type_note">Note</string>
     <string name="browser_type_document">Document en lecture seule</string>
     <string name="browser_actions">Actions sur « %1$s »</string>
+    <!-- Titre du sélecteur d'application ouvert par « Partager » : mail,
+         messagerie, stockage… Android moderne l'ignore souvent, mais un
+         libellé en dur ferait échouer ChainesEnDurTest. -->
+    <string name="browser_partager_via">Partager la note</string>
+    <plurals name="browser_partager_echecs">
+        <item quantity="one">%d note indisponible hors connexion, non jointe.</item>
+        <item quantity="other">%d notes indisponibles hors connexion, non jointes.</item>
+    </plurals>
 
     <!-- Sélection multiple : appui long sur une ligne, puis actions groupées
          dans une barre de titre contextuelle. Le déplacement groupé ne
@@ -312,10 +321,10 @@
 
     <string name="reglages_edition_titre">Édition</string>
     <string name="reglages_edition_explication">Le choix s\'applique à la prochaine ouverture d\'une note.</string>
-    <string name="reglages_moteur_virtualise">Éditeur actuel</string>
-    <string name="reglages_moteur_virtualise_detail">Moteur virtualisé stable, utilisé par défaut.</string>
-    <string name="reglages_moteur_natif">Éditeur natif expérimental</string>
-    <string name="reglages_moteur_natif_detail">Facilite la sélection de texte long. Ce moteur reste expérimental.</string>
+    <string name="reglages_moteur_virtualise">Éditeur virtualisé</string>
+    <string name="reglages_moteur_virtualise_detail">Moteur stable, conservé en repli.</string>
+    <string name="reglages_moteur_natif">Éditeur natif</string>
+    <string name="reglages_moteur_natif_detail">Utilisé par défaut. Facilite la sélection de texte long.</string>
 
     <string name="reglages_sync_titre">Synchronisation</string>
     <string name="reglages_en_attente">Opérations en attente</string>

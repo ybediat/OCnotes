@@ -267,10 +267,10 @@
 
     <string name="reglages_edition_titre">Edición</string>
     <string name="reglages_edition_explication">La opción se aplica la próxima vez que se abre una nota.</string>
-    <string name="reglages_moteur_virtualise">Editor actual</string>
-    <string name="reglages_moteur_virtualise_detail">Motor virtualizado estable, utilizado de forma predeterminada.</string>
-    <string name="reglages_moteur_natif">Editor nativo experimental</string>
-    <string name="reglages_moteur_natif_detail">Facilita la selección de textos largos. Este motor sigue siendo experimental.</string>
+    <string name="reglages_moteur_virtualise">Editor virtualizado</string>
+    <string name="reglages_moteur_virtualise_detail">Motor estable, disponible como alternativa.</string>
+    <string name="reglages_moteur_natif">Editor nativo</string>
+    <string name="reglages_moteur_natif_detail">Usado de forma predeterminada. Facilita la selección de textos largos.</string>
 
     <string name="reglages_sync_titre">Sincronización</string>
     <string name="reglages_en_attente">Operaciones pendientes</string>

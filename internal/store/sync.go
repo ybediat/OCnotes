@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
@@ -53,9 +54,9 @@ type Report struct {
 	Moved     int
 	Conflicts []Conflict
 
-	// Remaining est le nombre d'opérations toujours en attente : la
-	// synchronisation s'arrête à la première erreur réseau pour préserver
-	// l'ordre des opérations.
+	// Remaining est le nombre d'opérations toujours en attente : une panne de
+	// transport arrête la passe pour préserver l'ordre, et une opération que le
+	// serveur refuse y reste, mise de côté, pendant que les autres passent.
 	Remaining int
 }
 
@@ -109,23 +110,95 @@ func (s *Store) enqueueLocked(op Operation) {
 	s.queue = append(s.queue, op)
 }
 
+// requeueOrphanWritesLocked réinscrit les écritures que la file a perdues.
+//
+// L'invariant que cette fonction rétablit est simple : une entrée sale porte
+// toujours une écriture en file, puisque c'est cette écriture qui la rendra
+// propre. Deux chemins l'ont enfreint, avec le même symptôme — une note reste
+// « en attente d'envoi » pour toujours, et la modification qu'elle porte ne
+// part jamais :
+//
+//   - un renommage déplaçait l'entrée sans déplacer l'écriture, qui restait
+//     inscrite sous l'ancien chemin ; la passe suivante n'y trouvait plus de
+//     contenu et retirait l'opération sans rien envoyer ;
+//   - une frappe pendant une passe est absorbée comme doublon de l'écriture en
+//     cours de traitement, puis cette écriture est retirée de la file une fois
+//     poussée : la version tapée entre-temps n'est plus réclamée par personne.
+//
+// Le premier est corrigé à sa source, dans rename. Le second est inhérent à la
+// déduplication, et se rattrape ici. Surtout, la réparation est le seul moyen
+// de récupérer un appareil dont l'index porte déjà l'état fautif : rien
+// d'autre ne remet une note en file, l'éditeur n'écrivant pas ce qu'il n'a pas
+// modifié.
+//
+// Elle ne s'exécute qu'au démarrage et à l'ouverture d'une passe, jamais dans
+// la boucle de drainage : une note qui resterait sale ferait tourner la passe
+// sans fin.
+func (s *Store) requeueOrphanWritesLocked() bool {
+	orphelines := make([]string, 0)
+	for chemin, entry := range s.entries {
+		if !entry.Dirty || s.hasQueuedWriteLocked(chemin) {
+			continue
+		}
+		// Sans blob, il n'y a rien à envoyer : l'écriture serait retirée sans
+		// effet à la passe suivante.
+		if _, err := os.Stat(s.blobPath(entry.Cache)); err != nil {
+			continue
+		}
+		orphelines = append(orphelines, chemin)
+	}
+	// L'ordre de parcours d'une map varie d'une exécution à l'autre ; la file,
+	// elle, est rejouée dans l'ordre et persistée.
+	sort.Strings(orphelines)
+	for _, chemin := range orphelines {
+		s.enqueueLocked(Operation{Kind: OpWrite, Path: chemin})
+	}
+	return len(orphelines) > 0
+}
+
 // Push draine la file d'attente vers le serveur.
 //
 // Les opérations sont rejouées dans l'ordre : un déplacement suivi d'une
-// écriture n'a pas le même effet dans l'autre sens. La première erreur réseau
-// interrompt la passe et laisse le reste en file — réessayer plus tard vaut
-// mieux qu'appliquer les opérations dans le désordre.
+// écriture n'a pas le même effet dans l'autre sens. Une panne de transport
+// interrompt donc la passe et laisse le reste en file — réessayer plus tard
+// vaut mieux qu'appliquer les opérations dans le désordre.
 //
-// Un conflit, lui, n'interrompt pas la passe : il est résolu sur place et la
+// Un refus qui ne vise qu'une opération est traité autrement : elle passe en
+// fin de file et la passe continue avec les suivantes. Voir setAside pour ce
+// que cet ordre coûte, et ce que le respecter coûtait davantage. L'erreur est
+// tout de même renvoyée à la fin, avec le rapport de ce qui est passé : une
+// opération refusée pour de bon reste visible à chaque passe, et son message
+// nomme la note.
+//
+// Un conflit, lui, n'interrompt rien : il est résolu sur place et la
 // synchronisation continue.
 func (s *Store) Push(ctx context.Context, remote Remote) (Report, error) {
 	var report Report
 
+	// Une passe s'ouvre sur la remise en file de ce qui a été perdu de vue.
+	// Une seule fois, hors de la boucle : voir requeueOrphanWritesLocked.
+	s.mu.Lock()
+	reinscrites := s.requeueOrphanWritesLocked()
+	var err error
+	if reinscrites {
+		err = s.save()
+	}
+	s.mu.Unlock()
+	if err != nil {
+		return report, err
+	}
+
+	// misesDeCote compte les opérations que le serveur a refusées pendant cette
+	// passe et qui sont passées en fin de file. Quand elles occupent toute la
+	// file, tout ce qui restait a été tenté : la passe s'arrête.
+	misesDeCote := 0
+	var premierRefus error
+
 	for {
 		s.mu.Lock()
-		if len(s.queue) == 0 {
+		if len(s.queue) == 0 || misesDeCote >= len(s.queue) {
 			s.mu.Unlock()
-			return report, nil
+			break
 		}
 		op := s.queue[0]
 		s.mu.Unlock()
@@ -137,8 +210,18 @@ func (s *Store) Push(ctx context.Context, remote Remote) (Report, error) {
 
 		conflict, err := s.apply(ctx, remote, op, &report)
 		if err != nil {
-			report.Remaining = len(s.Pending())
-			return report, err
+			if estPanneDeTransport(err) {
+				report.Remaining = len(s.Pending())
+				return report, err
+			}
+			if premierRefus == nil {
+				premierRefus = err
+			}
+			if err := s.setAside(op); err != nil {
+				return report, err
+			}
+			misesDeCote++
+			continue
 		}
 		if conflict != nil {
 			report.Conflicts = append(report.Conflicts, *conflict)
@@ -156,6 +239,44 @@ func (s *Store) Push(ctx context.Context, remote Remote) (Report, error) {
 			return report, err
 		}
 	}
+
+	report.Remaining = len(s.Pending())
+	return report, premierRefus
+}
+
+// estPanneDeTransport distingue les deux natures d'échec, et c'est toute la
+// décision : une panne de transport condamne la passe entière — rien d'autre ne
+// passera, et l'ordre de la file doit être gardé intact pour la prochaine —
+// tandis qu'un refus ne vise que l'opération qui l'a provoqué.
+//
+// Un 5xx passe pour un refus alors qu'il est passager. Ce n'est pas grave :
+// toutes les opérations le rencontreront, chacune sera mise de côté une fois,
+// et la passe s'arrêtera d'elle-même après un tour de file.
+func estPanneDeTransport(err error) bool {
+	return errors.Is(err, opencloud.ErrOffline) ||
+		errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, context.Canceled)
+}
+
+// setAside envoie en fin de file l'opération que le serveur vient de refuser.
+//
+// Sans elle, cette opération restait en tête et **retenait tout ce qui la
+// suivait, indéfiniment** : chaque passe la rejouait, échouait pareil, et pas
+// une note derrière ne partait. Une seule note dont le dossier parent avait
+// disparu suffisait à arrêter la synchronisation de l'appareil.
+//
+// L'ordre de la file est un vrai contrat — un déplacement suivi d'une écriture
+// n'a pas le même effet dans l'autre sens — mais il n'engage que des opérations
+// qui s'appliquent. Celle-ci n'a rien appliqué : la faire passer derrière ne
+// change l'effet d'aucune autre, alors que la laisser devant les annule toutes.
+func (s *Store) setAside(op Operation) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(s.queue) > 0 && s.queue[0] == op {
+		s.queue = append(append([]Operation(nil), s.queue[1:]...), op)
+	}
+	return s.save()
 }
 
 // apply exécute une opération. Un conflit est renvoyé plutôt que remonté comme
@@ -317,7 +438,7 @@ func (s *Store) pushWrite(ctx context.Context, remote Remote, notePath string, r
 			return nil, existsErr
 		}
 		if exists {
-			return s.resolveConflict(ctx, remote, notePath, content, entry.BaseHash)
+			return s.resolveConflict(ctx, remote, notePath, content, entry.BaseHash, report)
 		}
 		etag, err = remote.SaveNew(ctx, notePath, content)
 	} else {
@@ -335,7 +456,7 @@ func (s *Store) pushWrite(ctx context.Context, remote Remote, notePath string, r
 	if !errors.Is(err, opencloud.ErrConflict) {
 		return nil, err
 	}
-	return s.resolveConflict(ctx, remote, notePath, content, entry.BaseHash)
+	return s.resolveConflict(ctx, remote, notePath, content, entry.BaseHash, report)
 }
 
 // settle enregistre qu'une note est alignée sur le serveur : ETag et base
@@ -371,8 +492,32 @@ func (s *Store) settle(notePath string, sent Entry, etag, hash string) error {
 // il faut confronter trois versions, et baseHash porte la troisième — celle
 // sur laquelle les deux côtés étaient d'accord. Sans elle, une note simplement
 // périmée produisait une copie.
-func (s *Store) resolveConflict(ctx context.Context, remote Remote, notePath string, local []byte, baseHash string) (*Conflict, error) {
+func (s *Store) resolveConflict(ctx context.Context, remote Remote, notePath string, local []byte, baseHash string, report *Report) (*Conflict, error) {
 	serverContent, serverETag, err := remote.Read(ctx, notePath)
+
+	// Le serveur n'a plus la note : elle a été supprimée ailleurs — interface
+	// web, autre appareil — pendant que la modification locale attendait son
+	// tour. Il n'y a alors aucune version à arbitrer, seulement un texte que
+	// l'utilisateur a écrit et qu'on ne jette pas. Il repart comme une
+	// création, exactement comme une note écrite hors connexion.
+	//
+	// La note réapparaît donc côté serveur, et c'est le comportement voulu :
+	// entre perdre une suppression et perdre un texte, on perd la suppression,
+	// qui se refait d'un geste.
+	//
+	// Sans ce cas, l'erreur remontait jusqu'à Push, qui laissait l'opération en
+	// tête de file : chaque passe rejouait la même lecture, échouait pareil, et
+	// toute la file restait derrière. Une note supprimée depuis l'interface web
+	// suffisait à arrêter la synchronisation de l'appareil, sans que rien ne
+	// désigne la coupable.
+	if errors.Is(err, opencloud.ErrNotFound) {
+		etag, err := remote.SaveNew(ctx, notePath, local)
+		if err != nil {
+			return nil, err
+		}
+		report.Pushed++
+		return nil, s.Accept(notePath, local, etag)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("store: lecture de la version serveur de %s: %w", notePath, err)
 	}
