@@ -30,6 +30,20 @@ $ErrorActionPreference = 'Stop'
 
 $repoDirectory = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
+function Resolve-ReleasePath {
+    param([Parameter(Mandatory = $true)][string] $Path)
+
+    # [IO.Path]::GetFullPath() se base sur le répertoire interne du processus
+    # PowerShell, qui peut être C:\Windows\System32 même si l'invite affiche la
+    # racine du dépôt. Les chemins relatifs de ce script sont donc toujours
+    # relatifs au dépôt, jamais à ce répertoire interne.
+    if (-not [IO.Path]::IsPathFullyQualified($Path)) {
+        $Path = Join-Path $repoDirectory $Path
+    }
+
+    return [IO.Path]::GetFullPath($Path)
+}
+
 if (-not $UnsignedApk) {
     $UnsignedApk = Join-Path $repoDirectory `
         'android\app\build\outputs\apk\release\app-release-unsigned.apk'
@@ -38,9 +52,9 @@ if (-not $OutputApk) {
     $OutputApk = Join-Path $repoDirectory 'dist\OpenNote-release-signed.apk'
 }
 
-$keystorePath = [IO.Path]::GetFullPath($Keystore)
-$unsignedPath = [IO.Path]::GetFullPath($UnsignedApk)
-$outputPath = [IO.Path]::GetFullPath($OutputApk)
+$keystorePath = Resolve-ReleasePath $Keystore
+$unsignedPath = Resolve-ReleasePath $UnsignedApk
+$outputPath = Resolve-ReleasePath $OutputApk
 
 if (-not (Test-Path -LiteralPath $keystorePath -PathType Leaf)) {
     throw "Clé introuvable : $keystorePath"

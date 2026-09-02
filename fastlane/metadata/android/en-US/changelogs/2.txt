@@ -1,0 +1,3 @@
+Improved German and Spanish translations.
+
+The Android build toolchain is now fully pinned for reliable release builds.
