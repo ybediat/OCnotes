@@ -1,0 +1,4 @@
+Amélioration des traductions allemande et espagnole.
+
+La chaîne de build Android est maintenant entièrement verrouillée pour des
+releases fiables.
