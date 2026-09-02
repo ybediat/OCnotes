@@ -37,7 +37,9 @@ function Resolve-ReleasePath {
     # PowerShell, qui peut être C:\Windows\System32 même si l'invite affiche la
     # racine du dépôt. Les chemins relatifs de ce script sont donc toujours
     # relatifs au dépôt, jamais à ce répertoire interne.
-    if (-not [IO.Path]::IsPathFullyQualified($Path)) {
+    # IsPathRooted est disponible sur Windows PowerShell/.NET Framework,
+    # contrairement à IsPathFullyQualified qui n'existe qu'en .NET récent.
+    if (-not [IO.Path]::IsPathRooted($Path)) {
         $Path = Join-Path $repoDirectory $Path
     }
 
