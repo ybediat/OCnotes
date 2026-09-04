@@ -8,24 +8,8 @@ une clé, un mot de passe, un jeton ou un fichier de configuration local.
 1. Exécutez les tests Go et Android.
 2. Vérifiez que l'arbre Git est propre et que la version de l'application est
    celle attendue dans `android/app/build.gradle.kts`.
-3. Poussez le tag, laissez la CI Linux construire, puis **téléchargez son
-   artefact** :
-
-```bash
-gh run download <identifiant-du-run> -D ci-artefact
-```
-
-**C'est cet APK-là qu'on signe, jamais un build local.** F-Droid reconstruit
-sous Linux et compare octet à octet hors signature ; le mode 2 échoue fermé,
-donc une divergence n'entraîne pas une publication dégradée mais aucune
-publication. Mesuré sur la 0.1.2, à partir du même commit : 18 187 434 octets
-sous Linux contre 19 306 710 sous Windows, `libgojni.so` compris — Go 1.27 en
-local contre 1.26.0 en CI suffit à l'expliquer, et les contrôles de version du
-script laissent désormais passer cet écart avec un simple avertissement.
-
-`scripts/build-android-linux.sh` reste le moyen de vérifier que la chaîne
-aboutit, et son APK convient si on l'exécute sur la même image que la CI. Mais
-par défaut, l'artefact de CI fait foi.
+3. Poussez le tag et laissez la CI Linux construire. **Le script de signature
+   récupère son artefact tout seul** : il n'y a rien à télécharger à la main.
 
 ## Clé de signature
 
@@ -47,29 +31,30 @@ par Git.
 Sur une machine qui possède la clé et les Android Build Tools 34.0.0 :
 
 ```powershell
-.\scripts\sign-android-release.ps1 -Keystore "C:\chemin\vers\opennote-release.p12"
+.\scripts\sign-android-release.ps1 -Keystore "$env:USERPROFILE\.opennote\signing\opennote-release.p12" -OutputApk "dist\OpenNote-<version>.apk"
 ```
 
-Pour signer l'APK non signé téléchargé depuis un artefact de CI, indiquez son
-chemin avec `-Source` :
+Sans autre indication, le script signe **l'APK non signé produit par la CI pour
+le commit courant** : il interroge `gh`, télécharge l'artefact sous
+`dist/ci-<commit>/` et signe celui-là. C'est le seul APK que F-Droid puisse
+reconstruire à l'identique. Si aucune exécution réussie n'existe pour ce commit,
+le script s'arrête en le disant plutôt que de se rabattre sur autre chose.
 
-```powershell
-.\scripts\sign-android-release.ps1 `
-  -Keystore "C:\chemin\vers\opennote-release.p12" `
-  -Source "C:\telechargements\app-release-unsigned.apk"
-```
+Deux échappatoires, toutes deux explicites :
 
-`-Source` est un alias de `-UnsignedApk`, conservé pour compatibilité.
+- `-Source <chemin>` impose un APK précis, par exemple un artefact déjà
+  téléchargé ;
+- `-Local` reprend le build de `android/app/build/outputs`, avec un
+  avertissement. À réserver à un essai d'installation sur appareil — cet APK
+  n'est pas publiable.
 
-Le script produit par défaut :
+`-Source` est un alias de `-UnsignedApk`, conservé pour compatibilité. Nommez la
+sortie `dist/OpenNote-<version>.apk` : c'est le nom qu'attend l'URL `Binaries`
+de la recette F-Droid.
 
-```text
-dist/OpenNote-release-signed.apk
-```
-
-Il demande le mot de passe dans le terminal, vérifie la signature avec
-`apksigner` et affiche l'empreinte SHA-256 de l'APK final. Installez ensuite
-l'APK sur un appareil de test avant toute publication.
+Le script demande le mot de passe dans le terminal, vérifie la signature avec
+`apksigner` et affiche l'empreinte SHA-256 de l'APK final. Installez-le sur un
+appareil de test avant toute publication.
 
 ## Publication
 

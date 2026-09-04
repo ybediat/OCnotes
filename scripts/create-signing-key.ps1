@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Crée la clé de signature Android de production sans exposer son mot de passe.
 
