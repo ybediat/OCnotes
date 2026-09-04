@@ -5,9 +5,9 @@
 # demande d'inclusion (RFP) et pour rester en phase avec le dépôt — une recette
 # écrite une fois puis oubliée diverge à la première release.
 #
-# Avant envoi : deux valeurs à remplir, marquées À REMPLIR, et une décision à
-# prendre — le mode de signature, dont le bloc commenté plus bas donne les
-# conséquences. Voir docs/fdroid/README.md.
+# Avant envoi : une valeur à remplir, marquée À REMPLIR — le SHA-256 de
+# l'archive Go —, et la révision de NDK à confirmer. Le mode de signature est
+# tranché : mode 2, motifs et conséquences plus bas. Voir docs/fdroid/README.md.
 
 Categories:
   - Writing
@@ -78,34 +78,25 @@ Builds:
       - android/app/libs/opennote.aar
 
 # ---------------------------------------------------------------------------
-# Mode de signature : à trancher AVANT d'envoyer la RFP. Ce choix ne se reprend
-# pas sans casse pour les utilisateurs.
+# Mode de signature : **mode 2, décidé**. F-Droid reconstruit l'application,
+# vérifie que son APK est identique au binaire officiel hors signature, puis
+# publie celui signé par OpenNote. Une seule signature pour tout le monde : un
+# utilisateur passe d'une installation F-Droid à un téléchargement direct, ou à
+# Obtainium, sans désinstaller.
 #
-# En l'état, cette recette est en **mode 1** : F-Droid construit et signe avec
-# sa propre clé. C'est le mode par défaut, et de loin le plus simple à faire
-# accepter pour une première inclusion.
+# Ce que ce mode impose, et qui ne se négocie pas : le binaire publié à l'URL
+# ci-dessous doit être **celui construit par la CI Linux**, jamais un build
+# local. Mesuré le 4 septembre 2026 sur la 0.1.2 — le même commit donne
+# 19 306 710 octets sous Windows et 18 187 434 sous Linux, et jusqu'au
+# `libgojni.so` diffère (Go 1.27 local contre 1.26.0 en CI, entre autres).
+# F-Droid construit sous Linux : un APK Windows ne peut pas correspondre.
 #
-# `docs/SIGNING.md` vise le **mode 2** : F-Droid reconstruit, vérifie que son
-# APK est identique au binaire officiel hors signature, puis publie celui signé
-# par OpenNote. C'est ce qui permet de passer d'un APK F-Droid à un APK
-# téléchargé directement — ou suivi par Obtainium — sans désinstaller.
-#
-# Deux raisons de ne pas le mettre tout de suite : le mode 2 exige un build
-# *reproductible*, ce qui n'est pas encore démontré ici ; et un échec de
-# reproductibilité bloque la publication au lieu de la dégrader.
-#
-# Mais l'inverse coûte aussi : passer du mode 1 au mode 2 plus tard oblige les
-# utilisateurs venus de F-Droid à désinstaller, les deux signatures étant
-# incompatibles. La porte est à sens unique dans les deux sens — d'où le choix
-# à faire maintenant, en connaissance de cause.
-#
-# Pour le mode 2, décommenter les deux lignes et publier l'APK signé à l'URL
-# indiquée. L'empreinte est celle du certificat de production, relevée dans
-# docs/SIGNING.md.
-#
-# Binaries: https://github.com/ybediat/OpenNote/releases/download/V%v/OpenNote-%v.apk
-# AllowedAPKSigningKeys: 9eda46c9fdb2756cdad00a548c27261d1a5bfb25b06e11892071bbd19f35e6ec
+# Le mode 2 échoue fermé : une non-correspondance ne dégrade pas la
+# publication, elle l'empêche. C'est le prix de la signature unique.
 # ---------------------------------------------------------------------------
+
+Binaries: https://github.com/ybediat/OpenNote/releases/download/V%v/OpenNote-%v.apk
+AllowedAPKSigningKeys: 9eda46c9fdb2756cdad00a548c27261d1a5bfb25b06e11892071bbd19f35e6ec
 
 AutoUpdateMode: Version V%v
 UpdateCheckMode: Tags ^V[0-9]+\.[0-9]+\.[0-9]+$

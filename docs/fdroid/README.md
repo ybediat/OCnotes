@@ -7,7 +7,7 @@ définitive est le dépôt `fdroiddata`, sous `metadata/eu.opennote.yml` ; elle 
 versionnée ici pour être jointe à la demande d'inclusion et pour suivre le dépôt
 — une recette écrite une fois puis oubliée diverge à la première release.
 
-## Deux valeurs à remplir avant envoi
+## Une valeur à remplir, une à confirmer
 
 **Le SHA-256 de l'archive Go.** La recette installe Go à la version exacte de
 `go.mod` et vérifie son empreinte. Elle s'obtient ainsi :
@@ -44,63 +44,9 @@ Gradle ne démarre ; c'est l'étape `prebuild`. Trois points s'y jouent :
 descriptions, les journaux nommés par `versionCode`, l'icône 512×512 et les
 captures y sont déjà. Les modifier ici serait les faire diverger.
 
-Aucune configuration de signature non plus : F-Droid signe avec sa propre clé.
-`android/app/build.gradle.kts` n'en déclare aucune, il n'y a donc rien à
-retirer — c'est voulu, la chaîne de signature du projet vit dans
-[`../RELEASING.md`](../RELEASING.md) et ne touche jamais Gradle.
-
-## Architectures
-
-La recette construit `arm64-v8a` et `x86_64`, dans `gomobile bind` comme dans
-`abiFilters`. Les deux vont ensemble : une ABI ajoutée à l'un sans l'autre donne
-soit un `.so` inutilisé, soit un APK qui plante au premier appel JNI.
-
-Sept fichiers portent cette liste — le module Gradle, les deux scripts de build,
-cette recette et trois documents. Plutôt que de s'y fier de mémoire :
-
-```bash
-grep -rn "target=android/arm64\|abiFilters" --include="*.sh" --include="*.ps1" --include="*.md" --include="*.yml" --include="*.kts" .
-```
-
-`x86_64` couvre les émulateurs, ChromeOS et Waydroid. Elle demande peu de
-confiance supplémentaire : c'est la même `GOARCH=amd64` que celle sur laquelle
-tourne `go test ./...` à chaque itération de développement.
-
-`armeabi-v7a` n'est pas exclue par principe mais faute de pouvoir la tester :
-les images système ARM 32 bits s'arrêtent à l'API 25, et `minSdk` vaut 26. Le
-cœur Go, lui, est propre en 32 bits — pas de `sync/atomic`, pas de `unsafe`, pas
-de cgo, toutes les tailles en `int64` — et la suite unitaire complète passe
-compilée et exécutée en 32 bits :
-
-```bash
-GOARCH=386 go test ./... -short
-```
-
-Il ne manque donc qu'un appareil réel pour l'ajouter.
-
-## Qui signe : une décision, pas un détail
-
-La recette est en **mode 1** — F-Droid construit et signe avec sa clé. C'est le
-mode par défaut et le plus simple à faire accepter.
-
-`../SIGNING.md` vise le **mode 2** : F-Droid reconstruit, vérifie l'identité
-binaire hors signature, et publie l'APK signé par OpenNote. Seul ce mode permet
-de passer d'une installation F-Droid à un APK téléchargé directement sans
-désinstaller.
-
-Le choix se fait **avant** la RFP, parce qu'il ne se reprend pas : les deux
-signatures sont incompatibles, et changer d'avis oblige les utilisateurs venus
-de F-Droid à désinstaller. Le mode 2 demande en plus un build reproductible,
-non démontré à ce jour — et un échec de reproductibilité bloque la publication
-au lieu de la dégrader.
-
-Les deux lignes à décommenter (`Binaries`, `AllowedAPKSigningKeys`, empreinte
-comprise) sont dans la recette, avec le raisonnement complet.
-
-## Envoyer la demande
-
-L'inclusion se demande par une RFP sur <https://gitlab.com/fdroid/rfp/-/issues>,
-en joignant cette recette. Le dépôt remplit déjà les conditions de fond :
-licence MIT, aucune dépendance non libre, aucun binaire versionné hors wrapper
-Gradle — validé à chaque exécution de CI contre le registre officiel —, tags de
-version et métadonnées Fastlane.
+Aucune configuration de signature côté Gradle : `android/app/build.gradle.kts`
+n'en déclare aucune, et c'est voulu. La clé n'intervient qu'après le build, sur
+la machine qui la détient, par `scripts/sign-android-release.ps1` — jamais
+pendant la compilation, jamais dans un fichier du dépôt. Le mode 2 ne change
+rien à cela : F-Droid construit un APK non signé, puis y recopie la signature
+de l'APK officiel qu'il a vérifié.
