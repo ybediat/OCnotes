@@ -1,0 +1,4 @@
+Support for x86_64 devices: emulators, ChromeOS and Waydroid.
+
+The build toolchain now accepts a third-party packaging environment, which
+opens the way to publishing on F-Droid.

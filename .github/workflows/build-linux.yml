@@ -19,6 +19,13 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v6
 
+      # Le wrapper Gradle est le seul binaire versionné du dépôt. Le comparer
+      # au registre officiel des distributions Gradle à chaque exécution est ce
+      # qui rend ce choix défendable : un relecteur — F-Droid en particulier —
+      # n'a pas à croire le dépôt sur parole.
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
+
       - name: Set up Go
         uses: actions/setup-go@v7
         with:

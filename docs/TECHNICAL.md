@@ -91,7 +91,7 @@ Le binding Go doit être régénéré après une modification de l'API exposée 
 `mobile/` :
 
 ```bash
-gomobile bind -target=android/arm64 -androidapi 26 -trimpath \
+gomobile bind -target=android/arm64,android/amd64 -androidapi 26 -trimpath \
   -ldflags="-s -w" -o android/app/libs/opennote.aar ./mobile
 ```
 

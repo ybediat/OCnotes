@@ -73,3 +73,17 @@ Avant de publier un binaire :
 
 Ne publiez aucune clé ni aucun mot de passe dans les artefacts de CI, les logs,
 les issues ou les releases.
+
+## F-Droid
+
+L'APK signé ci-dessus ne concerne pas F-Droid : le catalogue construit depuis
+les sources et signe avec sa propre clé. La recette proposée, ce qu'elle fait et
+les deux valeurs à remplir avant envoi sont dans
+[`fdroid/README.md`](fdroid/README.md).
+
+Une release destinée à F-Droid demande deux choses en plus des étapes
+précédentes : un tag `V<version>` poussé sur le dépôt public — c'est lui que
+suit `UpdateCheckMode: Tags` —, et un journal de version
+`fastlane/metadata/android/<locale>/changelogs/<versionCode>.txt` pour chaque
+langue déjà traduite. Un journal manquant ne casse rien ; il laisse simplement
+la version sans description dans le client.

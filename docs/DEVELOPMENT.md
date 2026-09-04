@@ -14,6 +14,13 @@ La chaîne de référence, utilisée par la CI Linux, requiert :
 - Gradle `8.9` ;
 - `gomobile` et `gobind` à la version verrouillée de `golang.org/x/mobile`.
 
+Le script de build en contrôle les **minima**, pas l'égalité : une version plus
+récente passe avec un avertissement. C'est ce qui permet à un empaqueteur —
+F-Droid en particulier — de construire avec sa propre image sans que le build
+échoue sur une comparaison de chaîne. Trois variables imposent un outil précis :
+`OPENNOTE_GRADLE_BIN`, `OPENNOTE_NDK_VERSION` et `ANDROID_NDK_HOME` ; côté
+Gradle, `-Popennote.ndkVersion=<révision>` fait la même chose pour le NDK.
+
 Définissez `ANDROID_SDK_ROOT` (ou `ANDROID_HOME`) et `ANDROID_NDK_HOME` pour
 que `gomobile` puisse trouver le SDK et le NDK. Les clés, `local.properties`,
 APK, AAR et répertoires de build ne doivent pas être versionnés.
@@ -47,8 +54,9 @@ lint et le build Android. L'APK non signé produit se trouve dans :
 android/app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
-Si Gradle 8.9 n'est pas dans le `PATH`, définissez `OPENNOTE_GRADLE_BIN` vers
-l'exécutable à employer.
+Le wrapper Gradle est versionné : `./gradlew` fonctionne sur un clone neuf. Pour
+employer un Gradle déjà installé, définissez `OPENNOTE_GRADLE_BIN` vers
+l'exécutable voulu.
 
 ## Construire sous Windows
 
@@ -79,7 +87,7 @@ réglages.
 publique, régénérez l'AAR avant tout build Android :
 
 ```bash
-gomobile bind -target=android/arm64 -androidapi 26 -trimpath \
+gomobile bind -target=android/arm64,android/amd64 -androidapi 26 -trimpath \
   -ldflags="-s -w" -o android/app/libs/opennote.aar ./mobile
 ```
 

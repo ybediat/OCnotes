@@ -9,6 +9,17 @@
 *.jar
 /mobile/mobile.aar
 
+# Exception au `*.jar` ci-dessus : le wrapper Gradle est versionné.
+#
+# Sans lui, `./gradlew` — que le README et CONTRIBUTING demandent tous deux de
+# lancer — échoue sur un clone neuf avec « Could not find or load main class
+# org.gradle.wrapper.GradleWrapperMain », un message qui ne désigne pas sa
+# cause. C'est le premier geste d'un relecteur F-Droid.
+#
+# Le binaire reste auditable : la CI le compare au registre officiel des
+# wrappers Gradle (gradle/actions/wrapper-validation) à chaque exécution.
+!android/gradle/wrapper/gradle-wrapper.jar
+
 # Android / Gradle
 /android/.gradle/
 /android/build/

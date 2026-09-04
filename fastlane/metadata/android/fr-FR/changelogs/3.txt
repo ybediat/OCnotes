@@ -1,0 +1,4 @@
+Prise en charge des appareils x86_64 : émulateurs, ChromeOS et Waydroid.
+
+La chaîne de construction accepte désormais l'environnement d'un distributeur
+tiers, ce qui ouvre la voie à une publication sur F-Droid.

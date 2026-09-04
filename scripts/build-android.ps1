@@ -106,7 +106,7 @@ if ($SansBind) {
     Write-Host "gomobile bind sauté (-SansBind)." -ForegroundColor Yellow
 } else {
     Write-Host "gomobile bind -> android/app/libs/opennote.aar" -ForegroundColor Cyan
-    gomobile bind -target=android/arm64 -androidapi 26 -ldflags="-s -w" `
+    gomobile bind -target=android/arm64,android/amd64 -androidapi 26 -ldflags="-s -w" `
         -o android/app/libs/opennote.aar ./mobile
     if ($LASTEXITCODE -ne 0) { throw "gomobile bind a échoué." }
 }

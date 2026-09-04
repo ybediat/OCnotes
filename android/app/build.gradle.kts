@@ -8,22 +8,46 @@ plugins {
 android {
     namespace = "eu.opennote"
     compileSdk = 35
-    // Doit rester aligné sur le script Linux, la CI et le build local :
-    // gomobile utilise ce NDK pour construire le cœur Go avant Gradle.
-    ndkVersion = "27.3.13750724"
+
+    // Le NDK sert à gomobile, qui construit le cœur Go *avant* Gradle : ce
+    // module n'a aucune source native. La révision de référence est celle du
+    // script Linux et de la CI.
+    //
+    // Elle reste surchargeable, parce qu'un empaqueteur — F-Droid en
+    // particulier — fournit sa propre image et n'a aucune raison de porter
+    // exactement celle-ci. Sans cette porte, AGP exigerait la révision
+    // épinglée et ferait échouer un build par ailleurs sain :
+    //
+    //   ./gradlew -Popennote.ndkVersion=27.2.12479018 assembleRelease
+    //
+    // `scripts/build-android-linux.sh` la passe automatiquement, avec la
+    // révision qu'il a réellement trouvée dans le SDK.
+    ndkVersion = providers.gradleProperty("opennote.ndkVersion").getOrElse("27.3.13750724")
 
     defaultConfig {
         applicationId = "eu.opennote"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.1.2"
 
-        // Le .aar de gomobile n'embarque que les ABI passées au bind.
-        // arm64-v8a couvre tous les appareils récents ; ajouter armeabi-v7a
-        // ici ET dans la commande gomobile pour les vieux appareils 32 bits.
+        // Le .aar de gomobile n'embarque que les ABI passées au bind : cette
+        // liste et la commande `gomobile bind` bougent ensemble. Une ABI
+        // ajoutée ici seule donne un APK qui plante au premier appel JNI ;
+        // ajoutée au bind seul, un `.so` embarqué que rien ne charge.
+        //
+        // arm64-v8a couvre les appareils récents. x86_64 couvre les
+        // émulateurs, ChromeOS et Waydroid — et se vérifie sur poste de
+        // développement, puisque c'est la même GOARCH=amd64 que celle sur
+        // laquelle tourne `go test ./...`.
+        //
+        // armeabi-v7a est absente faute de pouvoir la tester : les images
+        // système ARM 32 bits s'arrêtent à l'API 25, et minSdk vaut 26. Le
+        // cœur Go, lui, y est propre — ni sync/atomic, ni unsafe, ni cgo,
+        // toutes les tailles en int64 — et `GOARCH=386 go test ./... -short`
+        // passe. Il ne manque qu'un appareil pour l'éprouver.
         ndk {
-            abiFilters += listOf("arm64-v8a")
+            abiFilters += listOf("arm64-v8a", "x86_64")
         }
     }
 

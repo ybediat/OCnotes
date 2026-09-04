@@ -94,6 +94,8 @@ consignes de sécurité sont regroupés dans la
   release Android.
 - [Contribuer](CONTRIBUTING.md) — règles de contribution et validation d'une
   pull request.
+- [Publier sur F-Droid](docs/fdroid/README.md) — recette d'inclusion et
+  conditions déjà remplies.
 
 ## Construire depuis les sources
 
@@ -113,19 +115,23 @@ sources, exécute les tests Go et Android, puis produit l'APK release :
 bash scripts/build-android-linux.sh
 ```
 
-Il exige Go 1.26.0, JDK 17, Gradle 8.9, les plateformes Android 26 et 35,
-ainsi que le NDK 27.3.13750724. La CI Ubuntu installe et vérifie exactement ces
-versions. `OPENNOTE_GRADLE_BIN` permet d'indiquer un exécutable Gradle 8.9 si
-le wrapper n'est pas présent. Après chaque build CI, l'APK release non signé,
-l'AAR régénéré et le rapport lint restent téléchargeables pendant 14 jours dans
-les artefacts du workflow.
+La chaîne de référence est Go 1.26.0, JDK 17, Gradle 8.9, les plateformes
+Android 26 et 35 et le NDK 27.3.13750724 : celle qu'installe la CI Ubuntu, et
+celle sur laquelle sont construits les APK publiés. Le script en contrôle les
+*minima*, pas l'égalité — un empaqueteur qui fournit sa propre image, F-Droid
+en particulier, obtient un avertissement et non un échec. `OPENNOTE_GRADLE_BIN`,
+`OPENNOTE_NDK_VERSION` et `ANDROID_NDK_HOME` permettent d'imposer chacun des
+outils.
+
+Après chaque build CI, l'APK release non signé, l'AAR régénéré et le rapport
+lint restent téléchargeables pendant 14 jours dans les artefacts du workflow.
 
 Pour une génération manuelle :
 
 ```bash
 go install golang.org/x/mobile/cmd/gomobile@v0.0.0-20260821190718-4776eadac327
 go install golang.org/x/mobile/cmd/gobind@v0.0.0-20260821190718-4776eadac327
-gomobile bind -target=android/arm64 -androidapi 26 -trimpath -ldflags="-s -w" -o android/app/libs/opennote.aar ./mobile
+gomobile bind -target=android/arm64,android/amd64 -androidapi 26 -trimpath -ldflags="-s -w" -o android/app/libs/opennote.aar ./mobile
 ```
 
 ```bash
