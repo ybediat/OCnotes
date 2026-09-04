@@ -7,20 +7,21 @@ définitive est le dépôt `fdroiddata`, sous `metadata/eu.opennote.yml` ; elle 
 versionnée ici pour être jointe à la demande d'inclusion et pour suivre le dépôt
 — une recette écrite une fois puis oubliée diverge à la première release.
 
-## Une valeur à remplir, une à confirmer
+## Ce qui reste à confirmer
 
-**Le SHA-256 de l'archive Go.** La recette installe Go à la version exacte de
-`go.mod` et vérifie son empreinte. Elle s'obtient ainsi :
+**Le SHA-256 de l'archive Go est renseigné** :
+`aac1b08a0fb0c4e0a7c1555beb7b59180b05dfc5a3d62e40e9de90cd42f88235`. À
+recalculer à chaque changement de version dans `go.mod` :
 
 ```bash
 curl -fsSL 'https://go.dev/dl/?mode=json&include=all' | jq -r '.[] | select(.version=="go1.26.0") | .files[] | select(.filename=="go1.26.0.linux-amd64.tar.gz") | .sha256'
 ```
 
-**Le nom de la révision du NDK.** La recette demande `r27d`, soit
-`27.3.13750724`. À confirmer contre la liste des NDK connus de `fdroidserver` :
-si cette révision n'y figure pas, n'importe quelle `r27` convient désormais —
-le module accepte `-Popennote.ndkVersion=<révision>` et le script Linux ne
-compare plus que des minima.
+**Le nom de la révision du NDK**, en revanche, reste à confirmer. La recette
+demande `r27d`, soit `27.3.13750724`. À vérifier contre la liste des NDK connus
+de `fdroidserver` : si cette révision n'y figure pas, n'importe quelle `r27`
+convient désormais — le module accepte `-Popennote.ndkVersion=<révision>` et le
+script Linux ne compare plus que des minima.
 
 ## Ce que la recette fait, et pourquoi
 
