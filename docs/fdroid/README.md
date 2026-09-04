@@ -51,3 +51,75 @@ la machine qui la détient, par `scripts/sign-android-release.ps1` — jamais
 pendant la compilation, jamais dans un fichier du dépôt. Le mode 2 ne change
 rien à cela : F-Droid construit un APK non signé, puis y recopie la signature
 de l'APK officiel qu'il a vérifié.
+
+## Architectures
+
+La recette construit `arm64-v8a` et `x86_64`, dans `gomobile bind` comme dans
+`abiFilters`. Les deux vont ensemble : une ABI ajoutée à l'un sans l'autre donne
+soit un `.so` inutilisé, soit un APK qui plante au premier appel JNI.
+
+Sept fichiers portent cette liste — le module Gradle, les deux scripts de build,
+cette recette et trois documents. Plutôt que de s'y fier de mémoire :
+
+```bash
+grep -rn "target=android/arm64\|abiFilters" --include="*.sh" --include="*.ps1" --include="*.md" --include="*.yml" --include="*.kts" .
+```
+
+`x86_64` couvre les émulateurs, ChromeOS et Waydroid. Elle demande peu de
+confiance supplémentaire : c'est la même `GOARCH=amd64` que celle sur laquelle
+tourne `go test ./...` à chaque itération de développement.
+
+`armeabi-v7a` n'est pas exclue par principe mais faute de pouvoir la tester :
+les images système ARM 32 bits s'arrêtent à l'API 25, et `minSdk` vaut 26. Le
+cœur Go, lui, est propre en 32 bits — pas de `sync/atomic`, pas de `unsafe`, pas
+de cgo, toutes les tailles en `int64` — et la suite unitaire complète passe
+compilée et exécutée en 32 bits :
+
+```bash
+GOARCH=386 go test ./... -short
+```
+
+Il ne manque donc qu'un appareil réel pour l'ajouter.
+
+## Qui signe : mode 2, tranché
+
+F-Droid reconstruit l'application, vérifie que son APK est identique au binaire
+officiel hors signature, puis publie **celui signé par OpenNote**. Une seule
+signature circule : un utilisateur passe d'une installation F-Droid à un
+téléchargement direct, ou à Obtainium, sans désinstaller. C'est la raison du
+choix, et elle est du côté de l'utilisateur.
+
+Le mode 2 **échoue fermé** : si la reconstruction ne correspond pas, F-Droid ne
+publie pas — il ne se rabat pas sur sa propre signature. D'où la règle suivante,
+qui n'est pas un conseil.
+
+### L'APK publié vient de la CI Linux, jamais d'un build local
+
+Mesuré le 4 septembre 2026 sur la 0.1.2, à partir du même commit :
+
+```text
+Linux (CI)   9bfb1e2ab4faf0c3   18 187 434 octets
+Windows      9179361f746f720f   19 306 710 octets
+```
+
+Jusqu'au `libgojni.so` diffère. Une des causes est visible : Go 1.27.0 sur le
+poste de développement contre 1.26.0 en CI — l'assouplissement des contrôles de
+version, qui existe pour F-Droid, laisse désormais passer cet écart avec un
+simple avertissement. F-Droid construit sous Linux ; un APK produit sous Windows
+ne correspondra jamais.
+
+`scripts/sign-android-release.ps1` en tient compte : sans indication de source,
+il télécharge l'artefact de la CI pour le commit courant et signe celui-là. Le
+build local reste accessible par `-Local`, à la demande et avec un
+avertissement.
+
+## Envoyer la demande
+
+L'inclusion se demande par une RFP sur <https://gitlab.com/fdroid/rfp/-/issues>,
+en joignant cette recette. Le dépôt remplit déjà les conditions de fond :
+licence MIT, aucune dépendance non libre, aucun binaire versionné hors wrapper
+Gradle — validé à chaque exécution de CI contre le registre officiel —, tags de
+version et métadonnées Fastlane.
+
+Le texte de la demande, prêt à coller, est dans [`RFP.md`](RFP.md) — en anglais,
+langue du tracker.
