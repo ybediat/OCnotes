@@ -1,4 +1,4 @@
-﻿# Helpers partages par les scripts de spike (dot-source ce fichier).
+# Helpers partages par les scripts de spike (dot-source ce fichier).
 #
 # Le token n'est jamais passe en argument de ligne de commande : il transite par
 # un fichier de configuration curl temporaire, donc il n'apparait pas dans la
@@ -15,11 +15,11 @@ function New-CurlAuthConfig {
         [Parameter(Mandatory = $true)][string] $Username
     )
 
-    # OPENNOTE_APP_TOKEN permet un lancement non interactif (tests). Les
+    # OCNOTES_APP_TOKEN permet un lancement non interactif (tests). Les
     # variables d'environnement n'apparaissent pas dans la liste des processus.
-    if ($env:OPENNOTE_APP_TOKEN) {
-        Write-Host "Token lu depuis OPENNOTE_APP_TOKEN." -ForegroundColor DarkGray
-        $token = $env:OPENNOTE_APP_TOKEN
+    if ($env:OCNOTES_APP_TOKEN) {
+        Write-Host "Token lu depuis OCNOTES_APP_TOKEN." -ForegroundColor DarkGray
+        $token = $env:OCNOTES_APP_TOKEN
     }
     else {
         $secure = Read-Host -Prompt "App Token pour $Username" -AsSecureString
@@ -31,7 +31,7 @@ function New-CurlAuthConfig {
     if ([string]::IsNullOrWhiteSpace($token)) { throw "Token vide, abandon." }
 
     $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("${Username}:${token}"))
-    $cfg = Join-Path ([IO.Path]::GetTempPath()) ("opennote-spike-" + [Guid]::NewGuid().ToString('N') + ".cfg")
+    $cfg = Join-Path ([IO.Path]::GetTempPath()) ("ocnotes-spike-" + [Guid]::NewGuid().ToString('N') + ".cfg")
     Set-Content -Path $cfg -Value "header = `"Authorization: Basic $b64`"" -Encoding ascii
 
     return $cfg
@@ -71,7 +71,7 @@ function Invoke-Dav {
     # configuration curl, ou l'echappement est explicite et fiable.
     $hdrCfg = $null
     if ($HeaderLines.Count -gt 0) {
-        $hdrCfg = Join-Path ([IO.Path]::GetTempPath()) ("opennote-hdr-" + [Guid]::NewGuid().ToString('N') + ".cfg")
+        $hdrCfg = Join-Path ([IO.Path]::GetTempPath()) ("ocnotes-hdr-" + [Guid]::NewGuid().ToString('N') + ".cfg")
         $lines = foreach ($h in $HeaderLines) {
             'header = "' + $h.Replace('\', '\\').Replace('"', '\"') + '"'
         }

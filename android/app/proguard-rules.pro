@@ -11,9 +11,9 @@
 # réflexion via le companion object.
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.**
--keepclassmembers class eu.opennote.data.** {
+-keepclassmembers class eu.ocnotes.data.** {
     *** Companion;
 }
--keepclasseswithmembers class eu.opennote.data.** {
+-keepclasseswithmembers class eu.ocnotes.data.** {
     kotlinx.serialization.KSerializer serializer(...);
 }

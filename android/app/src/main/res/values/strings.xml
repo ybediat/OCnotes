@@ -15,7 +15,7 @@
       - `translatable="false"` marque ce qui ne doit pas être traduit.
 -->
 <resources>
-    <string name="app_name" translatable="false">OpenNote</string>
+    <string name="app_name" translatable="false">OCnotes</string>
 
     <!-- ================================================================
          Éléments communs
@@ -298,7 +298,7 @@
          ================================================================ -->
     <string name="menu_reglages">Réglages</string>
     <string name="menu_a_propos">À propos</string>
-    <string name="a_propos_titre">À propos d\'OpenNote</string>
+    <string name="a_propos_titre">À propos d\'OCnotes</string>
     <string name="a_propos_description">Gestionnaire de notes stockées sur un serveur OpenCloud. Créé par Yannis Bediat. V1.0 Aout 2026</string>
     <string name="a_propos_licence">Licence : MIT https://github.com/ybediat/OpenNote/tree/main?tab=MIT-1-ov-file</string>
     <string name="a_propos_depot">Dépôt Git</string>

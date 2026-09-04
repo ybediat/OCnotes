@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Banc de mesure de l'éditeur : combien coûte une image, et dans quelle phase.
 
@@ -123,7 +123,7 @@ param(
 
     [switch] $Prechauffer,
 
-    [string] $Paquet = "eu.opennote.debug"
+    [string] $Paquet = "eu.ocnotes.debug"
 )
 
 $ErrorActionPreference = "Stop"
@@ -257,7 +257,7 @@ function Enter-Liste {
         }
         # Se fier a `pidof` ne suffirait pas : MIUI garde le processus en vie
         # alors que l'application est en arriere-plan.
-        Invoke-Adb shell am start -n "$Paquet/eu.opennote.ui.MainActivity" | Out-Null
+        Invoke-Adb shell am start -n "$Paquet/eu.ocnotes.ui.MainActivity" | Out-Null
         Start-Sleep -Seconds 5
     }
     throw "Liste introuvable apres 5 tentatives."

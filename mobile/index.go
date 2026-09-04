@@ -36,10 +36,14 @@ type folderRef struct {
 //
 // `fromCache` signale que le réseau a manqué, comme pour ListFolderJSON.
 func (a *App) ListAllJSON() (string, error) {
-	a.mu.Lock()
-	lib := a.lib
-	a.mu.Unlock()
+	lib, local := a.session()
 
+	if local {
+		// L'inventaire est le cache : il n'y a pas de version plus fraîche à
+		// aller chercher, donc pas de « reconstitué depuis le cache » à
+		// signaler non plus.
+		return toJSON(a.listingDepuisIndex(false))
+	}
 	if lib == nil {
 		return "", errNoWorkspace()
 	}
@@ -109,11 +113,9 @@ func (a *App) listingDepuisIndex(fromCache bool) folderListing {
 // La liste vient du cache, jamais du réseau : un sélecteur doit s'ouvrir tout
 // de suite. Elle est alimentée par ListAllJSON et par la navigation.
 func (a *App) FoldersJSON() (string, error) {
-	a.mu.Lock()
-	lib := a.lib
-	a.mu.Unlock()
+	lib, local := a.session()
 
-	if lib == nil {
+	if lib == nil && !local {
 		return "", errNoWorkspace()
 	}
 
@@ -130,6 +132,12 @@ func (a *App) FoldersJSON() (string, error) {
 // donc l'inventaire du serveur a changé, mais personne ne regarde l'écran.
 // Renvoyer le listing entier pour le jeter serait du travail perdu.
 func (a *App) RefreshIndex() error {
+	if _, local := a.session(); local {
+		// L'inventaire est le cache lui-même : il n'y a rien à reconstruire,
+		// et rien à jeter.
+		return nil
+	}
+
 	_, err := a.ListAllJSON()
 	if err != nil && errors.Is(err, opencloud.ErrOffline) {
 		// Hors connexion, il n'y a rien à reconstruire et rien à signaler :

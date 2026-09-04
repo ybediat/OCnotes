@@ -42,6 +42,14 @@ const DefaultQuotaBytes int64 = 250 * 1024 * 1024
 // refuser une écriture : cette erreur reste une STORAGE_IO normale.
 const UnlimitedQuota int64 = 0
 
+// MinLocalQuota est le plancher appliqué en entrant en mode local.
+//
+// En mode local le quota n'évince plus rien — voir SetLocalOnly — mais il
+// reste affiché comme seuil d'alerte. Le laisser à 250 Mo ferait crier
+// l'interface bien avant que le téléphone ne soit gêné. L'utilisateur peut
+// l'abaisser ensuite s'il préfère être averti plus tôt.
+const MinLocalQuota int64 = 1 << 30
+
 // Entry est ce que le cache sait d'une note.
 type Entry struct {
 	// Path est relatif à la racine des notes.
@@ -106,6 +114,10 @@ type Store struct {
 	// navigateur, ce qu'une simple déduction à partir des chemins de notes ne
 	// permettrait pas.
 	folders map[string]bool
+
+	// localOnly dit qu'aucun serveur ne double ce cache : il n'est plus un
+	// cache mais le stockage. Voir SetLocalOnly pour ce que cela change.
+	localOnly bool
 }
 
 // persisted est la forme sérialisée de l'état du cache.
@@ -117,6 +129,10 @@ type persisted struct {
 	Known     map[string]*Known   `json:"known,omitempty"`
 	Indexed   bool                `json:"indexed,omitempty"`
 	Conflicts map[string]Conflict `json:"conflicts,omitempty"`
+
+	// LocalOnly n'a pas demandé de version d'index : un champ dont la valeur
+	// nulle est le comportement d'avant ne casse aucune lecture.
+	LocalOnly bool `json:"localOnly,omitempty"`
 }
 
 // Open ouvre — ou crée — un cache dans le dossier indiqué.
@@ -164,6 +180,7 @@ func Open(dir string) (*Store, error) {
 	}
 	s.indexed = state.Indexed
 	s.queue = state.Queue
+	s.localOnly = state.LocalOnly
 	migrated := state.Version != indexVersion
 	for _, entry := range s.entries {
 		// Les index de la version 1 ne portaient pas LastAccess. LocalMod est
@@ -195,6 +212,42 @@ func Open(dir string) (*Store, error) {
 func (s *Store) indexPath() string        { return filepath.Join(s.dir, "index.json") }
 func (s *Store) notesDir() string         { return filepath.Join(s.dir, "notes") }
 func (s *Store) blobPath(n string) string { return filepath.Join(s.notesDir(), n) }
+
+// SetLocalOnly dit au cache qu'aucun serveur ne le double.
+//
+// Il cesse alors d'être un cache : c'est le stockage, et chaque note qu'il
+// porte est la seule copie qui existe. Six règles en découlent, et elles ne se
+// séparent pas :
+//
+//   - rien n'est mis en file — il n'y a personne à qui pousser ;
+//   - rien n'est marqué Dirty — « en attente d'envoi » ne veut plus rien dire ;
+//   - tout est protégé de l'éviction — évincer, ici, c'est supprimer ;
+//   - le quota n'évince plus ; il ne sert qu'à alerter ;
+//   - Index() remonte toutes les entrées, plus seulement les sales — sans quoi
+//     la liste plate serait vide, puisque plus rien n'est sale ;
+//   - HasIndex() est vrai — l'inventaire, c'est le disque, il n'y a rien à
+//     attendre d'un serveur.
+//
+// Les deux dernières sont la conséquence des deux premières : ne plus armer
+// Dirty sans corriger Index() viderait la bibliothèque à l'écran, et corriger
+// Index() sans protéger de l'éviction laisserait le quota supprimer des notes
+// que rien ne pourrait retélécharger.
+func (s *Store) SetLocalOnly(local bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.localOnly == local {
+		return nil
+	}
+	s.localOnly = local
+	return s.save()
+}
+
+// LocalOnly dit si le cache est l'unique dépositaire des notes.
+func (s *Store) LocalOnly() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.localOnly
+}
 
 // repairBlobsLocked remet l'index en accord avec le dossier de blobs au
 // démarrage. Un contenu propre manquant redevient un simple Known, tandis que
@@ -267,6 +320,7 @@ func (s *Store) save() error {
 		Known:     s.known,
 		Indexed:   s.indexed,
 		Conflicts: s.conflicts,
+		LocalOnly: s.localOnly,
 	}
 	data, err := json.Marshal(state)
 	if err != nil {
@@ -429,7 +483,11 @@ func (s *Store) putLocked(notePath string, content []byte, enqueue bool) error {
 		entry = &Entry{Path: notePath, Cache: cacheName(notePath)}
 		s.entries[notePath] = entry
 	}
-	entry.Dirty = true
+	// En mode local, une note n'est jamais « en attente d'envoi » : il n'y a
+	// pas d'envoi. La marquer sale ferait compter des opérations qui
+	// n'existent pas et ferait chercher à requeueOrphanWritesLocked une file
+	// à réparer.
+	entry.Dirty = !s.localOnly
 	entry.Size = int64(len(content))
 	entry.LocalMod = time.Now().UTC()
 	entry.LastAccess = entry.LocalMod

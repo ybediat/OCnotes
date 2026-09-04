@@ -3,26 +3,26 @@
 Le corps ci-dessous est en anglais : c'est la langue du tracker
 <https://gitlab.com/fdroid/rfp/-/issues>. Le reste du projet reste en français.
 
-Joindre [`eu.opennote.yml`](eu.opennote.yml) à l'issue, ou coller son contenu
+Joindre [`eu.ocnotes.yml`](eu.ocnotes.yml) à l'issue, ou coller son contenu
 dans un bloc de code.
 
 ---
 
-**Titre de l'issue** : `OpenNote — offline-first Markdown notes for OpenCloud servers`
+**Titre de l'issue** : `OCnotes — offline-first Markdown notes for OpenCloud servers`
 
 ---
 
 ### Package/Application ID
 
-`eu.opennote`
+`eu.ocnotes`
 
 ### Name
 
-OpenNote
+OCnotes
 
 ### Description
 
-OpenNote is a Markdown note editor for [OpenCloud](https://opencloud.eu)
+OCnotes is a Markdown note editor for [OpenCloud](https://opencloud.eu)
 servers (a fork of ownCloud Infinite Scale).
 
 Notes stay as plain `.md` files in the user's personal OpenCloud space, so they
@@ -62,8 +62,8 @@ Writing, Internet
 
 ### Metadata
 
-A proposed `metadata/eu.opennote.yml` is attached, kept in the repository at
-`docs/fdroid/eu.opennote.yml` so it stays in sync with the source. The points
+A proposed `metadata/eu.ocnotes.yml` is attached, kept in the repository at
+`docs/fdroid/eu.ocnotes.yml` so it stays in sync with the source. The points
 worth reviewing are below.
 
 **The core is written in Go**, bound to the Kotlin/Compose UI with
@@ -72,8 +72,8 @@ worth reviewing are below.
 - installs Go at the exact version pinned in `go.mod` (1.26.0) in `sudo:`,
   with the official SHA-256 checked;
 - runs `gomobile bind` in `prebuild:`, producing
-  `android/app/libs/opennote.aar` before Gradle starts;
-- needs `scanignore: android/app/libs/opennote.aar` — that AAR is a binary
+  `android/app/libs/ocnotes.aar` before Gradle starts;
+- needs `scanignore: android/app/libs/ocnotes.aar` — that AAR is a binary
   inside the build tree, but it is produced from the repository's own sources
   by the preceding step. `GOPATH` is left at its default (`$HOME/go`), outside
   the build tree, so the `gomobile` and `gobind` executables are never scanned.
@@ -107,7 +107,7 @@ that a user can move between an F-Droid install, a direct APK download and
 Obtainium without uninstalling. The recipe sets:
 
 ```yaml
-Binaries: https://github.com/ybediat/OpenNote/releases/download/V%v/OpenNote-%v.apk
+Binaries: https://github.com/ybediat/OpenNote/releases/download/V%v/OCnotes-%v.apk
 AllowedAPKSigningKeys: 9eda46c9fdb2756cdad00a548c27261d1a5bfb25b06e11892071bbd19f35e6ec
 ```
 

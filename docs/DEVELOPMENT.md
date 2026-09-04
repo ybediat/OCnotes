@@ -1,4 +1,4 @@
-# Développer OpenNote
+# Développer OCnotes
 
 Ce guide permet de construire l'application et d'itérer sur le code sans
 connaître l'historique du projet.
@@ -18,8 +18,8 @@ Le script de build en contrôle les **minima**, pas l'égalité : une version pl
 récente passe avec un avertissement. C'est ce qui permet à un empaqueteur —
 F-Droid en particulier — de construire avec sa propre image sans que le build
 échoue sur une comparaison de chaîne. Trois variables imposent un outil précis :
-`OPENNOTE_GRADLE_BIN`, `OPENNOTE_NDK_VERSION` et `ANDROID_NDK_HOME` ; côté
-Gradle, `-Popennote.ndkVersion=<révision>` fait la même chose pour le NDK.
+`OCNOTES_GRADLE_BIN`, `OCNOTES_NDK_VERSION` et `ANDROID_NDK_HOME` ; côté
+Gradle, `-Pocnotes.ndkVersion=<révision>` fait la même chose pour le NDK.
 
 Définissez `ANDROID_SDK_ROOT` (ou `ANDROID_HOME`) et `ANDROID_NDK_HOME` pour
 que `gomobile` puisse trouver le SDK et le NDK. Les clés, `local.properties`,
@@ -55,7 +55,7 @@ android/app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
 Le wrapper Gradle est versionné : `./gradlew` fonctionne sur un clone neuf. Pour
-employer un Gradle déjà installé, définissez `OPENNOTE_GRADLE_BIN` vers
+employer un Gradle déjà installé, définissez `OCNOTES_GRADLE_BIN` vers
 l'exécutable voulu.
 
 ## Construire sous Windows
@@ -88,7 +88,7 @@ publique, régénérez l'AAR avant tout build Android :
 
 ```bash
 gomobile bind -target=android/arm64,android/amd64 -androidapi 26 -trimpath \
-  -ldflags="-s -w" -o android/app/libs/opennote.aar ./mobile
+  -ldflags="-s -w" -o android/app/libs/ocnotes.aar ./mobile
 ```
 
 Ensuite, lancez les tests Android :

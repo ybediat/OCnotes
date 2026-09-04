@@ -1,9 +1,9 @@
-# Publier OpenNote sur F-Droid
+# Publier OCnotes sur F-Droid
 
 Ce dossier ne sert qu'à préparer l'inclusion. Il ne fait rien lors du build.
 
-[`eu.opennote.yml`](eu.opennote.yml) est la recette proposée. Sa place
-définitive est le dépôt `fdroiddata`, sous `metadata/eu.opennote.yml` ; elle est
+[`eu.ocnotes.yml`](eu.ocnotes.yml) est la recette proposée. Sa place
+définitive est le dépôt `fdroiddata`, sous `metadata/eu.ocnotes.yml` ; elle est
 versionnée ici pour être jointe à la demande d'inclusion et pour suivre le dépôt
 — une recette écrite une fois puis oubliée diverge à la première release.
 
@@ -20,7 +20,7 @@ curl -fsSL 'https://go.dev/dl/?mode=json&include=all' | jq -r '.[] | select(.ver
 **Le nom de la révision du NDK**, en revanche, reste à confirmer. La recette
 demande `r27d`, soit `27.3.13750724`. À vérifier contre la liste des NDK connus
 de `fdroidserver` : si cette révision n'y figure pas, n'importe quelle `r27`
-convient désormais — le module accepte `-Popennote.ndkVersion=<révision>` et le
+convient désormais — le module accepte `-Pocnotes.ndkVersion=<révision>` et le
 script Linux ne compare plus que des minima.
 
 ## Ce que la recette fait, et pourquoi
@@ -84,7 +84,7 @@ Il ne manque donc qu'un appareil réel pour l'ajouter.
 ## Qui signe : mode 2, tranché
 
 F-Droid reconstruit l'application, vérifie que son APK est identique au binaire
-officiel hors signature, puis publie **celui signé par OpenNote**. Une seule
+officiel hors signature, puis publie **celui signé par OCnotes**. Une seule
 signature circule : un utilisateur passe d'une installation F-Droid à un
 téléchargement direct, ou à Obtainium, sans désinstaller. C'est la raison du
 choix, et elle est du côté de l'utilisateur.

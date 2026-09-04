@@ -128,6 +128,8 @@ func TestValidate(t *testing.T) {
 	}{
 		{"complète", sample(), true},
 		{"sans espace choisi", Config{ServerURL: "https://x.fr", Username: "moi"}, true},
+		{"locale sans serveur ni compte", Config{Mode: ModeLocal}, true},
+		{"locale avec un dernier dossier", Config{Mode: ModeLocal, LastPath: "carnets"}, true},
 		{"URL manquante", Config{Username: "moi"}, false},
 		{"utilisateur manquant", Config{ServerURL: "https://x.fr"}, false},
 		{"utilisateur en espaces", Config{ServerURL: "https://x.fr", Username: "   "}, false},
@@ -148,6 +150,37 @@ func TestValidate(t *testing.T) {
 				t.Error("Validate() a accepté une configuration invalide")
 			}
 		})
+	}
+}
+
+// Une configuration locale doit pouvoir être écrite et relue. Sans la sortie
+// anticipée de Validate, Save la refuserait faute d'URL, et le mode local ne
+// pourrait même pas retenir le dernier dossier consulté.
+func TestSaveEtLoadEnModeLocal(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := Save(dir, Config{Mode: ModeLocal, LastPath: "carnets"}); err != nil {
+		t.Fatalf("Save d'une configuration locale: %v", err)
+	}
+
+	got, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !got.IsLocal() {
+		t.Error("le mode local n'a pas survécu à l'aller-retour")
+	}
+	if got.LastPath != "carnets" {
+		t.Errorf("LastPath = %q", got.LastPath)
+	}
+	// Les deux drapeaux qui décident de l'écran de départ : une configuration
+	// locale qui se dirait connectée enverrait l'interface chercher un serveur
+	// qui n'existe pas.
+	if got.IsConnected() {
+		t.Error("une configuration locale ne doit pas se présenter comme connectée")
+	}
+	if got.HasWorkspace() {
+		t.Error("une configuration locale n'a pas d'espace de travail")
 	}
 }
 

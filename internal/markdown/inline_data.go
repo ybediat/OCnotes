@@ -10,10 +10,10 @@ import (
 // PlaceholderScheme préfixe les jetons qui remplacent une donnée en ligne le
 // temps d'une session d'édition.
 //
-// C'est volontairement une URL bien formée : « ![photo](opennote-image:0) »
+// C'est volontairement une URL bien formée : « ![photo](ocnotes-image:0) »
 // reste du Markdown valide, donc l'aperçu continue de le lire et d'afficher son
 // repère d'image. Un caractère sentinelle exotique aurait cassé l'analyse.
-const PlaceholderScheme = "opennote-image:"
+const PlaceholderScheme = "ocnotes-image:"
 
 // maxEditableWord borne la plus longue suite de caractères sans espace qu'un
 // éditeur de texte accepte d'afficher.
@@ -100,8 +100,8 @@ func RestoreInlineData(text string, data []string) string {
 		return text
 	}
 
-	// À l'envers, et ce n'est pas un détail : « opennote-image:1 » est un
-	// préfixe de « opennote-image:12 ». Traité dans l'ordre croissant, le
+	// À l'envers, et ce n'est pas un détail : « ocnotes-image:1 » est un
+	// préfixe de « ocnotes-image:12 ». Traité dans l'ordre croissant, le
 	// jeton 1 mangerait le début du jeton 12 et laisserait un « 2 » orphelin
 	// collé à une image entière.
 	out := text

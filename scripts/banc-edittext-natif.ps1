@@ -1,10 +1,10 @@
-﻿<#
+<#
 .SYNOPSIS
     Compare un android.widget.EditText monolithique à l'éditeur Compose mesuré
     par banc-editeur.ps1.
 
 .DESCRIPTION
-    La sonde charge la même note par le vrai dépôt OpenNote et lui applique le
+    La sonde charge la même note par le vrai dépôt OCnotes et lui applique le
     même PrepareEdit. Elle ne sauvegarde jamais : frappe, sélection et copie
     restent confinées à l'activité debug.
 
@@ -27,14 +27,14 @@ param(
     [switch] $Frappe,
     [switch] $Selection,
     [int] $Caracteres = 40,
-    [string] $Paquet = "eu.opennote.debug",
+    [string] $Paquet = "eu.ocnotes.debug",
     [string] $Passe = (Get-Date -Format "yyyyMMdd-HHmmss")
 )
 
 $ErrorActionPreference = "Stop"
-$ActivitePrincipale = "$Paquet/eu.opennote.ui.MainActivity"
-$ActiviteSonde = "$Paquet/eu.opennote.ui.editor.NativeEditTextProbeActivity"
-$Tag = "OpenNoteNativeProbe"
+$ActivitePrincipale = "$Paquet/eu.ocnotes.ui.MainActivity"
+$ActiviteSonde = "$Paquet/eu.ocnotes.ui.editor.NativeEditTextProbeActivity"
+$Tag = "OCnotesNativeProbe"
 
 if (-not (Get-Command adb -ErrorAction SilentlyContinue)) {
     $env:PATH = "$env:LOCALAPPDATA\Android\Sdk\platform-tools;$env:PATH"

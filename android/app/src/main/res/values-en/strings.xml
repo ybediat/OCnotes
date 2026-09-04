@@ -317,7 +317,7 @@
          ================================================================ -->
     <string name="menu_reglages">Settings</string>
     <string name="menu_a_propos">About</string>
-    <string name="a_propos_titre">About OpenNote</string>
+    <string name="a_propos_titre">About OCnotes</string>
     <string name="a_propos_description">A manager for notes stored on an OpenCloud server. Created by Yannis Bediat. v1.0 August 2026</string>
     <string name="a_propos_licence">License: MIT https://github.com/ybediat/OpenNote/tree/main?tab=MIT-1-ov-file</string>
     <string name="a_propos_depot">Git repository</string>

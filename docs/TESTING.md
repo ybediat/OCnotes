@@ -1,6 +1,6 @@
-# Tester OpenNote
+# Tester OCnotes
 
-OpenNote sépare les tests rapides et reproductibles des vérifications contre un
+OCnotes sépare les tests rapides et reproductibles des vérifications contre un
 serveur OpenCloud réel.
 
 ## Tests locaux
@@ -23,17 +23,17 @@ Les tests d'intégration sont volontairement désactivés tant que les trois
 variables suivantes ne sont pas définies :
 
 ```bash
-export OPENNOTE_IT_SERVER="https://cloud.exemple.fr"
-export OPENNOTE_IT_USER="mon-compte-de-test"
-export OPENNOTE_IT_TOKEN="mon-app-token"
+export OCNOTES_IT_SERVER="https://cloud.exemple.fr"
+export OCNOTES_IT_USER="mon-compte-de-test"
+export OCNOTES_IT_TOKEN="mon-app-token"
 ```
 
 Sous PowerShell :
 
 ```powershell
-$env:OPENNOTE_IT_SERVER = "https://cloud.exemple.fr"
-$env:OPENNOTE_IT_USER = "mon-compte-de-test"
-$env:OPENNOTE_IT_TOKEN = "mon-app-token"
+$env:OCNOTES_IT_SERVER = "https://cloud.exemple.fr"
+$env:OCNOTES_IT_USER = "mon-compte-de-test"
+$env:OCNOTES_IT_TOKEN = "mon-app-token"
 ```
 
 Puis lancez :
@@ -46,7 +46,7 @@ Ces tests créent un dossier temporaire dans l'espace personnel accessible par
 ce compte, puis tentent de le supprimer à la fin. Utilisez un compte ou un
 espace dédié aux tests, avec un App Token révocable. En cas d'interruption ou
 d'échec de nettoyage, recherchez et supprimez le dossier commençant par
-`opennote-it-`.
+`ocnotes-it-`.
 
 Ne mettez jamais ces variables dans un fichier versionné, une issue, un log ou
 une capture d'écran.
@@ -58,16 +58,16 @@ données d'un serveur réel. Construisez-le puis fournissez les identifiants par
 variables d'environnement :
 
 ```bash
-go build -o bin/opennote-cli ./cmd/opennote-cli
+go build -o bin/ocnotes-cli ./cmd/ocnotes-cli
 
-export OPENNOTE_SERVER="https://cloud.exemple.fr"
-export OPENNOTE_USER="mon-compte-de-test"
-export OPENNOTE_APP_TOKEN="mon-app-token"
-./bin/opennote-cli tree
+export OCNOTES_SERVER="https://cloud.exemple.fr"
+export OCNOTES_USER="mon-compte-de-test"
+export OCNOTES_APP_TOKEN="mon-app-token"
+./bin/ocnotes-cli tree
 ```
 
-Sous PowerShell, définissez de la même manière `OPENNOTE_SERVER`,
-`OPENNOTE_USER` et `OPENNOTE_APP_TOKEN` avec `$env:`.
+Sous PowerShell, définissez de la même manière `OCNOTES_SERVER`,
+`OCNOTES_USER` et `OCNOTES_APP_TOKEN` avec `$env:`.
 
 Les commandes `put`, `mkdir`, `mv`, `cp` et `rm` modifient le serveur. Testez
 ces commandes dans un espace dédié ; ne passez jamais le token en argument de
@@ -76,7 +76,7 @@ ligne de commande.
 Pour la liste complète :
 
 ```bash
-./bin/opennote-cli -help
+./bin/ocnotes-cli -help
 ```
 
 ## Vérification manuelle Android

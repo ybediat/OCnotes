@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Crée la clé de signature Android de production sans exposer son mot de passe.
 
@@ -8,7 +8,7 @@
     l'historique PowerShell, ni dans les journaux de ce script.
 
     Cette clé devra signer toutes les futures versions distribuées avec la
-    signature OpenNote. Perdre la clé empêche de publier une mise à jour pour
+    signature OCnotes. Perdre la clé empêche de publier une mise à jour pour
     les installations existantes.
 #>
 
@@ -16,11 +16,11 @@
 param(
     [string] $Keystore = (Join-Path `
         ([Environment]::GetFolderPath('UserProfile')) `
-        '.opennote\signing\opennote-release.p12'),
+        '.ocnotes\signing\ocnotes-release.p12'),
 
-    [string] $Alias = 'opennote-release',
+    [string] $Alias = 'ocnotes-release',
 
-    [string] $DistinguishedName = 'CN=OpenNote, O=OpenNote, C=FR'
+    [string] $DistinguishedName = 'CN=OCnotes, O=OCnotes, C=FR'
 )
 
 Set-StrictMode -Version Latest

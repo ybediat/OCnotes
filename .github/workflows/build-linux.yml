@@ -51,16 +51,16 @@ jobs:
 
       - name: Build from sources
         env:
-          OPENNOTE_GRADLE_BIN: gradle
+          OCNOTES_GRADLE_BIN: gradle
         run: bash scripts/build-android-linux.sh
 
       - name: Upload unsigned release
         uses: actions/upload-artifact@v7
         with:
-          name: opennote-linux-${{ github.sha }}
+          name: ocnotes-linux-${{ github.sha }}
           path: |
             android/app/build/outputs/apk/release/app-release-unsigned.apk
-            android/app/libs/opennote.aar
+            android/app/libs/ocnotes.aar
             android/app/build/reports/lint-results-release.*
           if-no-files-found: error
           retention-days: 14

@@ -1,8 +1,8 @@
-OpenNote est un éditeur de notes Markdown pour votre serveur OpenCloud.
+OCnotes est un éditeur de notes Markdown pour votre serveur OpenCloud.
 
 Vos notes restent de simples fichiers .md dans votre espace OpenCloud personnel.
 Vous pouvez les lire depuis l’interface web, les synchroniser avec d’autres
-clients et conserver l’accès à vos fichiers sans dépendre d’OpenNote.
+clients et conserver l’accès à vos fichiers sans dépendre d’OCnotes.
 
 <b>Fonctionnalités</b>
 <ul>
@@ -13,6 +13,6 @@ clients et conserver l’accès à vos fichiers sans dépendre d’OpenNote.
 <li>Utiliser un App Token OpenCloud stocké dans Android.</li>
 </ul>
 
-OpenNote est disponible en français, anglais, espagnol et allemand.
+OCnotes est disponible en français, anglais, espagnol et allemand.
 Configurez votre serveur OpenCloud vous-même.
-OpenNote exige Android 8.0 ou une version ultérieure.
+OCnotes exige Android 8.0 ou une version ultérieure.

@@ -1,6 +1,6 @@
-# Contribuer à OpenNote
+# Contribuer à OCnotes
 
-Merci de vouloir améliorer OpenNote. Le projet est encore en alpha : les retours,
+Merci de vouloir améliorer OCnotes. Le projet est encore en alpha : les retours,
 corrections ciblées et tests sur des appareils variés sont particulièrement utiles.
 
 ## Avant de commencer

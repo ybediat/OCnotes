@@ -31,7 +31,7 @@ par Git.
 Sur une machine qui possède la clé et les Android Build Tools 34.0.0 :
 
 ```powershell
-.\scripts\sign-android-release.ps1 -Keystore "$env:USERPROFILE\.opennote\signing\opennote-release.p12" -OutputApk "dist\OpenNote-<version>.apk"
+.\scripts\sign-android-release.ps1 -Keystore "$env:USERPROFILE\.ocnotes\signing\ocnotes-release.p12" -OutputApk "dist\OCnotes-<version>.apk"
 ```
 
 Sans autre indication, le script signe **l'APK non signé produit par la CI pour
@@ -49,7 +49,7 @@ Deux échappatoires, toutes deux explicites :
   n'est pas publiable.
 
 `-Source` est un alias de `-UnsignedApk`, conservé pour compatibilité. Nommez la
-sortie `dist/OpenNote-<version>.apk` : c'est le nom qu'attend l'URL `Binaries`
+sortie `dist/OCnotes-<version>.apk` : c'est le nom qu'attend l'URL `Binaries`
 de la recette F-Droid.
 
 Le script demande le mot de passe dans le terminal, vérifie la signature avec
@@ -73,7 +73,7 @@ les issues ou les releases.
 
 **L'APK signé ci-dessus est celui que F-Droid publiera.** C'est le mode 2 :
 F-Droid reconstruit depuis les sources, vérifie que son résultat est identique
-au binaire officiel hors signature, puis y recopie la signature OpenNote. Une
+au binaire officiel hors signature, puis y recopie la signature OCnotes. Une
 seule signature circule, donc un utilisateur passe de F-Droid au téléchargement
 direct sans désinstaller. Recette et conséquences dans
 [`fdroid/README.md`](fdroid/README.md).
@@ -86,4 +86,4 @@ Une release destinée à F-Droid demande en plus : un tag `V<version>` poussé s
 le dépôt public — c'est lui que suit `UpdateCheckMode: Tags` —, un journal
 `fastlane/metadata/android/<locale>/changelogs/<versionCode>.txt` par langue
 traduite, et l'APK signé publié en pièce jointe de la release GitHub à l'URL que
-`Binaries` attend : `.../releases/download/V<version>/OpenNote-<version>.apk`.
+`Binaries` attend : `.../releases/download/V<version>/OCnotes-<version>.apk`.

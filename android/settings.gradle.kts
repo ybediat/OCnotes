@@ -27,5 +27,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "OpenNote"
+rootProject.name = "OCnotes"
 include(":app")

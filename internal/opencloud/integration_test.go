@@ -15,9 +15,9 @@ import (
 //
 // Ils ne s'exécutent que si les trois variables suivantes sont définies :
 //
-//	OPENNOTE_IT_SERVER   https://cloud.exemple.fr
-//	OPENNOTE_IT_USER     login, ou UUID si l'IdP est en autoprovisioning
-//	OPENNOTE_IT_TOKEN    App Token
+//	OCNOTES_IT_SERVER   https://cloud.exemple.fr
+//	OCNOTES_IT_USER     login, ou UUID si l'IdP est en autoprovisioning
+//	OCNOTES_IT_TOKEN    App Token
 //
 // Ces noms sont volontairement distincts de ceux du CLI : lancer « go test »
 // ne doit jamais écrire par accident sur le serveur de quelqu'un.
@@ -28,12 +28,12 @@ import (
 func integrationSpace(t *testing.T) (*Space, context.Context, string) {
 	t.Helper()
 
-	server := os.Getenv("OPENNOTE_IT_SERVER")
-	user := os.Getenv("OPENNOTE_IT_USER")
-	token := os.Getenv("OPENNOTE_IT_TOKEN")
+	server := os.Getenv("OCNOTES_IT_SERVER")
+	user := os.Getenv("OCNOTES_IT_USER")
+	token := os.Getenv("OCNOTES_IT_TOKEN")
 
 	if server == "" || user == "" || token == "" {
-		t.Skip("intégration ignorée : définir OPENNOTE_IT_SERVER, OPENNOTE_IT_USER et OPENNOTE_IT_TOKEN")
+		t.Skip("intégration ignorée : définir OCNOTES_IT_SERVER, OCNOTES_IT_USER et OCNOTES_IT_TOKEN")
 	}
 	if testing.Short() {
 		t.Skip("intégration ignorée en mode court")
@@ -61,7 +61,7 @@ func integrationSpace(t *testing.T) (*Space, context.Context, string) {
 		t.Fatalf("Space: %v", err)
 	}
 
-	sandbox := fmt.Sprintf("opennote-it-%d", time.Now().UnixNano())
+	sandbox := fmt.Sprintf("ocnotes-it-%d", time.Now().UnixNano())
 	if err := space.Mkdir(ctx, sandbox); err != nil {
 		t.Fatalf("création du bac à sable: %v", err)
 	}
@@ -421,8 +421,8 @@ func TestIntegrationErreurs(t *testing.T) {
 	}
 
 	// Un mauvais token doit produire ErrUnauthorized, et non une erreur opaque.
-	mauvais, err := New(os.Getenv("OPENNOTE_IT_SERVER"), AppTokenAuth{
-		Username: os.Getenv("OPENNOTE_IT_USER"),
+	mauvais, err := New(os.Getenv("OCNOTES_IT_SERVER"), AppTokenAuth{
+		Username: os.Getenv("OCNOTES_IT_USER"),
 		Token:    "token-invalide-pour-le-test",
 	})
 	if err != nil {

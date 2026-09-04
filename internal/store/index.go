@@ -108,7 +108,10 @@ func (s *Store) Index() []Known {
 		out[chemin] = *k
 	}
 	for chemin, e := range s.entries {
-		if !e.Dirty {
+		// En mode local, plus rien n'est sale et rien ne remplit known : les
+		// entrées *sont* l'inventaire. Filtrer sur Dirty y viderait la
+		// bibliothèque à l'écran.
+		if !s.localOnly && !e.Dirty {
 			continue
 		}
 		out[chemin] = Known{Path: chemin, Size: e.Size, ModTime: e.LocalMod}
@@ -122,6 +125,69 @@ func (s *Store) Index() []Known {
 	return liste
 }
 
+// MissingContent renvoie les notes de l'inventaire dont le contenu n'est pas
+// sur l'appareil, triées par chemin.
+//
+// Une note peut être connue sans être détenue : l'inventaire tient en quelques
+// dizaines d'octets par note, le contenu se télécharge à l'ouverture. C'est ce
+// qui rend le débranchement coûteux — il faut d'abord tout rapatrier, sans
+// quoi ces notes-là ne seraient plus nulle part sur l'appareil.
+func (s *Store) MissingContent() []Known {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make([]Known, 0)
+	for chemin, k := range s.known {
+		if _, detenue := s.entries[chemin]; detenue {
+			continue
+		}
+		out = append(out, *k)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
+}
+
+// GoLocal fait du cache le dépositaire unique des notes.
+//
+// Les notes dont le contenu n'a pas été rapatrié sont **retirées** de
+// l'inventaire, et leurs chemins renvoyés pour que l'utilisateur sache
+// lesquelles. Les garder en ferait des fantômes : visibles dans la liste,
+// impossibles à ouvrir, et le message parlerait d'un téléchargement depuis un
+// serveur que l'appareil vient d'oublier.
+//
+// Les conflits ouverts sont clos, et la file vidée. Arbitrer un conflit contre
+// un serveur absent n'a plus de sens, et les deux versions sont de toute façon
+// déjà là, côte à côte.
+func (s *Store) GoLocal() ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	abandonnees := make([]string, 0)
+	for chemin := range s.known {
+		if _, detenue := s.entries[chemin]; !detenue {
+			abandonnees = append(abandonnees, chemin)
+			delete(s.known, chemin)
+		}
+	}
+	sort.Strings(abandonnees)
+
+	// L'inventaire devient exactement ce que l'appareil détient, ni plus ni
+	// moins. Les entrées cessent d'être « en attente d'envoi » : plus personne
+	// n'attend, et une entrée sale sans écriture en file ferait travailler la
+	// réparation du démarrage à chaque ouverture.
+	for chemin, e := range s.entries {
+		s.known[chemin] = &Known{Path: chemin, Size: e.Size, ModTime: e.LocalMod}
+		e.Dirty = false
+		e.Conflict = false
+	}
+	s.conflicts = map[string]Conflict{}
+	s.queue = nil
+	s.indexed = true
+	s.localOnly = true
+
+	return abandonnees, s.save()
+}
+
 // HasIndex dit si un inventaire a déjà été constitué.
 //
 // Un inventaire vide et un inventaire jamais fait ne veulent pas dire la même
@@ -131,7 +197,9 @@ func (s *Store) Index() []Known {
 func (s *Store) HasIndex() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.indexed
+	// En mode local, l'inventaire est le disque : il n'y a rien à attendre
+	// d'un serveur, donc jamais de « je ne sais pas encore ».
+	return s.indexed || s.localOnly
 }
 
 // forgetKnownLocked retire un chemin et sa descendance de l'inventaire.

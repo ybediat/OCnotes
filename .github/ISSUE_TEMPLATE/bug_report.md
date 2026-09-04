@@ -1,6 +1,6 @@
 ---
 name: 🐛 Signaler un bug
-about: Signaler un problème rencontré avec OpenNote
+about: Signaler un problème rencontré avec OCnotes
 title: "[BUG] "
 labels: bug
 assignees: ''
@@ -29,7 +29,7 @@ Décrivez ce qui s'est réellement produit.
 
 ## Informations techniques
 
-- Version d'OpenNote :
+- Version d'OCnotes :
 - Version d'Android :
 - Modèle du téléphone :
 - Version d'OpenCloud :

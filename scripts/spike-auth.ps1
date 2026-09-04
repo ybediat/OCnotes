@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Brique 1a — valide qu'un App Token OpenCloud donne acces au WebDAV.
 
@@ -156,10 +156,10 @@ try {
     # 4. PUT + DELETE ---------------------------------------------------------
     Write-Host ""
     Write-Host "4. Ecriture (PUT puis DELETE)"
-    $probeName = "opennote-spike-$(Get-Date -Format 'yyyyMMdd-HHmmss').md"
+    $probeName = "ocnotes-spike-$(Get-Date -Format 'yyyyMMdd-HHmmss').md"
     $probeFile = Join-Path $OutDir 'probe.md'
     [IO.File]::WriteAllText($probeFile,
-        "# OpenNote spike`n`nFichier de test, supprime automatiquement.`n",
+        "# OCnotes spike`n`nFichier de test, supprime automatiquement.`n",
         (New-Object System.Text.UTF8Encoding($false)))
 
     $put = Dav -Method PUT -Url "$davBase/$probeName" -OutFile 'put.txt' `

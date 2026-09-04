@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Chaîne complète : binding gomobile, APK debug ou release signé, install.
 
@@ -8,7 +8,7 @@
 
       1. PATH pour Go, ANDROID_HOME et ANDROID_NDK_HOME pour gomobile ;
       2. suite unitaire Go (`go test ./... -short`) — sautée avec -SansTests ;
-      3. `gomobile bind` vers android/app/libs/opennote.aar — sauté avec
+      3. `gomobile bind` vers android/app/libs/ocnotes.aar — sauté avec
          -SansBind si mobile/ n'a pas bougé (l'étape coûte une minute) ;
       4a. debut : `./gradlew assembleDebug`, puis `adb install -r` ;
       4b. avec -Release : `./gradlew assembleRelease`, signature via
@@ -41,7 +41,7 @@
     Chemin du keystore de signature release. Obligatoire avec -Release.
 
 .PARAMETER Alias
-    Alias de la clé dans le keystore. Défaut : opennote-release.
+    Alias de la clé dans le keystore. Défaut : ocnotes-release.
 
 .EXAMPLE
     .\scripts\build-android.ps1
@@ -52,7 +52,7 @@
     Rebuild rapide de l'APK debug après une retouche d'écran Compose.
 
 .EXAMPLE
-    .\scripts\build-android.ps1 -Release -Keystore C:\cles\opennote.jks
+    .\scripts\build-android.ps1 -Release -Keystore C:\cles\ocnotes.jks
     Build release, signature (mot de passe demandé par apksigner), install.
 #>
 
@@ -64,7 +64,7 @@ param(
     [string] $Serial,
     [switch] $Release,
     [string] $Keystore,
-    [string] $Alias = "opennote-release"
+    [string] $Alias = "ocnotes-release"
 )
 
 $ErrorActionPreference = "Stop"
@@ -105,9 +105,9 @@ if ($SansTests) {
 if ($SansBind) {
     Write-Host "gomobile bind sauté (-SansBind)." -ForegroundColor Yellow
 } else {
-    Write-Host "gomobile bind -> android/app/libs/opennote.aar" -ForegroundColor Cyan
+    Write-Host "gomobile bind -> android/app/libs/ocnotes.aar" -ForegroundColor Cyan
     gomobile bind -target=android/arm64,android/amd64 -androidapi 26 -ldflags="-s -w" `
-        -o android/app/libs/opennote.aar ./mobile
+        -o android/app/libs/ocnotes.aar ./mobile
     if ($LASTEXITCODE -ne 0) { throw "gomobile bind a échoué." }
 }
 
@@ -133,11 +133,11 @@ if ($Release) {
         -Keystore $Keystore -Alias $Alias -UnsignedApk $apkBrut
     if ($LASTEXITCODE -ne 0) { throw "La signature a échoué." }
 
-    $apk = Join-Path $racine "dist\OpenNote-release-signed.apk"
-    $paquet = "eu.opennote"
+    $apk = Join-Path $racine "dist\OCnotes-release-signed.apk"
+    $paquet = "eu.ocnotes"
 } else {
     $apk = Join-Path $racine "android\app\build\outputs\apk\debug\app-debug.apk"
-    $paquet = "eu.opennote.debug"
+    $paquet = "eu.ocnotes.debug"
 }
 
 if (-not (Test-Path $apk)) { throw "APK introuvable : $apk" }

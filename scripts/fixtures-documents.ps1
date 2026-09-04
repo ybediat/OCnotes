@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Fabrique les fixtures .docx et .odt du chantier « lecture seule des
     documents bureautiques ».
@@ -123,7 +123,7 @@ page.</p>
 #
 # 5 000 caractères : bien au-delà de `maxEditableWord` (2 000), bien en deçà
 # d'une image en base64. Le mot doit traverser la conversion intact.
-$MotLong = 'opennote' * 625
+$MotLong = 'ocnotes' * 625
 
 $MotLongHtml = @"
 <!DOCTYPE html>
@@ -190,7 +190,7 @@ if (-not (Test-Path $Sortie)) {
 }
 $Sortie = (Resolve-Path $Sortie).Path
 
-$travail = Join-Path ([System.IO.Path]::GetTempPath()) ("opennote-fixtures-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
+$travail = Join-Path ([System.IO.Path]::GetTempPath()) ("ocnotes-fixtures-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
 $profil = Join-Path $travail 'profil'
 New-Item -ItemType Directory -Path $travail -Force | Out-Null
 New-Item -ItemType Directory -Path $profil -Force | Out-Null

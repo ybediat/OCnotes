@@ -94,10 +94,38 @@ func (a *App) ctx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), requestTimeout)
 }
 
+// session renvoie d'un seul verrou les deux choses dont chaque geste a besoin :
+// la bibliothèque distante, et le fait qu'il n'y en ait pas par choix.
+//
+// Les deux se lisent ensemble parce qu'elles se répondent : une bibliothèque
+// nulle est une erreur en mode serveur — la session n'est pas remontée — et
+// l'état normal en mode local.
+func (a *App) session() (*notes.Library, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lib, a.cfg.IsLocal()
+}
+
+// rememberLastPath retient le dernier dossier consulté, pour rouvrir
+// l'application au même endroit. L'échec d'écriture est ignoré : ne pas
+// retrouver son dossier est un désagrément, pas une raison de refuser un
+// listing qu'on a déjà.
+func (a *App) rememberLastPath(dir string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cfg.LastPath = dir
+	_ = config.Save(a.dataDir, a.cfg)
+}
+
 // --- État -------------------------------------------------------------------
 
 // appState décrit ce que l'interface doit savoir pour choisir son écran.
 type appState struct {
+	// Mode vaut "", "local" ou "server". Le mode vide est celui d'une
+	// installation neuve, qui n'a pas encore choisi : c'est lui qui mène à
+	// l'écran de connexion, où le mode local est proposé.
+	Mode string `json:"mode"`
+
 	Connected    bool   `json:"connected"`
 	HasWorkspace bool   `json:"hasWorkspace"`
 	ServerURL    string `json:"serverUrl"`
@@ -127,6 +155,7 @@ func (a *App) StateJSON() (string, error) {
 	defer a.mu.Unlock()
 
 	return toJSON(appState{
+		Mode:         a.cfg.Mode,
 		Connected:    a.cfg.IsConnected(),
 		HasWorkspace: a.lib != nil,
 		ServerURL:    a.cfg.ServerURL,
@@ -158,6 +187,50 @@ func (a *App) PruneCache() error {
 }
 
 // --- Connexion --------------------------------------------------------------
+
+// StartLocal fait démarrer l'application sans serveur.
+//
+// Les notes vivent alors sur ce seul appareil : le cache cesse d'être un cache
+// pour devenir le stockage, avec tout ce que store.SetLocalOnly implique. Rien
+// n'est définitif — brancher un serveur plus tard reste possible, et tout ce
+// qui aura été écrit entre-temps y montera.
+//
+// Refusé si un serveur est déjà enregistré : quitter le mode serveur passe par
+// le débranchement, qui rapatrie d'abord ce qui n'est pas encore sur
+// l'appareil. Basculer ici sans cela laisserait sur place des notes dont seul
+// le nom est connu.
+func (a *App) StartLocal() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.cfg.IsConnected() {
+		return fmt.Errorf("mobile: [%s] un serveur est déjà enregistré, passer par le débranchement", CodeLocalMode)
+	}
+	if err := a.cache.SetLocalOnly(true); err != nil {
+		return err
+	}
+	if err := a.raiseLocalQuota(); err != nil {
+		return err
+	}
+
+	a.cfg = config.Config{Mode: config.ModeLocal}
+	return config.Save(a.dataDir, a.cfg)
+}
+
+// raiseLocalQuota relève le seuil au plancher du mode local.
+//
+// En mode local le quota n'évince plus rien : il ne sert qu'à alerter quand
+// les notes prennent beaucoup de place. Le laisser à 250 Mo ferait donc crier
+// l'interface bien avant que le téléphone ne soit gêné. L'utilisateur peut
+// l'abaisser ensuite s'il préfère être averti plus tôt ; « illimité » n'est
+// jamais relevé, c'est déjà le plus permissif.
+func (a *App) raiseLocalQuota() error {
+	quota := a.cache.Quota()
+	if quota == store.UnlimitedQuota || quota >= store.MinLocalQuota {
+		return nil
+	}
+	return a.cache.SetQuota(store.MinLocalQuota)
+}
 
 // Connect ouvre une session et vérifie les identifiants auprès du serveur.
 //
@@ -196,6 +269,16 @@ func (a *App) Connect(serverURL, username, appToken string) error {
 	a.cfg.ServerURL = serverURL
 	a.cfg.Username = username
 
+	// Branchement en cours depuis le mode local : rien n'est écrit tant que
+	// l'utilisateur n'a pas choisi son espace **et** le sort de ses notes.
+	// AttachJSON est le seul point de bascule. Tué ici, l'appareil redémarre
+	// en mode local, avec ses notes — au lieu de se retrouver en mode serveur
+	// sans espace, où plus aucun geste ne les atteindrait.
+	if a.cfg.IsLocal() {
+		return nil
+	}
+	a.cfg.Mode = config.ModeServer
+
 	if a.cfg.DriveID != "" {
 		for _, d := range drives {
 			if d.ID == a.cfg.DriveID {
@@ -214,12 +297,23 @@ func (a *App) Connect(serverURL, username, appToken string) error {
 // Rien de l'utilisateur précédent ne doit rester sur l'appareil : la
 // suppression du cache fait partie de la déconnexion, pas d'un ménage
 // ultérieur.
+//
+// En mode local, le même geste supprime toutes les notes de l'appareil — il
+// n'y a pas de session à fermer, et le cache est la seule copie. C'est bien la
+// même opération, mais l'interface doit l'annoncer pour ce qu'elle est : une
+// suppression définitive, pas une déconnexion.
+//
+// Dans les deux cas l'application revient au mode vide, celui d'une
+// installation neuve : le choix entre serveur et mode local se repose.
 func (a *App) Disconnect() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	a.client, a.lib, a.cfg = nil, nil, config.Config{}
 	if err := a.cache.Clear(); err != nil {
+		return err
+	}
+	if err := a.cache.SetLocalOnly(false); err != nil {
 		return err
 	}
 	return config.Clear(a.dataDir)
@@ -309,6 +403,290 @@ func (a *App) SelectWorkspace(driveID, root string) error {
 		return config.Save(a.dataDir, a.cfg)
 	}
 	return fmt.Errorf("mobile: espace %q introuvable", driveID)
+}
+
+// attachRequest décide du sort des notes locales au branchement d'un serveur.
+//
+// La décision passe en JSON plutôt qu'en booléen positionnel, comme pour
+// ResolveConflictJSON : un appelant qui écrit `"adopt": false` sait ce qu'il
+// demande, là où un troisième argument `false` ne dit rien à la relecture.
+type attachRequest struct {
+	DriveID string `json:"driveId"`
+	Root    string `json:"root"`
+
+	// Adopt à vrai fait monter toutes les notes de l'appareil vers le serveur.
+	// À faux, elles sont **supprimées** et l'appareil repart de ce que le
+	// serveur contient.
+	Adopt bool `json:"adopt"`
+}
+
+// attachResult rend compte de ce qui a été fait, en nombre de notes.
+type attachResult struct {
+	Adopted int    `json:"adopted"`
+	Deleted int    `json:"deleted"`
+	Root    string `json:"root"`
+}
+
+// AttachJSON branche un serveur sur une application en mode local.
+//
+// Deux issues, et une seule est réversible :
+//
+//   - `adopt: true` — tout monte d'un coup. Les notes deviennent des écritures
+//     en attente et la synchronisation ordinaire les propage, en préservant
+//     une note distante qui porterait le même nom.
+//   - `adopt: false` — les notes locales sont **supprimées** et l'appareil
+//     repart du serveur. C'est le cas de celui dont les vraies notes sont déjà
+//     en ligne et dont le local n'était que des brouillons.
+//
+// L'ordre des trois étapes est choisi pour qu'une interruption laisse un état
+// récupérable : l'espace d'abord (il peut échouer faute de réseau), le cache
+// ensuite, la configuration en dernier. Tué entre les deux dernières, l'appareil
+// redémarre en mode local avec des notes toutes marquées « en attente » — donc
+// protégées de l'éviction et visibles — et le branchement se refait.
+func (a *App) AttachJSON(requestJSON string) (string, error) {
+	var req attachRequest
+	if err := json.Unmarshal([]byte(requestJSON), &req); err != nil {
+		return "", fmt.Errorf("mobile: requête de branchement illisible: %w", err)
+	}
+
+	if _, local := a.session(); !local {
+		return "", fmt.Errorf("mobile: [%s] le branchement part du mode local ; passer par SelectWorkspace", CodeLocalMode)
+	}
+
+	// Compté avant : Adopt comme Clear rendent la question sans réponse.
+	notesLocales := len(a.cache.Entries())
+
+	if err := a.SelectWorkspace(req.DriveID, req.Root); err != nil {
+		return "", err
+	}
+
+	result := attachResult{}
+	if req.Adopt {
+		if err := a.cache.Adopt(); err != nil {
+			return "", err
+		}
+		result.Adopted = notesLocales
+	} else {
+		if err := a.cache.Clear(); err != nil {
+			return "", err
+		}
+		if err := a.cache.SetLocalOnly(false); err != nil {
+			return "", err
+		}
+		result.Deleted = notesLocales
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.cfg.Mode = config.ModeServer
+	result.Root = a.cfg.Root
+	if err := config.Save(a.dataDir, a.cfg); err != nil {
+		return "", err
+	}
+	return toJSON(result)
+}
+
+// --- Débranchement ----------------------------------------------------------
+
+// defaultDownloadBatch borne un lot de rapatriement quand l'appelant ne dit
+// rien. Assez pour avancer vite, assez court pour que la barre de progression
+// bouge et qu'une annulation soit prise en compte rapidement.
+const defaultDownloadBatch = 25
+
+// detachPlan dit ce que coûterait un débranchement, avant d'y toucher.
+type detachPlan struct {
+	// Total est le nombre de notes de l'espace ; Missing celles dont le
+	// contenu n'est pas encore sur l'appareil, et Bytes ce qu'elles pèsent.
+	Total   int   `json:"total"`
+	Missing int   `json:"missing"`
+	Bytes   int64 `json:"bytes"`
+
+	Usage int64 `json:"usage"`
+	Quota int64 `json:"quota"`
+
+	// Required est l'occupation une fois tout rapatrié. OverQuota dit qu'elle
+	// dépasse le seuil : le rapatriement se mordrait la queue — chaque note
+	// téléchargée en évincerait une autre — donc il refuse de commencer.
+	Required  int64 `json:"required"`
+	OverQuota bool  `json:"overQuota"`
+
+	// Pending est le nombre d'écritures qui n'ont pas encore atteint le
+	// serveur. Elles doivent partir avant : le débranchement vide la file.
+	Pending int `json:"pending"`
+}
+
+// DetachPlanJSON décrit ce qu'un débranchement demanderait.
+//
+// L'inventaire est rafraîchi au passage : on ne peut pas dire ce qu'il reste à
+// rapatrier sans savoir ce que le serveur contient. Hors connexion, l'appel
+// échoue — et c'est juste, il n'y a pas de débranchement sûr sans réseau.
+func (a *App) DetachPlanJSON() (string, error) {
+	lib, local := a.session()
+
+	if local {
+		return "", errLocalMode("le débranchement")
+	}
+	if lib == nil {
+		return "", errNoWorkspace()
+	}
+	if err := a.RefreshIndex(); err != nil {
+		return "", err
+	}
+	return toJSON(a.detachPlan())
+}
+
+func (a *App) detachPlan() detachPlan {
+	manquantes := a.cache.MissingContent()
+
+	plan := detachPlan{
+		Total:   len(a.cache.Index()),
+		Missing: len(manquantes),
+		Usage:   a.cache.Usage(),
+		Quota:   a.cache.Quota(),
+		Pending: len(a.cache.Pending()),
+	}
+	for _, k := range manquantes {
+		plan.Bytes += k.Size
+	}
+	plan.Required = plan.Usage + plan.Bytes
+	plan.OverQuota = plan.Quota != store.UnlimitedQuota && plan.Required > plan.Quota
+	return plan
+}
+
+// downloadReport rend compte d'un lot de rapatriement.
+type downloadReport struct {
+	Downloaded int   `json:"downloaded"`
+	Remaining  int   `json:"remaining"`
+	Bytes      int64 `json:"bytes"`
+
+	// Failed compte les notes que ce lot n'a pas pu obtenir pour une raison
+	// qui leur est propre — pas une panne de réseau, qui arrête la passe.
+	// Elles restent comptées dans Remaining.
+	Failed int `json:"failed"`
+
+	Error     string `json:"error"`
+	ErrorCode string `json:"errorCode"`
+}
+
+// DownloadBatchJSON rapatrie jusqu'à max notes dont le contenu manque.
+//
+// L'appel est volontairement borné plutôt que global : Android le rappelle en
+// boucle et affiche une progression, sans qu'aucun appel ne bloque plusieurs
+// minutes derrière la frontière ni qu'un rappel ait à la traverser.
+//
+// **Condition d'arrêt de la boucle : un lot qui ne rapatrie rien.** Remaining
+// compte aussi les notes en échec définitif, donc il ne tombe pas forcément à
+// zéro ; c'est Downloaded à zéro qui dit qu'insister ne sert plus à rien.
+func (a *App) DownloadBatchJSON(max int) (string, error) {
+	lib, local := a.session()
+
+	if local {
+		return "", errLocalMode("le rapatriement")
+	}
+	if lib == nil {
+		return "", errNoWorkspace()
+	}
+	if max <= 0 {
+		max = defaultDownloadBatch
+	}
+
+	// Sans cette garde, le rapatriement se mordrait la queue : les notes
+	// reçues sont propres, donc évinçables, et chaque téléchargement au-delà
+	// du seuil en supprimerait un précédent. La boucle tournerait sans fin en
+	// affichant des progrès.
+	if plan := a.detachPlan(); plan.OverQuota {
+		return "", fmt.Errorf(
+			"mobile: [%s] le seuil de cache (%d octets) ne peut pas contenir les %d octets à rapatrier",
+			CodeQuotaTooLow, plan.Quota, plan.Required)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), syncPassTimeout)
+	defer cancel()
+
+	report := downloadReport{}
+	for i, k := range a.cache.MissingContent() {
+		if i >= max {
+			break
+		}
+		if err := a.cache.Pull(ctx, lib, k.Path); err != nil {
+			if errors.Is(err, opencloud.ErrOffline) {
+				// Insister sur les suivantes ne ferait qu'attendre autant de
+				// délais réseau : la passe s'arrête et rend compte.
+				a.noteNetworkResult(err)
+				report.Error = err.Error()
+				report.ErrorCode = ErrorCode(report.Error)
+				break
+			}
+			report.Failed++
+			continue
+		}
+		report.Downloaded++
+		report.Bytes += k.Size
+	}
+
+	report.Remaining = len(a.cache.MissingContent())
+	return toJSON(report)
+}
+
+// detachResult rend compte d'un débranchement accompli.
+type detachResult struct {
+	// Kept est le nombre de notes qui vivent désormais sur le seul appareil.
+	Kept int `json:"kept"`
+
+	// Abandoned nomme celles qui n'ont pas pu être rapatriées et que
+	// l'inventaire vient d'oublier. Elles restent sur le serveur : c'est
+	// l'appareil qui les perd, pas l'utilisateur.
+	Abandoned []string `json:"abandoned"`
+}
+
+// DetachJSON coupe le lien avec le serveur et passe l'appareil en mode local.
+//
+// Les notes restent sur le serveur : débrancher n'y efface rien, l'application
+// l'oublie. À l'inverse, une note que le rapatriement n'a pas obtenue disparaît
+// de l'appareil — elle est nommée dans le compte rendu.
+//
+// Refusé tant que des écritures attendent : le débranchement vide la file, et
+// les perdre en silence serait le pire résultat possible. Une passe de
+// synchronisation d'abord, ce geste ensuite.
+func (a *App) DetachJSON() (string, error) {
+	lib, local := a.session()
+
+	if local {
+		return "", errLocalMode("le débranchement")
+	}
+	if lib == nil {
+		return "", errNoWorkspace()
+	}
+	if n := len(a.cache.Pending()); n > 0 {
+		return "", fmt.Errorf(
+			"mobile: [%s] %d modification(s) n'ont pas atteint le serveur, synchroniser d'abord",
+			CodePendingChanges, n)
+	}
+
+	abandonnees, err := a.cache.GoLocal()
+	if err != nil {
+		return "", err
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	// Le token n'a jamais été écrit ici ; c'est Android qui le retire du
+	// Keystore de son côté.
+	a.client, a.lib = nil, nil
+	a.cfg = config.Config{Mode: config.ModeLocal, LastPath: a.cfg.LastPath}
+	if err := config.Save(a.dataDir, a.cfg); err != nil {
+		return "", err
+	}
+	if err := a.raiseLocalQuota(); err != nil {
+		return "", err
+	}
+
+	return toJSON(detachResult{
+		Kept:      len(a.cache.Entries()),
+		Abandoned: abandonnees,
+	})
 }
 
 // openWorkspaceLocked monte la bibliothèque. L'appelant détient le verrou.
@@ -427,10 +805,16 @@ type folderListing struct {
 // navigateur reste utilisable hors connexion, ce qui est tout l'intérêt du
 // modèle local-first.
 func (a *App) ListFolderJSON(dir string) (string, error) {
-	a.mu.Lock()
-	lib := a.lib
-	a.mu.Unlock()
+	lib, local := a.session()
 
+	if local {
+		// Pas de repli : le cache est la source, pas un pis-aller. Un dossier
+		// vide est donc une réponse, et non l'aveu qu'on n'a rien pu obtenir —
+		// c'est pourquoi la question du cache vierge ne se pose pas ici.
+		listing := a.listFromCache(dir, false)
+		a.rememberLastPath(listing.Path)
+		return toJSON(listing)
+	}
 	if lib == nil {
 		return "", errNoWorkspace()
 	}
@@ -441,17 +825,14 @@ func (a *App) ListFolderJSON(dir string) (string, error) {
 	listing, err := lib.List(ctx, dir)
 	if err != nil {
 		a.noteNetworkResult(err)
-		if cached, ok := a.listFromCache(dir); ok {
-			return toJSON(cached)
+		if a.cacheConnaitQuelqueChose() {
+			return toJSON(a.listFromCache(dir, true))
 		}
 		return "", err
 	}
 	a.noteNetworkResult(nil)
 
-	a.mu.Lock()
-	a.cfg.LastPath = listing.Path
-	_ = config.Save(a.dataDir, a.cfg)
-	a.mu.Unlock()
+	a.rememberLastPath(listing.Path)
 
 	// La slice est initialisée non nulle : encoding/json sérialise une slice
 	// nulle en « null », alors que le contrat annonce un tableau. Kotlin n'a
@@ -481,15 +862,29 @@ func (a *App) ListFolderJSON(dir string) (string, error) {
 	return toJSON(out)
 }
 
+// cacheConnaitQuelqueChose dit si le cache a de quoi répondre.
+//
+// La question ne se pose qu'au repli hors connexion : un cache entièrement
+// vierge n'apprendrait rien à l'utilisateur, et annoncer une bibliothèque vide
+// serait pire que de remonter la panne réseau. En mode local elle n'a pas de
+// sens — un cache vide y veut dire « aucune note », ce qui est une réponse.
+func (a *App) cacheConnaitQuelqueChose() bool {
+	return len(a.cache.Entries()) > 0 || len(a.cache.Folders()) > 0
+}
+
 // listFromCache reconstruit le contenu d'un dossier à partir du cache seul.
-func (a *App) listFromCache(dir string) (folderListing, bool) {
+//
+// repli dit ce qu'on est en train de faire : un pis-aller hors connexion, que
+// l'interface signale par un bandeau, ou une lecture de la source en mode
+// local, où il n'y a rien à signaler.
+func (a *App) listFromCache(dir string, repli bool) folderListing {
 	dir = notes.CleanPath(dir)
 	prefix := ""
 	if dir != "" {
 		prefix = dir + "/"
 	}
 
-	out := folderListing{Path: dir, FromCache: true, Entries: []folderEntry{}}
+	out := folderListing{Path: dir, FromCache: repli, Entries: []folderEntry{}}
 	seenDirs := map[string]bool{}
 
 	// Les dossiers connus d'abord : un dossier vide n'apparaîtrait dans aucun
@@ -539,10 +934,7 @@ func (a *App) listFromCache(dir string) (folderListing, bool) {
 		})
 	}
 
-	// Le repli vaut dès que le cache connaît quelque chose : un dossier
-	// réellement vide doit s'afficher vide, pas remonter l'erreur réseau.
-	// Un cache entièrement vierge, lui, n'apprendrait rien à l'utilisateur.
-	return out, len(a.cache.Entries()) > 0 || len(a.cache.Folders()) > 0
+	return out
 }
 
 func indexByte(s string, b byte) int {
@@ -581,10 +973,15 @@ func (a *App) ReadNote(notePath string) (string, error) {
 // ce chemin en octets est indispensable pour les archives : seules les notes
 // sont converties en chaîne, à la toute fin de ReadNote.
 func (a *App) readBytes(notePath string) ([]byte, error) {
-	a.mu.Lock()
-	lib := a.lib
-	a.mu.Unlock()
+	lib, local := a.session()
 
+	if local {
+		content, _, cached := a.cache.Get(notePath)
+		if !cached {
+			return nil, contentMissingError(notePath)
+		}
+		return content, nil
+	}
 	if lib == nil {
 		return nil, errNoWorkspace()
 	}
@@ -624,6 +1021,10 @@ func (a *App) readBytes(notePath string) ([]byte, error) {
 
 func contentNotCachedError(notePath string) error {
 	return fmt.Errorf("mobile: [CONTENT_NOT_CACHED] le contenu de %s doit être téléchargé avant son ouverture hors connexion", notePath)
+}
+
+func contentMissingError(notePath string) error {
+	return fmt.Errorf("mobile: [%s] le contenu de %s est introuvable sur l'appareil et aucun serveur ne peut le fournir", CodeContentMissing, notePath)
 }
 
 // noteNetworkResult retient qu'un appel réseau vient d'échouer faute de
@@ -672,10 +1073,11 @@ func (a *App) WriteNote(notePath, content string) error {
 // Une modification locale non synchronisée n'est jamais écrasée : elle sera
 // confrontée au serveur lors du prochain Sync.
 func (a *App) RefreshNote(notePath string) error {
-	a.mu.Lock()
-	lib := a.lib
-	a.mu.Unlock()
+	lib, local := a.session()
 
+	if local {
+		return errLocalMode("rafraîchir une note")
+	}
 	if lib == nil {
 		return errNoWorkspace()
 	}
@@ -697,10 +1099,11 @@ type noteRef struct {
 // Le nom reçoit l'extension .md s'il ne l'a pas, et un suffixe numérique si
 // une note du même nom existe déjà.
 func (a *App) CreateNoteJSON(dir, name, content string) (string, error) {
-	a.mu.Lock()
-	lib := a.lib
-	a.mu.Unlock()
+	lib, local := a.session()
 
+	if local {
+		return a.createNoteLocal(dir, name, content)
+	}
 	if lib == nil {
 		return "", errNoWorkspace()
 	}
@@ -722,16 +1125,18 @@ func (a *App) CreateNoteJSON(dir, name, content string) (string, error) {
 	// Hors connexion : la note est créée dans le cache seul et poussée plus
 	// tard. Pouvoir écrire une note existante sans réseau mais pas en créer
 	// une n'aurait aucun sens pour l'utilisateur.
-	return a.createNoteOffline(dir, name, content)
+	return a.createNoteLocal(dir, name, content)
 }
 
-// createNoteOffline crée une note dans le cache et l'inscrit en file.
+// createNoteLocal crée une note dans le cache, et l'inscrit en file s'il y a
+// une file — en mode local, enqueueLocked n'inscrit rien.
 //
-// Le nom est choisi d'après le cache seul : on ne peut pas savoir ce que le
-// serveur contient. Une collision avec une note distante reste donc possible,
-// et c'est le If-None-Match de la synchronisation qui la rattrape — la note
-// distante est préservée et la version locale conservée à côté.
-func (a *App) createNoteOffline(dir, name, content string) (string, error) {
+// Le nom est choisi d'après le cache seul. Hors connexion on ne peut pas
+// savoir ce que le serveur contient : une collision avec une note distante
+// reste possible, et c'est le If-None-Match de la synchronisation qui la
+// rattrape — la note distante est préservée et la version locale conservée à
+// côté. En mode local la question ne se pose pas, le cache sait tout.
+func (a *App) createNoteLocal(dir, name, content string) (string, error) {
 	name = notes.WithExtension(strings.TrimSpace(name))
 	if err := notes.ValidateName(name); err != nil {
 		return "", err
@@ -775,10 +1180,11 @@ func (a *App) availableNameFromCache(dir, name string) string {
 
 // CreateFolderJSON crée un sous-dossier.
 func (a *App) CreateFolderJSON(dir, name string) (string, error) {
-	a.mu.Lock()
-	lib := a.lib
-	a.mu.Unlock()
+	lib, local := a.session()
 
+	if local {
+		return a.createFolderLocal(dir, name)
+	}
 	if lib == nil {
 		return "", errNoWorkspace()
 	}
@@ -799,6 +1205,14 @@ func (a *App) CreateFolderJSON(dir, name string) (string, error) {
 
 	// Hors connexion : le dossier est retenu par le cache et créé au prochain
 	// passage. Le navigateur l'affiche entre-temps.
+	return a.createFolderLocal(dir, name)
+}
+
+// createFolderLocal retient un dossier dans le cache seul.
+//
+// EnsureFolder inscrit une création en file, ce qu'il faut hors connexion et
+// qui ne coûte rien en mode local, où la file n'accepte plus rien.
+func (a *App) createFolderLocal(dir, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if err := notes.ValidateName(name); err != nil {
 		return "", err
@@ -812,10 +1226,11 @@ func (a *App) CreateFolderJSON(dir, name string) (string, error) {
 
 // Rename renomme une note ou un dossier et renvoie son nouveau chemin.
 func (a *App) Rename(itemPath, newName string) (string, error) {
-	a.mu.Lock()
-	lib := a.lib
-	a.mu.Unlock()
+	lib, local := a.session()
 
+	if local {
+		return a.renameLocal(itemPath, newName, false)
+	}
 	if lib == nil {
 		return "", errNoWorkspace()
 	}
@@ -836,14 +1251,25 @@ func (a *App) Rename(itemPath, newName string) (string, error) {
 		return "", err
 	}
 
+	return a.renameLocal(itemPath, newName, true)
+}
+
+// renameLocal applique un renommage au cache seul.
+//
+// differer sépare les deux appelants, et ce n'est pas un détail de forme : la
+// file refuse le renommage différé d'un dossier — STRUCTURAL_OFFLINE_FOLDER —
+// parce qu'elle ne saurait pas le rejouer fidèlement sur le serveur. En mode
+// local il n'y a rien à rejouer, donc rien à refuser : renommer un dossier y
+// est un geste ordinaire.
+func (a *App) renameLocal(itemPath, newName string, differer bool) (string, error) {
 	target, err := notes.ResolveRename(itemPath, newName)
 	if err != nil {
 		return "", err
 	}
-	if err := a.cache.Rename(itemPath, target); err != nil {
-		return "", err
+	if differer {
+		return target, a.cache.Rename(itemPath, target)
 	}
-	return target, nil
+	return target, a.cache.RenameLocal(itemPath, target)
 }
 
 // Move déplace une note ou un dossier vers un autre dossier.
@@ -853,10 +1279,11 @@ func (a *App) Rename(itemPath, newName string) (string, error) {
 // ResolveMove porte cette règle, partagée avec Library.Move pour que les deux
 // chemins ne puissent pas diverger.
 func (a *App) Move(itemPath, targetDir string) (string, error) {
-	a.mu.Lock()
-	lib := a.lib
-	a.mu.Unlock()
+	lib, local := a.session()
 
+	if local {
+		return a.moveLocal(itemPath, targetDir, false)
+	}
 	if lib == nil {
 		return "", errNoWorkspace()
 	}
@@ -879,14 +1306,21 @@ func (a *App) Move(itemPath, targetDir string) (string, error) {
 		return "", err
 	}
 
+	return a.moveLocal(itemPath, targetDir, true)
+}
+
+// moveLocal applique un déplacement au cache seul. Même partage que
+// renameLocal : c'est le même geste sur le cache, seul le chemin cible se
+// calcule autrement.
+func (a *App) moveLocal(itemPath, targetDir string, differer bool) (string, error) {
 	target, err := notes.ResolveMove(itemPath, targetDir)
 	if err != nil {
 		return "", err
 	}
-	if err := a.cache.Rename(itemPath, target); err != nil {
-		return "", err
+	if differer {
+		return target, a.cache.Rename(itemPath, target)
 	}
-	return target, nil
+	return target, a.cache.RenameLocal(itemPath, target)
 }
 
 // CopyJSON duplique une note dans un autre dossier et renvoie la copie créée.
@@ -906,11 +1340,9 @@ func (a *App) Move(itemPath, targetDir string) (string, error) {
 // duplication récursive est un geste serveur, étranger au modèle local-first —
 // et un document, qu'un PUT de nos octets ne ferait que corrompre.
 func (a *App) CopyJSON(itemPath, targetDir string) (string, error) {
-	a.mu.Lock()
-	lib := a.lib
-	a.mu.Unlock()
+	lib, local := a.session()
 
-	if lib == nil {
+	if lib == nil && !local {
 		return "", errNoWorkspace()
 	}
 
@@ -932,6 +1364,10 @@ func (a *App) CopyJSON(itemPath, targetDir string) (string, error) {
 
 	name := path.Base(itemPath)
 
+	if local {
+		return a.createNoteLocal(targetDir, name, string(content))
+	}
+
 	ctx, cancel := a.ctx()
 	defer cancel()
 
@@ -950,15 +1386,19 @@ func (a *App) CopyJSON(itemPath, targetDir string) (string, error) {
 
 	// Hors connexion : la copie vit d'abord dans le cache et part à la
 	// prochaine passe, comme n'importe quelle note créée sans réseau.
-	return a.createNoteOffline(targetDir, name, string(content))
+	return a.createNoteLocal(targetDir, name, string(content))
 }
 
 // Delete supprime une note ou un dossier.
 func (a *App) Delete(itemPath string) error {
-	a.mu.Lock()
-	lib := a.lib
-	a.mu.Unlock()
+	lib, local := a.session()
 
+	if local {
+		// Forget plutôt que Delete : rien à inscrire en file, et surtout
+		// Delete refuse la suppression différée d'un dossier — une prudence
+		// qui n'a plus d'objet quand il n'y a pas de serveur à qui la rejouer.
+		return a.cache.Forget(itemPath)
+	}
 	if lib == nil {
 		return errNoWorkspace()
 	}
@@ -1054,10 +1494,11 @@ type syncResult struct {
 // dans le résultat, avec ce qui a tout de même été propagé. L'interface peut
 // ainsi afficher « 3 notes envoyées, 2 en attente » plutôt qu'un échec sec.
 func (a *App) SyncJSON() (string, error) {
-	a.mu.Lock()
-	lib := a.lib
-	a.mu.Unlock()
+	lib, local := a.session()
 
+	if local {
+		return "", errLocalMode("la synchronisation")
+	}
 	if lib == nil {
 		return "", errNoWorkspace()
 	}
@@ -1392,6 +1833,37 @@ func MaxEditableWord() int { return markdown.MaxEditableWord() }
 // gomobile dans une chaîne.
 const CodeUnsupported = "UNSUPPORTED"
 
+// CodeLocalMode signale un geste qui n'a de sens qu'avec un serveur, demandé
+// à une application qui n'en a pas.
+//
+// Il ne décrit pas une panne : synchroniser sans serveur n'est pas un échec,
+// c'est une question qui ne se pose pas. L'interface n'a en principe pas à le
+// rencontrer — elle masque ces gestes en mode local — mais un travailleur de
+// fond programmé avant la bascule, lui, peut très bien arriver après.
+const CodeLocalMode = "LOCAL_MODE"
+
+// CodeContentMissing signale une note dont le contenu manque sur l'appareil
+// alors qu'aucun serveur ne peut le fournir.
+//
+// Distinct de CONTENT_NOT_CACHED, qui promet un téléchargement dès le retour
+// du réseau : ici il n'y a rien à attendre, et proposer d'attendre serait
+// mentir. Ne devrait pas survenir — le débranchement retire de l'inventaire ce
+// qu'il n'a pas pu rapatrier — mais un blob perdu reste possible.
+const CodeContentMissing = "CONTENT_MISSING"
+
+// CodeQuotaTooLow signale un seuil de cache trop bas pour contenir tout ce
+// qu'un débranchement doit rapatrier.
+//
+// C'est un refus de commencer, pas un échec en cours de route : au-delà du
+// seuil, chaque note reçue en évincerait une autre, et la boucle tournerait
+// sans fin en annonçant des progrès. L'interface propose de relever le seuil.
+const CodeQuotaTooLow = "QUOTA_TOO_LOW"
+
+// CodePendingChanges signale des modifications qui n'ont pas atteint le
+// serveur alors qu'on s'apprête à vider la file. Une passe de synchronisation
+// les fait partir.
+const CodePendingChanges = "PENDING_CHANGES"
+
 // ErrorCode extrait l'étiquette de catégorie d'un message d'erreur.
 //
 // gomobile ne transmet qu'une chaîne : l'erreur typée ne franchit pas la
@@ -1502,6 +1974,10 @@ func errNotConnected() error {
 
 func errNoWorkspace() error {
 	return errors.New("mobile: aucun espace de travail choisi, appeler SelectWorkspace")
+}
+
+func errLocalMode(geste string) error {
+	return fmt.Errorf("mobile: [%s] %s exige un serveur, et l'application n'en a pas", CodeLocalMode, geste)
 }
 
 func toJSON(v any) (string, error) {

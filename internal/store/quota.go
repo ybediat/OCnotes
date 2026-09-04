@@ -53,14 +53,14 @@ func (s *Store) Prune() error {
 // d'écriture : même propre, son ancien blob ne doit pas être évincé entre le
 // calcul et son remplacement atomique.
 func (s *Store) ensureSpaceLocked(keep string, newSize int64) error {
-	if s.quota == UnlimitedQuota {
+	if s.quota == UnlimitedQuota || s.localOnly {
 		return nil
 	}
 	return s.pruneForSizeLocked(keep, newSize)
 }
 
 func (s *Store) pruneLocked(keep string) error {
-	if s.quota == UnlimitedQuota {
+	if s.quota == UnlimitedQuota || s.localOnly {
 		return nil
 	}
 	return s.pruneForSizeLocked(keep, -1)
@@ -132,7 +132,11 @@ func (s *Store) usageLocked() (int64, map[string]int64) {
 }
 
 func (s *Store) protectedLocked(notePath string, entry *Entry) bool {
-	if entry.Dirty || entry.Conflict {
+	// En mode local, aucune note n'a de copie ailleurs : l'éviction ne libère
+	// pas de l'espace récupérable, elle détruit du travail. La garde est
+	// redondante avec celle d'ensureSpaceLocked, et c'est voulu — c'est le
+	// seul endroit du dépôt qui décide de supprimer le contenu d'une note.
+	if s.localOnly || entry.Dirty || entry.Conflict {
 		return true
 	}
 	for _, op := range s.queue {

@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "eu.opennote"
+    namespace = "eu.ocnotes"
     compileSdk = 35
 
     // Le NDK sert à gomobile, qui construit le cœur Go *avant* Gradle : ce
@@ -18,14 +18,14 @@ android {
     // exactement celle-ci. Sans cette porte, AGP exigerait la révision
     // épinglée et ferait échouer un build par ailleurs sain :
     //
-    //   ./gradlew -Popennote.ndkVersion=27.2.12479018 assembleRelease
+    //   ./gradlew -Pocnotes.ndkVersion=27.2.12479018 assembleRelease
     //
     // `scripts/build-android-linux.sh` la passe automatiquement, avec la
     // révision qu'il a réellement trouvée dans le SDK.
-    ndkVersion = providers.gradleProperty("opennote.ndkVersion").getOrElse("27.3.13750724")
+    ndkVersion = providers.gradleProperty("ocnotes.ndkVersion").getOrElse("27.3.13750724")
 
     defaultConfig {
-        applicationId = "eu.opennote"
+        applicationId = "eu.ocnotes"
         minSdk = 26
         targetSdk = 35
         versionCode = 3
@@ -71,7 +71,7 @@ android {
             //
             // Sur cette ROM Xiaomi, le sélecteur de langue système n'expose
             // pas les pseudo-langues. On les applique à l'application seule :
-            //   adb shell cmd locale set-app-locales eu.opennote.debug \
+            //   adb shell cmd locale set-app-locales eu.ocnotes.debug \
             //       --locales en-XA
             // et on revient avec `--locales ""`.
             isPseudoLocalesEnabled = true
@@ -131,12 +131,12 @@ dependencies {
     // régénère depuis la racine du dépôt avec :
     //
     //   gomobile bind -target=android -androidapi 26 \
-    //       -o android/app/libs/opennote.aar ./mobile
+    //       -o android/app/libs/ocnotes.aar ./mobile
     //
     // Tant que ce fichier n'existe pas, la compilation échoue sur des
     // symboles `mobile.App` / `mobile.Mobile` introuvables : c'est attendu.
     // ------------------------------------------------------------------
-    implementation(files("libs/opennote.aar"))
+    implementation(files("libs/ocnotes.aar"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

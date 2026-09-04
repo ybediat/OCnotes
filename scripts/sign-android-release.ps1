@@ -1,6 +1,6 @@
-﻿<#
+<#
 .SYNOPSIS
-    Signe et vérifie l'APK release OpenNote avec apksigner 34.0.0.
+    Signe et vérifie l'APK release OCnotes avec apksigner 34.0.0.
 
 .DESCRIPTION
     Par défaut, le script signe l'APK non signé produit par la CI Linux pour le
@@ -30,7 +30,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $Keystore,
 
-    [string] $Alias = 'opennote-release',
+    [string] $Alias = 'ocnotes-release',
 
     [Alias('Source')]
     [string] $UnsignedApk,
@@ -131,7 +131,7 @@ if (-not $UnsignedApk) {
     }
 }
 if (-not $OutputApk) {
-    $OutputApk = Join-Path $repoDirectory 'dist\OpenNote-release-signed.apk'
+    $OutputApk = Join-Path $repoDirectory 'dist\OCnotes-release-signed.apk'
 }
 
 $keystorePath = Resolve-ReleasePath $Keystore

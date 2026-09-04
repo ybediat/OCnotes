@@ -79,6 +79,14 @@ func (s *Store) Pending() []Operation {
 // contenu poussé est toujours lu dans le cache au moment de l'envoi.
 // L'appelant doit détenir le verrou.
 func (s *Store) enqueueLocked(op Operation) {
+	// En mode local il n'y a personne à qui pousser. La garde est ici plutôt
+	// que chez chaque appelant : tous les chemins d'écriture, de renommage et
+	// de suppression passent par cette porte, et un seul oubli suffirait à
+	// laisser grossir une file que rien ne draine jamais.
+	if s.localOnly {
+		return
+	}
+
 	switch op.Kind {
 	case OpWrite:
 		for _, existing := range s.queue {
@@ -605,8 +613,72 @@ func (s *Store) Pull(ctx context.Context, remote Remote, notePath string) error 
 	return s.Accept(notePath, content, etag)
 }
 
+// Adopt prépare la montée de tout le contenu local vers un serveur qu'on vient
+// de brancher.
+//
+// Chaque dossier devient une création en attente, chaque note une écriture :
+// la passe de synchronisation ordinaire fait le reste. Rien n'est inventé pour
+// l'occasion — c'est exactement l'état d'un appareil qui aurait tout créé hors
+// connexion, et pushWrite sait déjà traiter ce cas, collision avec une note
+// distante du même nom comprise.
+//
+// Les dossiers passent devant les notes : un PUT dans un dossier qui n'existe
+// pas est refusé.
+func (s *Store) Adopt() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Quitter le mode local en premier : tant qu'il est armé, enqueueLocked
+	// n'inscrit rien et la file resterait désespérément vide.
+	s.localOnly = false
+
+	dossiers := make([]string, 0, len(s.folders))
+	for d := range s.folders {
+		dossiers = append(dossiers, d)
+	}
+	sort.Strings(dossiers)
+	for _, d := range dossiers {
+		s.enqueueLocked(Operation{Kind: OpMkdir, Path: d})
+	}
+
+	chemins := make([]string, 0, len(s.entries))
+	for chemin := range s.entries {
+		chemins = append(chemins, chemin)
+	}
+	sort.Strings(chemins)
+
+	// L'inventaire redevient exactement ce que l'appareil détient. Il sera
+	// remplacé par celui du serveur au premier listing — qui réinscrit les
+	// entrées sales, donc toutes celles-ci — mais entre-temps la bibliothèque
+	// reste affichable, y compris sans réseau.
+	s.known = make(map[string]*Known, len(chemins))
+
+	for _, chemin := range chemins {
+		entry := s.entries[chemin]
+		// L'ETag et la base décrivaient un autre serveur — celui d'avant un
+		// débranchement — ou rien du tout. Les laisser ferait partir un
+		// If-Match que le nouveau serveur ne peut pas reconnaître. Les vider
+		// envoie la note par le chemin des créations hors connexion, qui
+		// vérifie l'existence avant d'écrire et ne peut donc rien écraser.
+		entry.ETag = ""
+		entry.BaseHash = ""
+		entry.Dirty = true
+
+		s.enqueueLocked(Operation{Kind: OpWrite, Path: chemin})
+		s.known[chemin] = &Known{Path: chemin, Size: entry.Size, ModTime: entry.LocalMod}
+	}
+	s.indexed = true
+
+	return s.save()
+}
+
 // Clear vide le cache et la file. Sert à la déconnexion : rien de
 // l'utilisateur précédent ne doit rester sur l'appareil.
+//
+// L'inventaire en fait partie, et ce n'était pas le cas : known survivait à la
+// purge, avec les **noms** des notes du compte précédent, que la liste plate
+// affichait ensuite. Le mode local est arrivé sur cette promesse — il faut
+// pouvoir supprimer toutes ses notes — et l'a rendue vérifiable.
 func (s *Store) Clear() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -621,5 +693,8 @@ func (s *Store) Clear() error {
 	s.entries = map[string]*Entry{}
 	s.folders = map[string]bool{}
 	s.queue = nil
+	s.known = map[string]*Known{}
+	s.conflicts = map[string]Conflict{}
+	s.indexed = false
 	return s.save()
 }

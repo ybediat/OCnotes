@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Brique 1b/3 — valide les operations WebDAV et la detection de conflit.
 
@@ -93,7 +93,7 @@ try {
     if (-not $personal) { throw "Aucun espace personnel trouve." }
 
     $davBase  = $personal.root.webDavUrl.TrimEnd('/')
-    $treeName = "opennote-spike-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    $treeName = "ocnotes-spike-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
     $treeBase = Join-DavUrl -Base $davBase -Segment $treeName
 
     Write-Host "Espace  : $($personal.name)  [$($personal.driveType)]"

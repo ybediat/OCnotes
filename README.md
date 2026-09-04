@@ -1,6 +1,6 @@
 <div align="center">
 
-# OpenNote
+# OCnotes
 
 **Notes Markdown sur votre serveur OpenCloud — sur Android, même hors connexion.**
 
@@ -11,9 +11,9 @@
 
 </div>
 
-## Ce que fait OpenNote
+## Ce que fait OCnotes
 
-OpenNote est une application Android d'édition de notes **Markdown** stockées
+OCnotes est une application Android d'édition de notes **Markdown** stockées
 sur un serveur [**OpenCloud**](https://opencloud.eu) (fork d'ownCloud Infinite
 Scale). Vos notes restent de simples fichiers `.md` dans votre espace personnel :
 lisibles depuis l'interface web, synchronisables avec n'importe quel autre
@@ -65,7 +65,7 @@ internal/store/       cache local, file offline, ETags, conflits        [Go pur]
 internal/markdown/    mise en forme, titre, rendu de l'aperçu           [Go pur]
 internal/config/      réglages non sensibles                            [Go pur]
 mobile/               façade gomobile — contrat gelé avec Kotlin
-cmd/opennote-cli/     harnais de test desktop
+cmd/ocnotes-cli/     harnais de test desktop
 android/              projet Gradle, UI Compose
 scripts/              outillage de développement (PowerShell)
 ```
@@ -119,8 +119,8 @@ La chaîne de référence est Go 1.26.0, JDK 17, Gradle 8.9, les plateformes
 Android 26 et 35 et le NDK 27.3.13750724 : celle qu'installe la CI Ubuntu, et
 celle sur laquelle sont construits les APK publiés. Le script en contrôle les
 *minima*, pas l'égalité — un empaqueteur qui fournit sa propre image, F-Droid
-en particulier, obtient un avertissement et non un échec. `OPENNOTE_GRADLE_BIN`,
-`OPENNOTE_NDK_VERSION` et `ANDROID_NDK_HOME` permettent d'imposer chacun des
+en particulier, obtient un avertissement et non un échec. `OCNOTES_GRADLE_BIN`,
+`OCNOTES_NDK_VERSION` et `ANDROID_NDK_HOME` permettent d'imposer chacun des
 outils.
 
 Après chaque build CI, l'APK release non signé, l'AAR régénéré et le rapport
@@ -131,7 +131,7 @@ Pour une génération manuelle :
 ```bash
 go install golang.org/x/mobile/cmd/gomobile@v0.0.0-20260821190718-4776eadac327
 go install golang.org/x/mobile/cmd/gobind@v0.0.0-20260821190718-4776eadac327
-gomobile bind -target=android/arm64,android/amd64 -androidapi 26 -trimpath -ldflags="-s -w" -o android/app/libs/opennote.aar ./mobile
+gomobile bind -target=android/arm64,android/amd64 -androidapi 26 -trimpath -ldflags="-s -w" -o android/app/libs/ocnotes.aar ./mobile
 ```
 
 ```bash
@@ -179,9 +179,9 @@ variables ne sont pas définies, pour qu'un `go test ./...` n'écrive jamais par
 accident sur le serveur de quelqu'un :
 
 ```bash
-export OPENNOTE_IT_SERVER="https://cloud.exemple.fr"
-export OPENNOTE_IT_USER="monlogin"
-export OPENNOTE_IT_TOKEN="..."
+export OCNOTES_IT_SERVER="https://cloud.exemple.fr"
+export OCNOTES_IT_USER="monlogin"
+export OCNOTES_IT_TOKEN="..."
 ```
 
 ```bash
@@ -190,24 +190,24 @@ go test ./... -run TestIntegration -v
 
 ### CLI de test desktop
 
-`opennote-cli` exécute le vrai client Go contre un vrai serveur, sans
+`ocnotes-cli` exécute le vrai client Go contre un vrai serveur, sans
 téléphone. C'est le moyen le plus rapide de vérifier le cœur métier.
 
 ```bash
-go build -o bin/opennote-cli ./cmd/opennote-cli
+go build -o bin/ocnotes-cli ./cmd/ocnotes-cli
 ```
 
 Le token se lit dans l'environnement — jamais en argument, où il atterrirait
 dans l'historique du shell et la liste des processus :
 
 ```bash
-export OPENNOTE_SERVER="https://cloud.exemple.fr"
-export OPENNOTE_USER="monlogin"
-export OPENNOTE_APP_TOKEN="..."
+export OCNOTES_SERVER="https://cloud.exemple.fr"
+export OCNOTES_USER="monlogin"
+export OCNOTES_APP_TOKEN="..."
 ```
 
 ```bash
-./bin/opennote-cli tree
+./bin/ocnotes-cli tree
 ```
 
 Commandes : `drives`, `ls`, `tree`, `cat`, `put`, `mkdir`, `mv`, `rm`.

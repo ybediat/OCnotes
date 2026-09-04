@@ -4,7 +4,7 @@
         <activity
             android:name=".ui.editor.NativeEditTextProbeActivity"
             android:exported="true"
-            android:theme="@style/Theme.OpenNote"
+            android:theme="@style/Theme.OCnotes"
             android:windowSoftInputMode="adjustResize|stateAlwaysHidden" />
     </application>
 </manifest>

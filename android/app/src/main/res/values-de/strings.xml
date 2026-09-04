@@ -280,7 +280,7 @@
          ================================================================ -->
     <string name="menu_reglages">Einstellungen</string>
     <string name="menu_a_propos">Über</string>
-    <string name="a_propos_titre">Über OpenNote</string>
+    <string name="a_propos_titre">Über OCnotes</string>
     <string name="a_propos_description">Notizenmanager für Notizen, die auf einem OpenCloud-Server gespeichert sind. Erstellt von Yannis Bediat. V1.0 August 2026</string>
     <string name="a_propos_licence">Lizenz: MIT https://github.com/ybediat/OpenNote/tree/main?tab=MIT-1-ov-file</string>
     <string name="a_propos_depot">Git-Repository</string>

@@ -16,17 +16,17 @@ import (
 // WebDAV, modèle de notes, cache et sérialisation JSON, tous traversés par les
 // mêmes appels que ceux que fera Kotlin.
 //
-// Ignoré tant que OPENNOTE_IT_SERVER, OPENNOTE_IT_USER et OPENNOTE_IT_TOKEN ne
+// Ignoré tant que OCNOTES_IT_SERVER, OCNOTES_IT_USER et OCNOTES_IT_TOKEN ne
 // sont pas définis.
 func integrationEnv(t *testing.T) (server, user, token string) {
 	t.Helper()
 
-	server = os.Getenv("OPENNOTE_IT_SERVER")
-	user = os.Getenv("OPENNOTE_IT_USER")
-	token = os.Getenv("OPENNOTE_IT_TOKEN")
+	server = os.Getenv("OCNOTES_IT_SERVER")
+	user = os.Getenv("OCNOTES_IT_USER")
+	token = os.Getenv("OCNOTES_IT_TOKEN")
 
 	if server == "" || user == "" || token == "" {
-		t.Skip("intégration ignorée : définir OPENNOTE_IT_SERVER, OPENNOTE_IT_USER et OPENNOTE_IT_TOKEN")
+		t.Skip("intégration ignorée : définir OCNOTES_IT_SERVER, OCNOTES_IT_USER et OCNOTES_IT_TOKEN")
 	}
 	if testing.Short() {
 		t.Skip("intégration ignorée en mode court")
@@ -69,7 +69,7 @@ func cleanupWorkspace(t *testing.T, server, user, token, root string) {
 
 func TestIntegrationFacadeParcoursComplet(t *testing.T) {
 	server, user, token := integrationEnv(t)
-	root := fmt.Sprintf("opennote-facade-%d", time.Now().UnixNano())
+	root := fmt.Sprintf("ocnotes-facade-%d", time.Now().UnixNano())
 
 	app, err := NewApp(t.TempDir())
 	if err != nil {

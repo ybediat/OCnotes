@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Construit OpenNote depuis les sources sur Linux, sans AAR préexistant.
+# Construit OCnotes depuis les sources sur Linux, sans AAR préexistant.
 #
 # Chaîne de référence : JDK 17, Go 1.26.0, Android SDK 35, plateforme
 # Android 26, NDK 27.3.13750724 et Gradle 8.9. C'est celle qu'installe la CI du
@@ -13,10 +13,10 @@
 # avec la chaîne de référence est signalé, jamais fatal.
 #
 # Points de réglage, tous par l'environnement :
-#   OPENNOTE_GRADLE_BIN    exécutable Gradle à utiliser
-#   OPENNOTE_NDK_VERSION   révision de NDK à chercher dans le SDK
+#   OCNOTES_GRADLE_BIN    exécutable Gradle à utiliser
+#   OCNOTES_NDK_VERSION   révision de NDK à chercher dans le SDK
 #   ANDROID_NDK_HOME       chemin d'un NDK, prioritaire sur la recherche
-#   OPENNOTE_TOOLS_DIR     cache des binaires gomobile et gobind
+#   OCNOTES_TOOLS_DIR     cache des binaires gomobile et gobind
 
 set -Eeuo pipefail
 
@@ -83,7 +83,7 @@ android_sdk="$(cd -- "$android_sdk" && pwd -P)"
 # Le NDK ne sert qu'à gomobile : le module Android n'a aucune source native.
 # Trois sources, dans cet ordre — ce que l'environnement impose, la révision
 # demandée, puis le NDK le plus récent installé.
-wanted_ndk_version="${OPENNOTE_NDK_VERSION:-$NDK_VERSION}"
+wanted_ndk_version="${OCNOTES_NDK_VERSION:-$NDK_VERSION}"
 
 if [[ -n "${ANDROID_NDK_HOME:-}" ]]; then
     android_ndk="$ANDROID_NDK_HOME"
@@ -107,16 +107,16 @@ export ANDROID_SDK_ROOT="$android_sdk"
 export ANDROID_NDK_HOME="$(cd -- "$android_ndk" && pwd -P)"
 export GOFLAGS="${GOFLAGS:+$GOFLAGS }-mod=readonly"
 
-if [[ -n "${OPENNOTE_GRADLE_BIN:-}" ]]; then
-    [[ -x "$OPENNOTE_GRADLE_BIN" ]] || command -v "$OPENNOTE_GRADLE_BIN" >/dev/null 2>&1 ||
-        die "Gradle introuvable : $OPENNOTE_GRADLE_BIN"
-    gradle_command=("$OPENNOTE_GRADLE_BIN")
+if [[ -n "${OCNOTES_GRADLE_BIN:-}" ]]; then
+    [[ -x "$OCNOTES_GRADLE_BIN" ]] || command -v "$OCNOTES_GRADLE_BIN" >/dev/null 2>&1 ||
+        die "Gradle introuvable : $OCNOTES_GRADLE_BIN"
+    gradle_command=("$OCNOTES_GRADLE_BIN")
 elif [[ -f "$repo_dir/android/gradle/wrapper/gradle-wrapper.jar" ]]; then
     gradle_command=(sh "$repo_dir/android/gradlew")
 elif command -v gradle >/dev/null 2>&1; then
     gradle_command=(gradle)
 else
-    die "Gradle $GRADLE_VERSION ou supérieur est requis (ou définir OPENNOTE_GRADLE_BIN)"
+    die "Gradle $GRADLE_VERSION ou supérieur est requis (ou définir OCNOTES_GRADLE_BIN)"
 fi
 
 actual_gradle_version="$("${gradle_command[@]}" --version | awk '/^Gradle / { print $2; exit }')"
@@ -130,7 +130,7 @@ cd "$repo_dir"
 mobile_version="$(go list -m -f '{{.Version}}' golang.org/x/mobile)"
 [[ "$mobile_version" == v* ]] || die "version de golang.org/x/mobile non verrouillée dans go.mod"
 
-tools_dir="${OPENNOTE_TOOLS_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/opennote/go-tools/$mobile_version}"
+tools_dir="${OCNOTES_TOOLS_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/ocnotes/go-tools/$mobile_version}"
 mkdir -p "$tools_dir"
 
 printf 'Chaîne de build : Go %s, x/mobile %s, JDK %s, Gradle %s, NDK %s\n' \
@@ -151,10 +151,10 @@ gomobile bind \
     -androidapi=26 \
     -trimpath \
     -ldflags="-s -w" \
-    -o android/app/libs/opennote.aar \
+    -o android/app/libs/ocnotes.aar \
     ./mobile
 
-[[ -s android/app/libs/opennote.aar ]] || die "gomobile n'a pas produit opennote.aar"
+[[ -s android/app/libs/ocnotes.aar ]] || die "gomobile n'a pas produit ocnotes.aar"
 
 if (($# == 0)); then
     gradle_tasks=(testDebugUnitTest lintRelease assembleRelease)
@@ -162,19 +162,19 @@ else
     gradle_tasks=("$@")
 fi
 
-# `opennote.ndkVersion` dit à AGP quel NDK a réellement servi. Sans lui, le
+# `ocnotes.ndkVersion` dit à AGP quel NDK a réellement servi. Sans lui, le
 # module exigerait la révision épinglée dans build.gradle.kts, et le build
 # échouerait sur l'image d'un empaqueteur qui en porte une autre — soit
 # exactement ce que les contrôles ci-dessus viennent d'éviter.
 (
     cd android
     "${gradle_command[@]}" --no-daemon --stacktrace \
-        "-Popennote.ndkVersion=$actual_ndk_version" \
+        "-Pocnotes.ndkVersion=$actual_ndk_version" \
         "${gradle_tasks[@]}"
 )
 
 readonly apk="$repo_dir/android/app/build/outputs/apk/release/app-release-unsigned.apk"
 [[ -s "$apk" ]] || die "APK release introuvable : $apk"
 
-sha256sum android/app/libs/opennote.aar "$apk"
+sha256sum android/app/libs/ocnotes.aar "$apk"
 printf 'Build Linux terminé : %s\n' "$apk"

@@ -34,12 +34,35 @@ const FileName = "config.json"
 // version distingue les évolutions du format. Une configuration d'une version
 // inconnue est ignorée : mieux vaut refaire la connexion que repartir sur des
 // réglages mal interprétés.
-const version = 1
+//
+// La version 2 introduit Mode. Aucune migration depuis la 1 : une
+// configuration sans mode ne saurait pas dire si l'appareil a choisi de vivre
+// sans serveur ou n'a simplement pas encore choisi, et deviner à partir de la
+// présence d'une URL serait une règle de plus à maintenir pour un format que
+// personne n'a en production.
+const version = 2
+
+// Modes de fonctionnement, et ce que vaut le mode vide.
+//
+// ModeUnset est celui d'une installation neuve : rien n'est enregistré, aucun
+// choix n'est fait, et c'est ce que Load renvoie quand le fichier manque. Il
+// mène à l'écran de connexion, où l'utilisateur choisit entre un serveur et le
+// mode local.
+const (
+	ModeUnset  = ""
+	ModeLocal  = "local"
+	ModeServer = "server"
+)
 
 // Config rassemble ce qu'il faut retrouver au démarrage pour reconstituer la
 // session — tout sauf le secret.
 type Config struct {
 	Version int `json:"version"`
+
+	// Mode dit où vivent les notes : sur un serveur, ou sur ce seul appareil.
+	// Il commande la validation — un mode local n'a ni URL ni compte à
+	// vérifier — et l'écran de départ.
+	Mode string `json:"mode,omitempty"`
 
 	// ServerURL est la racine du serveur, sans chemin ni slash final.
 	ServerURL string `json:"serverUrl"`
@@ -137,7 +160,15 @@ func Clear(dataDir string) error {
 }
 
 // Validate vérifie qu'une configuration est cohérente avant d'être écrite.
+//
+// Une configuration locale n'a rien à valider : ni serveur, ni compte. Ses
+// autres champs — Root, LastPath — sont des chemins, pas des URL. Sans cette
+// sortie, Save refuserait d'écrire et le mode local ne pourrait même pas
+// retenir le dernier dossier consulté.
 func (c Config) Validate() error {
+	if c.Mode == ModeLocal {
+		return nil
+	}
 	if c.ServerURL == "" {
 		return fmt.Errorf("config: [%s] URL de serveur manquante", CodeServerURLMissing)
 	}
@@ -163,9 +194,18 @@ func (c Config) Validate() error {
 	return nil
 }
 
+// IsLocal indique que les notes ne vivent que sur cet appareil.
+func (c Config) IsLocal() bool {
+	return c.Mode == ModeLocal
+}
+
 // IsConnected indique qu'un serveur et un compte sont connus.
+//
+// Faux en mode local, où Validate ne vérifie plus rien : sans cette exclusion,
+// une configuration locale se présenterait comme connectée et l'interface
+// chercherait un serveur qui n'existe pas.
 func (c Config) IsConnected() bool {
-	return c.Validate() == nil
+	return !c.IsLocal() && c.Validate() == nil
 }
 
 // HasWorkspace indique qu'un espace a été choisi et que la bibliothèque de

@@ -2,7 +2,7 @@
 
 ## Objet
 
-OpenNote est une application Android de prise de notes Markdown synchronisées
+OCnotes est une application Android de prise de notes Markdown synchronisées
 avec un serveur OpenCloud. Les notes restent des fichiers : l'application ne
 leur impose ni base de données distante ni format propriétaire.
 
@@ -32,12 +32,12 @@ de vie Android et du stockage chiffré du jeton de connexion.
 
 ## Données et synchronisation
 
-OpenNote est *local-first* : une modification est d'abord enregistrée dans le
+OCnotes est *local-first* : une modification est d'abord enregistrée dans le
 stockage local, puis placée dans une file persistante. Elle est envoyée au
 serveur lorsque le réseau est disponible.
 
 Les écritures distantes utilisent les ETags et les préconditions HTTP. Si une
-note a été modifiée à la fois localement et sur le serveur, OpenNote n'écrase
+note a été modifiée à la fois localement et sur le serveur, OCnotes n'écrase
 pas silencieusement la version distante : la situation est signalée afin que
 l'utilisateur puisse choisir la suite.
 
@@ -52,7 +52,7 @@ bug.
 - `.docx` et `.odt` : lecture seule et rendu en aperçu lorsque le contenu peut
   être interprété sans risque.
 
-Les fichiers restent dans leur format d'origine. OpenNote n'écrit pas dans les
+Les fichiers restent dans leur format d'origine. OCnotes n'écrit pas dans les
 documents bureautiques.
 
 ## Organisation du dépôt
@@ -60,7 +60,7 @@ documents bureautiques.
 | Répertoire | Rôle |
 |---|---|
 | `android/` | application Android, ressources et tests Kotlin |
-| `cmd/opennote-cli/` | outil en ligne de commande pour le cœur Go |
+| `cmd/ocnotes-cli/` | outil en ligne de commande pour le cœur Go |
 | `internal/config/` | configuration non sensible |
 | `internal/documents/` | lecture des documents bureautiques |
 | `internal/markdown/` | analyse, formatage et rendu Markdown |
@@ -92,7 +92,7 @@ Le binding Go doit être régénéré après une modification de l'API exposée 
 
 ```bash
 gomobile bind -target=android/arm64,android/amd64 -androidapi 26 -trimpath \
-  -ldflags="-s -w" -o android/app/libs/opennote.aar ./mobile
+  -ldflags="-s -w" -o android/app/libs/ocnotes.aar ./mobile
 ```
 
 ## Contribution et sécurité
