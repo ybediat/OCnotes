@@ -1,1 +1,1 @@
-Offline-first Markdown notes for your OpenCloud server
+Local or OpenCloud-synchronized Markdown notes

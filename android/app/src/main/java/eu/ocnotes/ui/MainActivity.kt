@@ -21,6 +21,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import eu.ocnotes.appContainer
+import eu.ocnotes.data.AppMode
 import eu.ocnotes.ui.common.ChargementPleinEcran
 import eu.ocnotes.ui.common.TiroirApplication
 import eu.ocnotes.ui.root.DemarrageState
@@ -67,6 +68,13 @@ private fun OCnotesApp(
     val sessionExpiree by viewModel.sessionExpiree.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val etatTiroir = rememberDrawerState(DrawerValue.Closed)
+    val container = LocalContext.current.appContainer
+
+    LaunchedEffect(container) {
+        container.repository.mode.collect { mode ->
+            container.syncScheduler.setLocalOnly(mode == AppMode.LOCAL)
+        }
+    }
 
     // Le geste reste réservé au navigateur. Dans l'éditeur, le tiroir Material
     // écoute toute la surface et peut voler un défilement vertical dès que le

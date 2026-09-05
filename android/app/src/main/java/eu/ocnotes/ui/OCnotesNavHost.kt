@@ -64,9 +64,11 @@ fun OCnotesNavHost(
                         SuiteConnexion.NAVIGATEUR -> Routes.NAVIGATEUR
                     }
                     navController.navigate(cible) {
-                        // On ne revient pas à l'écran de connexion par le
-                        // bouton retour : la session est ouverte.
-                        popUpTo(Routes.CONNEXION) { inclusive = true }
+                        if (suite == SuiteConnexion.NAVIGATEUR) {
+                            popUpTo(0) { inclusive = true }
+                        } else {
+                            popUpTo(Routes.CONNEXION) { inclusive = true }
+                        }
                     }
                 },
             )
@@ -77,6 +79,11 @@ fun OCnotesNavHost(
                 onEspaceChoisi = {
                     navController.navigate(Routes.NAVIGATEUR) {
                         popUpTo(Routes.ESPACE) { inclusive = true }
+                    }
+                },
+                onAnnulerLocal = {
+                    navController.navigate(Routes.NAVIGATEUR) {
+                        popUpTo(0) { inclusive = true }
                     }
                 },
             )
@@ -106,6 +113,11 @@ fun OCnotesNavHost(
                     navController.navigate(Routes.CONNEXION) {
                         // Après une déconnexion, toute la pile est périmée :
                         // le cache est vide et la session fermée.
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+                onConnecterServeur = {
+                    navController.navigate(Routes.CONNEXION) {
                         popUpTo(0) { inclusive = true }
                     }
                 },

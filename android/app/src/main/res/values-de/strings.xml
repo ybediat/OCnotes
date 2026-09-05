@@ -71,6 +71,9 @@
     <string name="err_url_serveur_manquante">Geben Sie die Serveradresse an.</string>
     <string name="err_url_serveur_invalide">Ungültige Serveradresse. Sie muss mit http:// oder https:// beginnen.</string>
     <string name="err_utilisateur_manquant">Geben Sie Ihren Benutzernamen an.</string>
+    <string name="err_mode_local">Für diese Aktion ist ein verbundener Server erforderlich.</string>
+    <string name="err_quota_local">Das Speicherlimit ist zu niedrig, um alle Notizen auf diesem Gerät zu behalten.</string>
+    <string name="err_modifications_attente">Vor dem Trennen des Servers müssen noch Änderungen synchronisiert werden.</string>
 
     <!-- ================================================================
          Start
@@ -86,7 +89,7 @@
          Dies ist der erste Blockierungspunkt einer selbstgehosteten Anwendung.
          Der Menüpfad sollte der von OpenCloud bleiben, in der Sprache, in der OpenCloud ihn anzeigt.
          ================================================================ -->
-    <string name="login_accroche">Ihre Markdown-Notizen auf Ihrem OpenCloud-Server.</string>
+    <string name="login_accroche">Ihre Markdown-Notizen auf diesem Gerät oder mit OpenCloud.</string>
     <string name="login_serveur_label">Serveradresse</string>
     <string name="login_serveur_exemple">https://cloud.beispiel.de</string>
     <string name="login_utilisateur_label">Benutzername</string>
@@ -96,6 +99,10 @@
     <!-- Ein Netzwerkfehler erfordert keine Korrektur: Die Beschreibung lädt zum erneuten Versuch ein, nicht zur erneuten Eingabe. -->
     <string name="login_connecter">Anmelden</string>
     <string name="login_reessayer">Erneut versuchen</string>
+    <string name="login_continuer_local">Ohne Server fortfahren</string>
+    <string name="login_continuer_local_aide">Ihre Notizen bleiben nur auf diesem Gerät. Sie können später einen Server verbinden.</string>
+    <string name="login_rester_local">Im lokalen Modus bleiben</string>
+    <string name="login_rester_local_aide">Die Verbindung wird abgebrochen und Ihre lokalen Notizen bleiben unverändert.</string>
     <string name="login_aide_titre">Noch kein App-Token?</string>
     <string name="login_aide_chemin">In OpenCloud: Kontteinstellungen → App-Tokens → + Neu. Geben Sie ihm einen Namen und ein Ablaufdatum. Das Token wird nur einmal angezeigt – kopieren Sie es sofort.</string>
     <string name="login_aide_revocation">Dies ist nicht Ihr Passwort: Ein App-Token kann widerrufen werden, ohne Ihre Anmeldedaten zu ändern.</string>
@@ -113,6 +120,10 @@
     <string name="espace_chemin_aide">Der Ordner wird erstellt, falls er nicht existiert. Lassen Sie das Feld leer, um das Stammverzeichnis des Speicherorts zu verwenden, z. B. wenn Ihre Notizen bereits dort sind.</string>
     <string name="espace_continuer">Weiter</string>
     <string name="espace_preparation">Vorbereitung…</string>
+    <string name="espace_local_titre">Was soll mit den lokalen Notizen geschehen?</string>
+    <string name="espace_local_explication">Derzeit auf diesem Gerät gespeicherte Notizen: %1$d. Sie können sie auf den Server hochladen oder löschen und nur die bereits online vorhandenen Notizen verwenden.</string>
+    <string name="espace_local_envoyer">Auf den Server hochladen</string>
+    <string name="espace_local_remplacer">Lokale Notizen löschen</string>
     <string name="espace_virtuel">Zusammenschluss der mit Ihnen geteilten Ordner, kein Speicherort: Hier können keine Notizordner erstellt werden.</string>
     <string name="espace_inutilisable">Dieser Speicherort kann keine Notizen hosten.</string>
     <string name="espace_personnel">Ihr persönlicher Speicherort</string>
@@ -268,12 +279,16 @@
     <string name="dialogue_supprimer_titre">„%1$s“ löschen?</string>
     <string name="dialogue_supprimer_dossier">Der Ordner und alle Notizen, die er enthält, werden vom Server gelöscht. Diese Aktion ist endgültig.</string>
     <string name="dialogue_supprimer_note">Die Notiz wird vom Server gelöscht. Diese Aktion ist endgültig.</string>
+    <string name="dialogue_supprimer_dossier_local">Der Ordner und alle enthaltenen Notizen werden endgültig von diesem Gerät gelöscht. Es gibt keine Serverkopie.</string>
+    <string name="dialogue_supprimer_note_local">Die Notiz wird endgültig von diesem Gerät gelöscht. Es gibt keine Serverkopie.</string>
     <plurals name="dialogue_supprimer_lot_titre">
         <item quantity="one">%d Element löschen?</item>
         <item quantity="other">%d Elemente löschen?</item>
     </plurals>
     <string name="dialogue_supprimer_lot_notes">Die ausgewählten Elemente werden vom Server gelöscht. Diese Aktion ist endgültig.</string>
     <string name="dialogue_supprimer_lot_dossiers">Die ausgewählten Elemente werden vom Server gelöscht, einschließlich der Ordner mit ihrem gesamten Inhalt. Diese Aktion ist endgültig.</string>
+    <string name="dialogue_supprimer_lot_dossiers_local">Die ausgewählten Elemente werden endgültig von diesem Gerät gelöscht, einschließlich der Ordner und ihrer Inhalte. Es gibt keine Serverkopie.</string>
+    <string name="dialogue_supprimer_lot_notes_local">Die ausgewählten Notizen werden endgültig von diesem Gerät gelöscht. Es gibt keine Serverkopie.</string>
 
     <!-- ================================================================
          Seitenmenü
@@ -281,7 +296,7 @@
     <string name="menu_reglages">Einstellungen</string>
     <string name="menu_a_propos">Über</string>
     <string name="a_propos_titre">Über OCnotes</string>
-    <string name="a_propos_description">Notizenmanager für Notizen, die auf einem OpenCloud-Server gespeichert sind. Erstellt von Yannis Bediat. V1.0 August 2026</string>
+    <string name="a_propos_description">Manager für Markdown-Notizen auf diesem Gerät oder synchronisiert mit OpenCloud. Erstellt von Yannis Bediat. V1.0 August 2026</string>
     <string name="a_propos_licence">Lizenz: MIT https://github.com/ybediat/OpenNote/tree/main?tab=MIT-1-ov-file</string>
     <string name="a_propos_depot">Git-Repository</string>
 
@@ -318,10 +333,13 @@
     <string name="reglages_sync_maintenant">Jetzt synchronisieren</string>
 
     <string name="reglages_cache_titre">Offline-Cache</string>
+    <string name="reglages_stockage_local_titre">Notizen auf diesem Gerät</string>
     <string name="reglages_cache_quota">Speicherlimit</string>
     <string name="reglages_cache_utilisation">Nutzung</string>
     <string name="reglages_cache_usage">%1$s von %2$s verwendet</string>
+    <string name="reglages_stockage_local_usage">%1$s gespeichert · Warnung bei %2$s</string>
     <string name="reglages_cache_explication">Lokale Entwürfe, Konfliktkopien und ausstehende Operationen werden niemals automatisch gelöscht.</string>
+    <string name="reglages_cache_explication_locale">Alle Ihre Notizen befinden sich auf diesem Gerät. Das Limit dient nur als Warnung: Notizen werden nie automatisch gelöscht.</string>
     <string name="reglages_cache_modifier_quota">Limit ändern</string>
     <string name="reglages_cache_liberer">Speicherplatz freigeben</string>
     <string name="reglages_cache_choix_titre">Offline-Cache-Limit</string>
@@ -335,6 +353,40 @@
     <string name="reglages_deconnexion_explication">Das Abmelden löscht das Token, die Konfiguration und den lokalen Cache dieses Geräts. Die Notizen bleiben auf dem Server.</string>
     <string name="reglages_deconnexion_titre">Abmelden?</string>
     <string name="reglages_deconnexion_confirmation">Das Token, die Konfiguration und der lokale Cache werden gelöscht. Ihre Notizen bleiben auf dem Server.</string>
+    <string name="reglages_local_titre">Lokaler Speicher</string>
+    <string name="reglages_local_explication">Alle Notizen befinden sich ausschließlich auf diesem Gerät. Es findet keine Synchronisierung statt.</string>
+    <string name="reglages_local_connecter">Server verbinden</string>
+    <string name="reglages_local_utiliser">Nur dieses Gerät verwenden</string>
+    <string name="reglages_local_utiliser_explication">Auf dem Gerät fehlende Notizen werden zuerst heruntergeladen. Kopien auf dem Server werden nicht gelöscht.</string>
+    <string name="reglages_local_plan_titre">In den lokalen Modus wechseln?</string>
+    <string name="reglages_local_plan">Notizen im Speicher: %1$d. Herunterzuladende Inhalte: %2$d (etwa %3$s).</string>
+    <plurals name="reglages_local_plan_attente">
+        <item quantity="one">Zuerst muss %d Änderung an den Server gesendet werden.</item>
+        <item quantity="other">Zuerst müssen %d Änderungen an den Server gesendet werden.</item>
+    </plurals>
+    <string name="reglages_local_plan_quota">Das Gerät benötigt %1$s und damit mehr als das aktuelle Limit von %2$s. Erhöhen Sie zuerst das Speicherlimit.</string>
+    <string name="reglages_local_rapatrier">Herunterladen und fortfahren</string>
+    <string name="reglages_local_rapatriement_titre">Notizen werden heruntergeladen…</string>
+    <string name="reglages_local_rapatriement_progression">Fortschritt: %1$d/%2$d</string>
+    <string name="reglages_local_rapatriement_erreur">Der Server antwortet nicht mehr. Die Verbindung wurde nicht getrennt; versuchen Sie es erneut, sobald das Netzwerk verfügbar ist.</string>
+    <string name="reglages_local_indisponibles_titre">Einige Notizen sind weiterhin nicht verfügbar</string>
+    <plurals name="reglages_local_indisponibles">
+        <item quantity="one">Eine Notiz konnte nicht heruntergeladen werden. Sie bleibt auf dem Server, ist aber auf diesem Gerät nicht mehr verfügbar. Trotzdem fortfahren?</item>
+        <item quantity="other">%d Notizen konnten nicht heruntergeladen werden. Sie bleiben auf dem Server, sind aber auf diesem Gerät nicht mehr verfügbar. Trotzdem fortfahren?</item>
+    </plurals>
+    <string name="reglages_local_continuer">Trotzdem fortfahren</string>
+    <plurals name="reglages_local_active">
+        <item quantity="one">Lokaler Modus aktiviert. Eine Notiz bleibt auf diesem Gerät.</item>
+        <item quantity="other">Lokaler Modus aktiviert. %d Notizen bleiben auf diesem Gerät.</item>
+    </plurals>
+    <plurals name="reglages_local_abandonnees">
+        <item quantity="one">Lokaler Modus aktiviert. Eine auf dem Server verbliebene Notiz ist auf diesem Gerät nicht verfügbar.</item>
+        <item quantity="other">Lokaler Modus aktiviert. %d auf dem Server verbliebene Notizen sind auf diesem Gerät nicht verfügbar.</item>
+    </plurals>
+    <string name="reglages_local_effacer">Alle Notizen löschen</string>
+    <string name="reglages_local_effacer_explication">Setzt die App zurück. Im lokalen Modus gibt es diese Notizen nirgendwo sonst.</string>
+    <string name="reglages_local_effacer_titre">Alle Notizen endgültig löschen?</string>
+    <string name="reglages_local_effacer_confirmation">Alle Notizen und Ordner auf diesem Gerät werden endgültig gelöscht. Dies kann nicht rückgängig gemacht werden.</string>
     <!-- Nicht gesendete Änderungen würden verloren gehen: Dies ist die einzige Warnung auf dem Bildschirm,
          die angibt, was auf dem Spiel steht. -->
     <plurals name="reglages_deconnexion_attente">

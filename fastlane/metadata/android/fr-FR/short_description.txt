@@ -1,1 +1,1 @@
-Notes Markdown hors connexion sur votre serveur OpenCloud
+Notes Markdown locales ou synchronisées avec OpenCloud

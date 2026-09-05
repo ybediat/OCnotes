@@ -7,9 +7,11 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import eu.ocnotes.AppContainer
 import eu.ocnotes.R
+import eu.ocnotes.data.AppMode
 import eu.ocnotes.data.AppStateDto
 import eu.ocnotes.data.CacheStateDto
 import eu.ocnotes.data.ConflictDto
+import eu.ocnotes.data.DetachPlanDto
 import eu.ocnotes.data.OCnotesException
 import eu.ocnotes.data.OCnotesRepository
 import eu.ocnotes.data.MoteurEdition
@@ -46,7 +48,16 @@ data class SettingsUiState(
     val erreur: Texte? = null,
     val deconnecte: Boolean = false,
     val moteurEdition: MoteurEdition = MoteurEdition.DEFAUT,
-)
+    val preparationModeLocal: Boolean = false,
+    val planModeLocal: DetachPlanDto? = null,
+    val rapatriementEnCours: Boolean = false,
+    val rapatriementTotal: Int = 0,
+    val rapatriementRestant: Int = 0,
+    /** Contenus impossibles à rapatrier ; une confirmation séparée est requise. */
+    val confirmationAbandon: Int = 0,
+) {
+    val modeLocal: Boolean get() = etat.mode == AppMode.LOCAL
+}
 
 class SettingsViewModel(
     private val repository: OCnotesRepository,
@@ -142,6 +153,156 @@ class SettingsViewModel(
             } catch (e: OCnotesException) {
                 _uiState.update { it.copy(erreur = e.texte()) }
             }
+        }
+    }
+
+    /** Calcule le coût réel avant de proposer le passage au stockage local. */
+    fun preparerModeLocal() {
+        if (_uiState.value.preparationModeLocal || _uiState.value.rapatriementEnCours) return
+        _uiState.update { it.copy(preparationModeLocal = true, erreur = null, resume = null) }
+        viewModelScope.launch {
+            try {
+                val plan = repository.detachPlan()
+                _uiState.update { it.copy(preparationModeLocal = false, planModeLocal = plan) }
+            } catch (e: OCnotesException) {
+                _uiState.update { it.copy(preparationModeLocal = false, erreur = e.texte()) }
+            }
+        }
+    }
+
+    fun fermerPlanModeLocal() = _uiState.update { it.copy(planModeLocal = null) }
+
+    /**
+     * Pousse d'abord les écritures, puis rapatrie les contenus par petits lots.
+     * La bascule finale ne se fait que lorsque tout est local ou après une
+     * seconde confirmation explicite pour les contenus indisponibles.
+     */
+    fun activerModeLocal() {
+        val planInitial = _uiState.value.planModeLocal ?: return
+        if (planInitial.overQuota || _uiState.value.rapatriementEnCours) return
+        syncScheduler.cancelAll()
+
+        _uiState.update {
+            it.copy(
+                planModeLocal = null,
+                rapatriementEnCours = true,
+                rapatriementTotal = planInitial.missing,
+                rapatriementRestant = planInitial.missing,
+                erreur = null,
+                resume = null,
+            )
+        }
+
+        viewModelScope.launch {
+            try {
+                var plan = planInitial
+                if (plan.pending > 0) {
+                    val rapport = repository.sync()
+                    if (rapport.hasError || rapport.remaining > 0) {
+                        syncScheduler.setLocalOnly(false)
+                        _uiState.update {
+                            it.copy(
+                                rapatriementEnCours = false,
+                                resume = resumeDe(rapport),
+                                resumePartiel = true,
+                            )
+                        }
+                        return@launch
+                    }
+                    plan = repository.detachPlan()
+                    if (plan.overQuota) {
+                        syncScheduler.setLocalOnly(false)
+                        _uiState.update {
+                            it.copy(
+                                rapatriementEnCours = false,
+                                planModeLocal = plan,
+                            )
+                        }
+                        return@launch
+                    }
+                    _uiState.update {
+                        it.copy(
+                            rapatriementTotal = plan.missing,
+                            rapatriementRestant = plan.missing,
+                        )
+                    }
+                }
+
+                var restant = plan.missing
+                while (restant > 0) {
+                    val lot = repository.downloadBatch()
+                    restant = lot.remaining
+                    _uiState.update { it.copy(rapatriementRestant = restant) }
+
+                    if (lot.error.isNotBlank()) {
+                        syncScheduler.setLocalOnly(false)
+                        _uiState.update {
+                            it.copy(
+                                rapatriementEnCours = false,
+                                erreur = Texte.de(R.string.reglages_local_rapatriement_erreur),
+                            )
+                        }
+                        return@launch
+                    }
+                    if (lot.downloaded == 0 && restant > 0) {
+                        _uiState.update {
+                            it.copy(
+                                rapatriementEnCours = false,
+                                confirmationAbandon = restant,
+                            )
+                        }
+                        return@launch
+                    }
+                }
+
+                terminerModeLocal()
+            } catch (e: OCnotesException) {
+                syncScheduler.setLocalOnly(false)
+                _uiState.update { it.copy(rapatriementEnCours = false, erreur = e.texte()) }
+            }
+        }
+    }
+
+    fun annulerAbandon() {
+        syncScheduler.setLocalOnly(false)
+        _uiState.update { it.copy(confirmationAbandon = 0) }
+    }
+
+    fun confirmerAbandon() {
+        if (_uiState.value.confirmationAbandon == 0) return
+        _uiState.update { it.copy(confirmationAbandon = 0, rapatriementEnCours = true) }
+        viewModelScope.launch {
+            try {
+                terminerModeLocal()
+            } catch (e: OCnotesException) {
+                syncScheduler.setLocalOnly(false)
+                _uiState.update { it.copy(rapatriementEnCours = false, erreur = e.texte()) }
+            }
+        }
+    }
+
+    private suspend fun terminerModeLocal() {
+        val resultat = repository.detach()
+        syncScheduler.cancelAll()
+        val nouvelEtat = repository.state()
+        val nouveauCache = repository.cacheState()
+        _uiState.update {
+            it.copy(
+                etat = nouvelEtat,
+                cache = nouveauCache,
+                enAttente = 0,
+                tokenValide = false,
+                conflits = emptyList(),
+                dialogueConflits = false,
+                rapatriementEnCours = false,
+                rapatriementRestant = 0,
+                resumePartiel = resultat.abandoned.isNotEmpty(),
+                resume = if (resultat.abandoned.isEmpty()) {
+                    Texte.pluriel(R.plurals.reglages_local_active, resultat.kept)
+                } else {
+                    Texte.pluriel(R.plurals.reglages_local_abandonnees, resultat.abandoned.size)
+                },
+            )
         }
     }
 

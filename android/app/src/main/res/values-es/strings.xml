@@ -69,6 +69,9 @@
     <string name="err_url_serveur_manquante">Introduzca la dirección del servidor.</string>
     <string name="err_url_serveur_invalide">Dirección del servidor no válida. Debe comenzar por http:// o https://</string>
     <string name="err_utilisateur_manquant">Introduzca su nombre de usuario.</string>
+    <string name="err_mode_local">Esta acción requiere un servidor conectado.</string>
+    <string name="err_quota_local">El límite de almacenamiento es demasiado bajo para guardar todas las notas en este dispositivo.</string>
+    <string name="err_modifications_attente">Aún deben sincronizarse algunos cambios antes de desconectar el servidor.</string>
 
     <!-- ================================================================
          Démarrage
@@ -85,7 +88,7 @@
          Le chemin de menu doit rester celui d'OpenCloud, dans la langue où
          OpenCloud l'affiche.
          ================================================================ -->
-    <string name="login_accroche">Sus notas Markdown, en su servidor OpenCloud.</string>
+    <string name="login_accroche">Sus notas Markdown, en este dispositivo o con OpenCloud.</string>
     <string name="login_serveur_label">Dirección del servidor</string>
     <string name="login_serveur_exemple">https://cloud.ejemplo.es</string>
     <string name="login_utilisateur_label">Nombre de usuario</string>
@@ -96,6 +99,10 @@
          réessayer, pas à recommencer la saisie. -->
     <string name="login_connecter">Iniciar sesión</string>
     <string name="login_reessayer">Volver a intentarlo</string>
+    <string name="login_continuer_local">Continuar sin servidor</string>
+    <string name="login_continuer_local_aide">Sus notas permanecerán únicamente en este dispositivo. Podrá conectar un servidor más adelante.</string>
+    <string name="login_rester_local">Permanecer en modo local</string>
+    <string name="login_rester_local_aide">Se cancela la conexión y sus notas locales permanecen intactas.</string>
     <string name="login_aide_titre">¿Todavía no tiene un App Token?</string>
     <string name="login_aide_chemin">En OpenCloud: Ajustes de la cuenta → App Tokens → + New. Asígnele un nombre y una fecha de caducidad. El token solo se muestra una vez, así que cópielo inmediatamente.</string>
     <string name="login_aide_revocation">No es su contraseña: un App Token se puede revocar sin cambiar sus credenciales.</string>
@@ -114,6 +121,10 @@
     <string name="espace_chemin_aide">La carpeta se crea si no existe. Deje el campo vacío para utilizar la raíz del espacio, por ejemplo, si sus notas ya están allí.</string>
     <string name="espace_continuer">Continuar</string>
     <string name="espace_preparation">Preparando…</string>
+    <string name="espace_local_titre">¿Qué desea hacer con las notas locales?</string>
+    <string name="espace_local_explication">Notas actuales en este dispositivo: %1$d. Puede enviarlas al servidor o eliminarlas y usar solo las notas que ya están en línea.</string>
+    <string name="espace_local_envoyer">Enviar al servidor</string>
+    <string name="espace_local_remplacer">Eliminar las notas locales</string>
     <string name="espace_virtuel">Conjunto de carpetas compartidas con usted, no un espacio de almacenamiento: no se puede crear una carpeta de notas aquí.</string>
     <string name="espace_inutilisable">Este espacio no puede alojar notas.</string>
     <string name="espace_personnel">Su espacio personal</string>
@@ -152,10 +163,13 @@
     <string name="sync_hors_ligne">Servidor inaccesible. No hay nada que enviar por ahora.</string>
 
     <string name="reglages_cache_titre">Caché sin conexión</string>
+    <string name="reglages_stockage_local_titre">Notas en este dispositivo</string>
     <string name="reglages_cache_quota">Límite de espacio</string>
     <string name="reglages_cache_utilisation">Uso</string>
     <string name="reglages_cache_usage">%1$s utilizados de %2$s</string>
+    <string name="reglages_stockage_local_usage">%1$s almacenados · aviso a los %2$s</string>
     <string name="reglages_cache_explication">Los borradores locales, las copias de conflicto y las operaciones pendientes nunca se eliminan automáticamente.</string>
+    <string name="reglages_cache_explication_locale">Todas sus notas se guardan en este dispositivo. El límite es solo una advertencia: ninguna nota se elimina automáticamente.</string>
     <string name="reglages_cache_modifier_quota">Cambiar el límite</string>
     <string name="reglages_cache_liberer">Liberar espacio</string>
     <string name="reglages_cache_choix_titre">Límite de caché sin conexión</string>
@@ -286,12 +300,16 @@
     <string name="dialogue_supprimer_titre">¿Eliminar «%1$s»?</string>
     <string name="dialogue_supprimer_dossier">La carpeta y todas las notas que contiene se eliminarán del servidor. Esta acción es permanente.</string>
     <string name="dialogue_supprimer_note">La nota se eliminará del servidor. Esta acción es permanente.</string>
+    <string name="dialogue_supprimer_dossier_local">La carpeta y todas sus notas se eliminarán definitivamente de este dispositivo. No existe ninguna copia en el servidor.</string>
+    <string name="dialogue_supprimer_note_local">La nota se eliminará definitivamente de este dispositivo. No existe ninguna copia en el servidor.</string>
     <plurals name="dialogue_supprimer_lot_titre">
         <item quantity="one">¿Eliminar %d elemento?</item>
         <item quantity="other">¿Eliminar %d elementos?</item>
     </plurals>
     <string name="dialogue_supprimer_lot_notes">Los elementos seleccionados se eliminarán del servidor. Esta acción es permanente.</string>
     <string name="dialogue_supprimer_lot_dossiers">Los elementos seleccionados se eliminarán del servidor, incluidas las carpetas con todo su contenido. Esta acción es permanente.</string>
+    <string name="dialogue_supprimer_lot_dossiers_local">Los elementos seleccionados se eliminarán definitivamente de este dispositivo, incluidas las carpetas y su contenido. No existe ninguna copia en el servidor.</string>
+    <string name="dialogue_supprimer_lot_notes_local">Las notas seleccionadas se eliminarán definitivamente de este dispositivo. No existe ninguna copia en el servidor.</string>
 
     <!-- ================================================================
          Menu latéral
@@ -299,7 +317,7 @@
     <string name="menu_reglages">Ajustes</string>
     <string name="menu_a_propos">Acerca de</string>
     <string name="a_propos_titre">Acerca de OCnotes</string>
-    <string name="a_propos_description">Gestor de notas almacenadas en un servidor OpenCloud. Creado por Yannis Bediat. v1.0 agosto de 2026</string>
+    <string name="a_propos_description">Gestor de notas Markdown, almacenadas en este dispositivo o sincronizadas con OpenCloud. Creado por Yannis Bediat. v1.0 agosto de 2026</string>
     <string name="a_propos_licence">Licencia: MIT https://github.com/ybediat/OpenNote/tree/main?tab=MIT-1-ov-file</string>
     <string name="a_propos_depot">Repositorio Git</string>
 
@@ -336,6 +354,44 @@
     <string name="reglages_deconnexion_explication">Al cerrar sesión se eliminan el token, la configuración y la caché local de este dispositivo. Sus notas permanecen en el servidor.</string>
     <string name="reglages_deconnexion_titre">¿Cerrar sesión?</string>
     <string name="reglages_deconnexion_confirmation">Se eliminarán el token, la configuración y la caché local. Sus notas permanecen en el servidor.</string>
+    <string name="reglages_local_titre">Almacenamiento local</string>
+    <string name="reglages_local_explication">Todas las notas se guardan únicamente en este dispositivo. No se realiza ninguna sincronización.</string>
+    <string name="reglages_local_connecter">Conectar un servidor</string>
+    <string name="reglages_local_utiliser">Usar solo este dispositivo</string>
+    <string name="reglages_local_utiliser_explication">Primero se descargarán las notas que faltan en el dispositivo. Las copias del servidor no se eliminarán.</string>
+    <string name="reglages_local_plan_titre">¿Cambiar al modo local?</string>
+    <string name="reglages_local_plan">Notas en el espacio: %1$d. Contenidos que descargar: %2$d (unos %3$s).</string>
+    <plurals name="reglages_local_plan_attente">
+        <item quantity="one">Primero debe enviarse %d cambio al servidor.</item>
+        <item quantity="other">Primero deben enviarse %d cambios al servidor.</item>
+        <item quantity="many">Primero deben enviarse %d cambios al servidor.</item>
+    </plurals>
+    <string name="reglages_local_plan_quota">El dispositivo necesitará %1$s, por encima del límite actual de %2$s. Aumente primero el límite de almacenamiento.</string>
+    <string name="reglages_local_rapatrier">Descargar y continuar</string>
+    <string name="reglages_local_rapatriement_titre">Descargando notas…</string>
+    <string name="reglages_local_rapatriement_progression">Progreso: %1$d/%2$d</string>
+    <string name="reglages_local_rapatriement_erreur">El servidor dejó de responder. No se ha desconectado nada; inténtelo de nuevo cuando haya red.</string>
+    <string name="reglages_local_indisponibles_titre">Algunas notas siguen sin estar disponibles</string>
+    <plurals name="reglages_local_indisponibles">
+        <item quantity="one">No se pudo descargar una nota. Permanecerá en el servidor, pero ya no estará disponible en este dispositivo. ¿Continuar de todos modos?</item>
+        <item quantity="other">No se pudieron descargar %d notas. Permanecerán en el servidor, pero ya no estarán disponibles en este dispositivo. ¿Continuar de todos modos?</item>
+        <item quantity="many">No se pudieron descargar %d notas. Permanecerán en el servidor, pero ya no estarán disponibles en este dispositivo. ¿Continuar de todos modos?</item>
+    </plurals>
+    <string name="reglages_local_continuer">Continuar de todos modos</string>
+    <plurals name="reglages_local_active">
+        <item quantity="one">Modo local activado. Se conserva una nota en este dispositivo.</item>
+        <item quantity="other">Modo local activado. Se conservan %d notas en este dispositivo.</item>
+        <item quantity="many">Modo local activado. Se conservan %d notas en este dispositivo.</item>
+    </plurals>
+    <plurals name="reglages_local_abandonnees">
+        <item quantity="one">Modo local activado. Una nota que permanece en el servidor no está disponible en este dispositivo.</item>
+        <item quantity="other">Modo local activado. %d notas que permanecen en el servidor no están disponibles en este dispositivo.</item>
+        <item quantity="many">Modo local activado. %d notas que permanecen en el servidor no están disponibles en este dispositivo.</item>
+    </plurals>
+    <string name="reglages_local_effacer">Eliminar todas las notas</string>
+    <string name="reglages_local_effacer_explication">Restablece la aplicación. En modo local, estas notas no existen en ningún otro lugar.</string>
+    <string name="reglages_local_effacer_titre">¿Eliminar definitivamente todas las notas?</string>
+    <string name="reglages_local_effacer_confirmation">Todas las notas y carpetas de este dispositivo se eliminarán definitivamente. Esta acción no se puede deshacer.</string>
     <!-- Des modifications non envoyées seraient perdues : c'est la seule mise
          en garde de l'écran, elle compte ce qui est en jeu. -->
     <plurals name="reglages_deconnexion_attente">

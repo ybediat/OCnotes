@@ -16,6 +16,8 @@ import kotlinx.serialization.Serializable
 /** Réponse de `App.stateJSON()`. */
 @Serializable
 data class AppStateDto(
+    /** Vide au premier lancement, puis `local` ou `server`. */
+    val mode: String = "",
     val connected: Boolean = false,
     val hasWorkspace: Boolean = false,
     val serverUrl: String = "",
@@ -26,6 +28,13 @@ data class AppStateDto(
     val lastPath: String = "",
     val pending: Int = 0,
 )
+
+/** Valeurs stables du champ [AppStateDto.mode], définies par la façade Go. */
+object AppMode {
+    const val UNSET = ""
+    const val LOCAL = "local"
+    const val SERVER = "server"
+}
 
 /** Occupation des seuls contenus récupérables du cache local. */
 @Serializable
@@ -122,6 +131,52 @@ data class ResolveConflictRequestDto(
 @Serializable
 data class ResolveConflictResultDto(
     val conflict: ConflictDto? = null,
+)
+
+@Serializable
+data class AttachRequestDto(
+    val driveId: String,
+    val root: String,
+    val adopt: Boolean,
+)
+
+/** Compte rendu du branchement d'un serveur depuis le mode local. */
+@Serializable
+data class AttachResultDto(
+    val adopted: Int = 0,
+    val deleted: Int = 0,
+    val root: String = "",
+)
+
+/** Prévision du stockage et du réseau nécessaires avant un débranchement. */
+@Serializable
+data class DetachPlanDto(
+    val total: Int = 0,
+    val missing: Int = 0,
+    val bytes: Long = 0,
+    val usage: Long = 0,
+    val quota: Long = 0,
+    val required: Long = 0,
+    val overQuota: Boolean = false,
+    val pending: Int = 0,
+)
+
+/** Compte rendu d'un lot borné de rapatriement. */
+@Serializable
+data class DownloadReportDto(
+    val downloaded: Int = 0,
+    val remaining: Int = 0,
+    val bytes: Long = 0,
+    val failed: Int = 0,
+    val error: String = "",
+    val errorCode: String = "",
+)
+
+/** Compte rendu du passage définitif au stockage local. */
+@Serializable
+data class DetachResultDto(
+    val kept: Int = 0,
+    val abandoned: List<String> = emptyList(),
 )
 
 /** Réponse de `App.syncJSON()`. */

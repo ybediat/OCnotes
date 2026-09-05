@@ -347,6 +347,7 @@ fun BrowserScreen(
         is Dialogue.Supprimer -> SuppressionDialog(
             nomAffiche = d.entree.display,
             estDossier = d.entree.isDir,
+            modeLocal = etat.modeLocal,
             onConfirmer = { viewModel.supprimer(d.entree) },
             onFermer = { dialogue = null },
         )
@@ -380,6 +381,7 @@ fun BrowserScreen(
         Dialogue.SupprimerLot -> SuppressionLotDialog(
             nombre = etat.selection.size,
             contientDossier = etat.selectionContientDossier,
+            modeLocal = etat.modeLocal,
             onConfirmer = viewModel::supprimerLot,
             onFermer = { dialogue = null },
         )

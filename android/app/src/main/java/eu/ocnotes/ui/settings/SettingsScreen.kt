@@ -61,6 +61,7 @@ private object QuotaCache {
 fun SettingsScreen(
     onRetour: () -> Unit,
     onDeconnecte: () -> Unit,
+    onConnecterServeur: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModel.factory(LocalContext.current.appContainer),
@@ -103,45 +104,58 @@ fun SettingsScreen(
             // la ligne garde sa place, et l'absence se voit.
             val absent = stringResource(R.string.commun_valeur_vide)
 
-            Text(
-                text = stringResource(R.string.reglages_compte),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Ligne(
-                libelle = stringResource(R.string.reglages_serveur),
-                valeur = etat.etat.serverUrl.ifBlank { absent },
-            )
-            Ligne(
-                libelle = stringResource(R.string.reglages_utilisateur),
-                valeur = etat.etat.username.ifBlank { absent },
-            )
-
-            // La session a pu être remontée hors connexion : l'application est
-            // utilisable, mais le serveur n'a encore rien confirmé.
-            if (!etat.tokenValide) {
+            if (etat.modeLocal) {
                 Text(
-                    text = stringResource(R.string.reglages_token_non_confirme),
-                    style = MaterialTheme.typography.bodySmall,
+                    text = stringResource(R.string.reglages_local_titre),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    text = stringResource(R.string.reglages_local_explication),
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Button(onClick = onConnecterServeur, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.reglages_local_connecter))
+                }
+            } else {
+                Text(
+                    text = stringResource(R.string.reglages_compte),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Ligne(
+                    libelle = stringResource(R.string.reglages_serveur),
+                    valeur = etat.etat.serverUrl.ifBlank { absent },
+                )
+                Ligne(
+                    libelle = stringResource(R.string.reglages_utilisateur),
+                    valeur = etat.etat.username.ifBlank { absent },
+                )
+
+                if (!etat.tokenValide) {
+                    Text(
+                        text = stringResource(R.string.reglages_token_non_confirme),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+
+                Text(
+                    text = stringResource(R.string.reglages_espace_titre),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Ligne(
+                    libelle = stringResource(R.string.reglages_espace),
+                    valeur = etat.etat.driveName.ifBlank { absent },
+                )
+                Ligne(
+                    libelle = stringResource(R.string.reglages_dossier),
+                    valeur = etat.etat.root.ifBlank {
+                        stringResource(R.string.reglages_racine_espace)
+                    },
+                )
             }
-
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-
-            Text(
-                text = stringResource(R.string.reglages_espace_titre),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Ligne(
-                libelle = stringResource(R.string.reglages_espace),
-                valeur = etat.etat.driveName.ifBlank { absent },
-            )
-            Ligne(
-                libelle = stringResource(R.string.reglages_dossier),
-                valeur = etat.etat.root.ifBlank {
-                    stringResource(R.string.reglages_racine_espace)
-                },
-            )
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
@@ -169,48 +183,50 @@ fun SettingsScreen(
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
-            Text(
-                text = stringResource(R.string.reglages_sync_titre),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Ligne(
-                libelle = stringResource(R.string.reglages_en_attente),
-                valeur = if (etat.enAttente == 0) {
-                    stringResource(R.string.reglages_aucune)
-                } else {
-                    etat.enAttente.toString()
-                },
-            )
-            Text(
-                text = stringResource(R.string.reglages_sync_explication),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (!etat.modeLocal) {
+                Text(
+                    text = stringResource(R.string.reglages_sync_titre),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Ligne(
+                    libelle = stringResource(R.string.reglages_en_attente),
+                    valeur = if (etat.enAttente == 0) {
+                        stringResource(R.string.reglages_aucune)
+                    } else {
+                        etat.enAttente.toString()
+                    },
+                )
+                Text(
+                    text = stringResource(R.string.reglages_sync_explication),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
-            Button(
-                onClick = viewModel::synchroniser,
-                enabled = !etat.syncEnCours,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (etat.syncEnCours) {
-                    CircularProgressIndicator(
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.padding(end = 8.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                    )
-                    Text(stringResource(R.string.reglages_sync_en_cours))
-                } else {
-                    Icon(Icons.Default.Sync, null, Modifier.padding(end = 8.dp))
-                    Text(stringResource(R.string.reglages_sync_maintenant))
-                }
-            }
-
-            if (etat.conflits.isNotEmpty()) {
-                OutlinedButton(
-                    onClick = viewModel::ouvrirConflits,
+                Button(
+                    onClick = viewModel::synchroniser,
+                    enabled = !etat.syncEnCours,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(stringResource(R.string.reglages_conflits_ouvrir, etat.conflits.size))
+                    if (etat.syncEnCours) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.padding(end = 8.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                        Text(stringResource(R.string.reglages_sync_en_cours))
+                    } else {
+                        Icon(Icons.Default.Sync, null, Modifier.padding(end = 8.dp))
+                        Text(stringResource(R.string.reglages_sync_maintenant))
+                    }
+                }
+
+                if (etat.conflits.isNotEmpty()) {
+                    OutlinedButton(
+                        onClick = viewModel::ouvrirConflits,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.reglages_conflits_ouvrir, etat.conflits.size))
+                    }
                 }
             }
 
@@ -237,7 +253,13 @@ fun SettingsScreen(
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
             Text(
-                text = stringResource(R.string.reglages_cache_titre),
+                text = stringResource(
+                    if (etat.modeLocal) {
+                        R.string.reglages_stockage_local_titre
+                    } else {
+                        R.string.reglages_cache_titre
+                    },
+                ),
                 style = MaterialTheme.typography.titleSmall,
             )
             Ligne(
@@ -247,13 +269,23 @@ fun SettingsScreen(
             Ligne(
                 libelle = stringResource(R.string.reglages_cache_utilisation),
                 valeur = stringResource(
-                    R.string.reglages_cache_usage,
+                    if (etat.modeLocal) {
+                        R.string.reglages_stockage_local_usage
+                    } else {
+                        R.string.reglages_cache_usage
+                    },
                     Formatter.formatShortFileSize(context, etat.cache.usage),
                     libelleQuota(etat.cache.quota),
                 ),
             )
             Text(
-                text = stringResource(R.string.reglages_cache_explication),
+                text = stringResource(
+                    if (etat.modeLocal) {
+                        R.string.reglages_cache_explication_locale
+                    } else {
+                        R.string.reglages_cache_explication
+                    },
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -263,27 +295,62 @@ fun SettingsScreen(
             ) {
                 Text(stringResource(R.string.reglages_cache_modifier_quota))
             }
-            OutlinedButton(
-                onClick = viewModel::libererEspace,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.reglages_cache_liberer))
+            if (!etat.modeLocal) {
+                OutlinedButton(
+                    onClick = viewModel::libererEspace,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.reglages_cache_liberer))
+                }
             }
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
+
+            if (!etat.modeLocal) {
+                OutlinedButton(
+                    onClick = viewModel::preparerModeLocal,
+                    enabled = !etat.preparationModeLocal && !etat.rapatriementEnCours,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (etat.preparationModeLocal) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                    Text(stringResource(R.string.reglages_local_utiliser))
+                }
+                Text(
+                    text = stringResource(R.string.reglages_local_utiliser_explication),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             OutlinedButton(
                 onClick = { confirmation = true },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text = stringResource(R.string.reglages_deconnexion),
+                    text = stringResource(
+                        if (etat.modeLocal) {
+                            R.string.reglages_local_effacer
+                        } else {
+                            R.string.reglages_deconnexion
+                        },
+                    ),
                     color = MaterialTheme.colorScheme.error,
                 )
             }
 
             Text(
-                text = stringResource(R.string.reglages_deconnexion_explication),
+                text = stringResource(
+                    if (etat.modeLocal) {
+                        R.string.reglages_local_effacer_explication
+                    } else {
+                        R.string.reglages_deconnexion_explication
+                    },
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -321,10 +388,22 @@ fun SettingsScreen(
     if (confirmation) {
         AlertDialog(
             onDismissRequest = { confirmation = false },
-            title = { Text(stringResource(R.string.reglages_deconnexion_titre)) },
+            title = {
+                Text(
+                    stringResource(
+                        if (etat.modeLocal) {
+                            R.string.reglages_local_effacer_titre
+                        } else {
+                            R.string.reglages_deconnexion_titre
+                        },
+                    ),
+                )
+            },
             text = {
                 Text(
-                    if (etat.enAttente > 0) {
+                    if (etat.modeLocal) {
+                        stringResource(R.string.reglages_local_effacer_confirmation)
+                    } else if (etat.enAttente > 0) {
                         pluralStringResource(
                             R.plurals.reglages_deconnexion_attente,
                             etat.enAttente,
@@ -343,13 +422,116 @@ fun SettingsScreen(
                     },
                 ) {
                     Text(
-                        text = stringResource(R.string.reglages_deconnexion),
+                        text = stringResource(
+                            if (etat.modeLocal) {
+                                R.string.reglages_local_effacer
+                            } else {
+                                R.string.reglages_deconnexion
+                            },
+                        ),
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
             },
             dismissButton = {
                 TextButton(onClick = { confirmation = false }) {
+                    Text(stringResource(R.string.action_annuler))
+                }
+            },
+        )
+    }
+
+    etat.planModeLocal?.let { plan ->
+        AlertDialog(
+            onDismissRequest = viewModel::fermerPlanModeLocal,
+            title = { Text(stringResource(R.string.reglages_local_plan_titre)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(
+                            R.string.reglages_local_plan,
+                            plan.total,
+                            plan.missing,
+                            Formatter.formatShortFileSize(context, plan.bytes),
+                        ),
+                    )
+                    if (plan.pending > 0) {
+                        Text(
+                            pluralStringResource(
+                                R.plurals.reglages_local_plan_attente,
+                                plan.pending,
+                                plan.pending,
+                            ),
+                        )
+                    }
+                    if (plan.overQuota) {
+                        Text(
+                            text = stringResource(
+                                R.string.reglages_local_plan_quota,
+                                Formatter.formatShortFileSize(context, plan.required),
+                                Formatter.formatShortFileSize(context, plan.quota),
+                            ),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = viewModel::activerModeLocal,
+                    enabled = !plan.overQuota,
+                ) {
+                    Text(stringResource(R.string.reglages_local_rapatrier))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::fermerPlanModeLocal) {
+                    Text(stringResource(R.string.action_annuler))
+                }
+            },
+        )
+    }
+
+    if (etat.rapatriementEnCours) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.reglages_local_rapatriement_titre)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    CircularProgressIndicator()
+                    Text(
+                        stringResource(
+                            R.string.reglages_local_rapatriement_progression,
+                            etat.rapatriementTotal - etat.rapatriementRestant,
+                            etat.rapatriementTotal,
+                        ),
+                    )
+                }
+            },
+            confirmButton = {},
+        )
+    }
+
+    if (etat.confirmationAbandon > 0) {
+        AlertDialog(
+            onDismissRequest = viewModel::annulerAbandon,
+            title = { Text(stringResource(R.string.reglages_local_indisponibles_titre)) },
+            text = {
+                Text(
+                    pluralStringResource(
+                        R.plurals.reglages_local_indisponibles,
+                        etat.confirmationAbandon,
+                        etat.confirmationAbandon,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmerAbandon) {
+                    Text(stringResource(R.string.reglages_local_continuer))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::annulerAbandon) {
                     Text(stringResource(R.string.action_annuler))
                 }
             },

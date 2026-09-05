@@ -73,6 +73,9 @@ class RootViewModel(
                     validerEnArrierePlan()
                 }
 
+                RestoreOutcome.LOCALE ->
+                    _etat.value = DemarrageState.Pret(Depart.NAVIGATEUR)
+
                 RestoreOutcome.AUCUNE_SESSION ->
                     _etat.value = DemarrageState.Pret(Depart.CONNEXION)
 

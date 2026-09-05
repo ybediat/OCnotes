@@ -1,5 +1,6 @@
 package eu.ocnotes.ui.workspace
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,12 +10,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.FolderShared
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +26,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -44,12 +49,17 @@ import eu.ocnotes.ui.common.resoudre
 @Composable
 fun WorkspaceScreen(
     onEspaceChoisi: () -> Unit,
+    onAnnulerLocal: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: WorkspaceViewModel = viewModel(
         factory = WorkspaceViewModel.factory(LocalContext.current.appContainer),
     ),
 ) {
     val etat by viewModel.uiState.collectAsStateWithLifecycle()
+
+    BackHandler(enabled = etat.modeLocal && !etat.validation) {
+        viewModel.annulerBranchement()
+    }
 
     LaunchedEffect(etat.termine) {
         if (etat.termine) {
@@ -58,9 +68,30 @@ fun WorkspaceScreen(
         }
     }
 
+    LaunchedEffect(etat.annule) {
+        if (etat.annule) {
+            viewModel.annulationConsommee()
+            onAnnulerLocal()
+        }
+    }
+
     Scaffold(
         modifier = modifier,
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.espace_titre)) }) },
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.espace_titre)) },
+                navigationIcon = {
+                    if (etat.modeLocal) {
+                        IconButton(onClick = viewModel::annulerBranchement) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.action_retour),
+                            )
+                        }
+                    }
+                },
+            )
+        },
     ) { paddings ->
         if (etat.chargement) {
             ChargementPleinEcran(Modifier.padding(paddings))
@@ -143,6 +174,39 @@ fun WorkspaceScreen(
                 }
             }
         }
+    }
+
+    if (etat.confirmationBranchement) {
+        AlertDialog(
+            onDismissRequest = viewModel::fermerConfirmation,
+            title = { Text(stringResource(R.string.espace_local_titre)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.espace_local_explication,
+                        etat.notesLocales,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.confirmerBranchement(adopt = true) }) {
+                    Text(stringResource(R.string.espace_local_envoyer))
+                }
+            },
+            dismissButton = {
+                Column {
+                    TextButton(onClick = { viewModel.confirmerBranchement(adopt = false) }) {
+                        Text(
+                            text = stringResource(R.string.espace_local_remplacer),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    TextButton(onClick = viewModel::fermerConfirmation) {
+                        Text(stringResource(R.string.action_annuler))
+                    }
+                }
+            },
+        )
     }
 }
 

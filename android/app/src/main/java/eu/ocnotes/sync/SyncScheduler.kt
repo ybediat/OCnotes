@@ -29,6 +29,9 @@ class SyncScheduler(context: Context) {
 
     private val workManager = WorkManager.getInstance(context.applicationContext)
 
+    @Volatile
+    private var localOnly = false
+
     private val networkRequired = Constraints.Builder()
         .setRequiredNetworkType(NetworkType.CONNECTED)
         .build()
@@ -41,6 +44,7 @@ class SyncScheduler(context: Context) {
      * exécution et la synchronisation périodique n'aurait jamais lieu.
      */
     fun schedulePeriodic() {
+        if (localOnly) return
         val request = PeriodicWorkRequestBuilder<SyncWorker>(PERIOD_HOURS, TimeUnit.HOURS)
             .setConstraints(networkRequired)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 5, TimeUnit.MINUTES)
@@ -60,6 +64,7 @@ class SyncScheduler(context: Context) {
      * sur le même cache.
      */
     fun syncNow() {
+        if (localOnly) return
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(networkRequired)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
@@ -78,6 +83,7 @@ class SyncScheduler(context: Context) {
      * **dernière** écriture.
      */
     fun syncAfterLocalChange() {
+        if (localOnly) return
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(networkRequired)
             .setInitialDelay(DEBOUNCE_SECONDS, TimeUnit.SECONDS)
@@ -92,6 +98,12 @@ class SyncScheduler(context: Context) {
         workManager.cancelUniqueWork(WORK_PERIODIC)
         workManager.cancelUniqueWork(WORK_NOW)
         workManager.cancelUniqueWork(WORK_DEBOUNCED)
+    }
+
+    /** Désactive tout travail serveur tant que les notes vivent sur l'appareil seul. */
+    fun setLocalOnly(local: Boolean) {
+        localOnly = local
+        if (local) cancelAll() else schedulePeriodic()
     }
 
     private companion object {

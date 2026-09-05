@@ -330,6 +330,7 @@ private fun SelecteurDossier(
 fun SuppressionDialog(
     nomAffiche: String,
     estDossier: Boolean,
+    modeLocal: Boolean,
     onConfirmer: () -> Unit,
     onFermer: () -> Unit,
 ) {
@@ -340,9 +341,17 @@ fun SuppressionDialog(
             Text(
                 stringResource(
                     if (estDossier) {
-                        R.string.dialogue_supprimer_dossier
+                        if (modeLocal) {
+                            R.string.dialogue_supprimer_dossier_local
+                        } else {
+                            R.string.dialogue_supprimer_dossier
+                        }
                     } else {
-                        R.string.dialogue_supprimer_note
+                        if (modeLocal) {
+                            R.string.dialogue_supprimer_note_local
+                        } else {
+                            R.string.dialogue_supprimer_note
+                        }
                     },
                 ),
             )
@@ -377,6 +386,7 @@ fun SuppressionDialog(
 fun SuppressionLotDialog(
     nombre: Int,
     contientDossier: Boolean,
+    modeLocal: Boolean,
     onConfirmer: () -> Unit,
     onFermer: () -> Unit,
 ) {
@@ -389,9 +399,17 @@ fun SuppressionLotDialog(
             Text(
                 stringResource(
                     if (contientDossier) {
-                        R.string.dialogue_supprimer_lot_dossiers
+                        if (modeLocal) {
+                            R.string.dialogue_supprimer_lot_dossiers_local
+                        } else {
+                            R.string.dialogue_supprimer_lot_dossiers
+                        }
                     } else {
-                        R.string.dialogue_supprimer_lot_notes
+                        if (modeLocal) {
+                            R.string.dialogue_supprimer_lot_notes_local
+                        } else {
+                            R.string.dialogue_supprimer_lot_notes
+                        }
                     },
                 ),
             )

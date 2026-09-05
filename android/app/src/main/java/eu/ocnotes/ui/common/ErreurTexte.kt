@@ -68,6 +68,9 @@ private fun texteLocal(code: String): Texte? = when (code) {
     "SERVER_URL_MISSING" -> Texte.de(R.string.err_url_serveur_manquante)
     "SERVER_URL_INVALID" -> Texte.de(R.string.err_url_serveur_invalide)
     "USERNAME_MISSING" -> Texte.de(R.string.err_utilisateur_manquant)
+    "LOCAL_MODE" -> Texte.de(R.string.err_mode_local)
+    "QUOTA_TOO_LOW" -> Texte.de(R.string.err_quota_local)
+    "PENDING_CHANGES" -> Texte.de(R.string.err_modifications_attente)
     else -> null
 }
 

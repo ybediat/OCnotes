@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import eu.ocnotes.AppContainer
 import eu.ocnotes.R
+import eu.ocnotes.data.AppMode
 import eu.ocnotes.data.FolderEntryDto
 import eu.ocnotes.data.FolderRefDto
 import eu.ocnotes.data.OCnotesException
@@ -59,6 +60,8 @@ data class BrowserUiState(
      * sélection doive sauter. [recharger] élague ce qui n'existe plus.
      */
     val selection: Set<String> = emptySet(),
+    /** Les suppressions sont définitives : aucune copie serveur n'existe. */
+    val modeLocal: Boolean = false,
 ) {
     val enListePlate: Boolean get() = mode == ModeAffichage.LISTE
 
@@ -198,9 +201,20 @@ class BrowserViewModel(
                     // racine du dossier de notes — surtout pas `etat.root`,
                     // qui est exprimé dans un autre référentiel.
                     cheminCourant = etat.lastPath,
+                    modeLocal = etat.mode == AppMode.LOCAL,
                 )
             }
             recharger()
+        }
+
+        viewModelScope.launch {
+            var precedent = repository.mode.value
+            repository.mode.collect { mode ->
+                val change = precedent.isNotBlank() && mode.isNotBlank() && mode != precedent
+                precedent = mode
+                _uiState.update { it.copy(modeLocal = mode == AppMode.LOCAL) }
+                if (change) recharger()
+            }
         }
 
         // Les réglages d'affichage viennent d'un flux : le mode se change

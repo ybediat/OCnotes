@@ -18,6 +18,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -202,6 +203,36 @@ fun LoginScreen(
                     ),
                 )
             }
+        }
+
+        if (etat.configurationChargee && !etat.serveurEnregistre) {
+            OutlinedButton(
+                onClick = viewModel::continuerEnLocal,
+                enabled = !etat.enCours,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    stringResource(
+                        if (etat.depuisModeLocal) {
+                            R.string.login_rester_local
+                        } else {
+                            R.string.login_continuer_local
+                        },
+                    ),
+                )
+            }
+
+            Text(
+                text = stringResource(
+                    if (etat.depuisModeLocal) {
+                        R.string.login_rester_local_aide
+                    } else {
+                        R.string.login_continuer_local_aide
+                    },
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         Spacer(Modifier.height(24.dp))

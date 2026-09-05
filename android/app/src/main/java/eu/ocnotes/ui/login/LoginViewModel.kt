@@ -6,10 +6,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import eu.ocnotes.AppContainer
+import eu.ocnotes.data.AppMode
 import eu.ocnotes.data.ErrorCategory
 import eu.ocnotes.data.OCnotesException
-import eu.ocnotes.data.TokenStore
 import eu.ocnotes.data.OCnotesRepository
+import eu.ocnotes.data.TokenStore
 import eu.ocnotes.ui.common.Texte
 import eu.ocnotes.ui.common.texte
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,6 +43,11 @@ data class LoginUiState(
      * « Réessayer » et rien n'est à corriger.
      */
     val erreurEstAuth: Boolean = false,
+    /** L'écran a été ouvert depuis des notes locales déjà existantes. */
+    val depuisModeLocal: Boolean = false,
+    /** Un compte existe déjà : le passage local sécurisé se fait dans les réglages. */
+    val serveurEnregistre: Boolean = false,
+    val configurationChargee: Boolean = false,
     val suite: SuiteConnexion? = null,
 ) {
     val peutValider: Boolean
@@ -72,6 +78,9 @@ class LoginViewModel(
                     serverUrl = it.serverUrl.ifBlank { etat?.serverUrl.orEmpty() },
                     username = it.username.ifBlank { etat?.username.orEmpty() },
                     appToken = it.appToken.ifBlank { token.orEmpty() },
+                    depuisModeLocal = etat?.mode == AppMode.LOCAL,
+                    serveurEnregistre = etat?.mode == AppMode.SERVER,
+                    configurationChargee = true,
                 )
             }
         }
@@ -123,6 +132,21 @@ class LoginViewModel(
                         erreurEstAuth = e.category == ErrorCategory.AUTH,
                     )
                 }
+            }
+        }
+    }
+
+    /** Démarre sans serveur, ou abandonne un branchement sans toucher aux notes. */
+    fun continuerEnLocal() {
+        if (_uiState.value.enCours) return
+        _uiState.update { it.copy(enCours = true, erreur = null, erreurEstAuth = false) }
+
+        viewModelScope.launch {
+            try {
+                repository.startLocal()
+                _uiState.update { it.copy(enCours = false, suite = SuiteConnexion.NAVIGATEUR) }
+            } catch (e: OCnotesException) {
+                _uiState.update { it.copy(enCours = false, erreur = e.texte()) }
             }
         }
     }

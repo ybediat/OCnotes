@@ -82,6 +82,9 @@
     <string name="err_url_serveur_manquante">Indiquez l\'adresse du serveur.</string>
     <string name="err_url_serveur_invalide">Adresse de serveur invalide. Elle doit commencer par http:// ou https://</string>
     <string name="err_utilisateur_manquant">Indiquez votre nom d\'utilisateur.</string>
+    <string name="err_mode_local">Cette action nécessite un serveur connecté.</string>
+    <string name="err_quota_local">La limite de stockage est trop basse pour conserver toutes les notes sur cet appareil.</string>
+    <string name="err_modifications_attente">Des modifications doivent encore être synchronisées avant de déconnecter le serveur.</string>
 
     <!-- ================================================================
          Démarrage
@@ -98,7 +101,7 @@
          Le chemin de menu doit rester celui d'OpenCloud, dans la langue où
          OpenCloud l'affiche.
          ================================================================ -->
-    <string name="login_accroche">Vos notes Markdown, sur votre serveur OpenCloud.</string>
+    <string name="login_accroche">Vos notes Markdown, sur cet appareil ou avec OpenCloud.</string>
     <string name="login_serveur_label">Adresse du serveur</string>
     <string name="login_serveur_exemple">https://cloud.exemple.fr</string>
     <string name="login_utilisateur_label">Nom d\'utilisateur</string>
@@ -109,6 +112,10 @@
          réessayer, pas à recommencer la saisie. -->
     <string name="login_connecter">Se connecter</string>
     <string name="login_reessayer">Réessayer</string>
+    <string name="login_continuer_local">Continuer sans serveur</string>
+    <string name="login_continuer_local_aide">Vos notes resteront uniquement sur cet appareil. Vous pourrez connecter un serveur plus tard.</string>
+    <string name="login_rester_local">Rester en mode local</string>
+    <string name="login_rester_local_aide">Le branchement est annulé et vos notes locales restent intactes.</string>
     <string name="login_aide_titre">Pas encore d\'App Token ?</string>
     <string name="login_aide_chemin">Dans OpenCloud : Réglages du compte → App Tokens → + New. Donnez-lui un nom et une date d\'expiration. Le jeton n\'est affiché qu\'une seule fois, copiez-le tout de suite.</string>
     <string name="login_aide_revocation">Ce n\'est pas votre mot de passe : un App Token se révoque sans changer vos identifiants.</string>
@@ -127,6 +134,10 @@
     <string name="espace_chemin_aide">Le dossier est créé s\'il n\'existe pas. Laissez le champ vide pour utiliser la racine de l\'espace, par exemple si vos notes y sont déjà.</string>
     <string name="espace_continuer">Continuer</string>
     <string name="espace_preparation">Préparation…</string>
+    <string name="espace_local_titre">Que faire des notes locales ?</string>
+    <string name="espace_local_explication">Notes actuellement sur cet appareil : %1$d. Vous pouvez les envoyer vers le serveur, ou les supprimer pour utiliser uniquement les notes déjà présentes en ligne.</string>
+    <string name="espace_local_envoyer">Envoyer vers le serveur</string>
+    <string name="espace_local_remplacer">Supprimer les notes locales</string>
     <string name="espace_virtuel">Agrégat des dossiers partagés avec vous, pas un espace de stockage : on ne peut pas y créer de dossier de notes.</string>
     <string name="espace_inutilisable">Cet espace ne peut pas héberger de notes.</string>
     <string name="espace_personnel">Votre espace personnel</string>
@@ -286,12 +297,16 @@
     <string name="dialogue_supprimer_titre">Supprimer « %1$s » ?</string>
     <string name="dialogue_supprimer_dossier">Le dossier et toutes les notes qu\'il contient seront supprimés du serveur. Cette action est définitive.</string>
     <string name="dialogue_supprimer_note">La note sera supprimée du serveur. Cette action est définitive.</string>
+    <string name="dialogue_supprimer_dossier_local">Le dossier et toutes les notes qu\'il contient seront définitivement supprimés de cet appareil. Il n\'existe aucune copie serveur.</string>
+    <string name="dialogue_supprimer_note_local">La note sera définitivement supprimée de cet appareil. Il n\'existe aucune copie serveur.</string>
     <plurals name="dialogue_supprimer_lot_titre">
         <item quantity="one">Supprimer %d élément ?</item>
         <item quantity="other">Supprimer %d éléments ?</item>
     </plurals>
     <string name="dialogue_supprimer_lot_notes">Les éléments sélectionnés seront supprimés du serveur. Cette action est définitive.</string>
     <string name="dialogue_supprimer_lot_dossiers">Les éléments sélectionnés seront supprimés du serveur, y compris les dossiers avec tout ce qu\'ils contiennent. Cette action est définitive.</string>
+    <string name="dialogue_supprimer_lot_dossiers_local">Les éléments sélectionnés seront définitivement supprimés de cet appareil, y compris les dossiers et leur contenu. Il n\'existe aucune copie serveur.</string>
+    <string name="dialogue_supprimer_lot_notes_local">Les notes sélectionnées seront définitivement supprimées de cet appareil. Il n\'existe aucune copie serveur.</string>
 
     <!-- ================================================================
          Menu latéral
@@ -299,7 +314,7 @@
     <string name="menu_reglages">Réglages</string>
     <string name="menu_a_propos">À propos</string>
     <string name="a_propos_titre">À propos d\'OCnotes</string>
-    <string name="a_propos_description">Gestionnaire de notes stockées sur un serveur OpenCloud. Créé par Yannis Bediat. V1.0 Aout 2026</string>
+    <string name="a_propos_description">Gestionnaire de notes Markdown, sur cet appareil ou synchronisées avec OpenCloud. Créé par Yannis Bediat. V1.0 Août 2026</string>
     <string name="a_propos_licence">Licence : MIT https://github.com/ybediat/OpenNote/tree/main?tab=MIT-1-ov-file</string>
     <string name="a_propos_depot">Dépôt Git</string>
     <string name="a_propos_depot_url" translatable="false">https://github.com/ybediat/OpenNote</string>
@@ -334,10 +349,13 @@
     <string name="reglages_sync_maintenant">Synchroniser maintenant</string>
 
     <string name="reglages_cache_titre">Cache hors ligne</string>
+    <string name="reglages_stockage_local_titre">Notes sur l\'appareil</string>
     <string name="reglages_cache_quota">Limite d\'espace</string>
     <string name="reglages_cache_utilisation">Utilisation</string>
     <string name="reglages_cache_usage">%1$s utilisés sur %2$s</string>
+    <string name="reglages_stockage_local_usage">%1$s stockés · alerte à %2$s</string>
     <string name="reglages_cache_explication">Les brouillons locaux, les copies de conflit et les opérations en attente ne sont jamais supprimés automatiquement.</string>
+    <string name="reglages_cache_explication_locale">Toutes vos notes vivent sur cet appareil. La limite sert uniquement d\'alerte : aucune note n\'est supprimée automatiquement.</string>
     <string name="reglages_cache_modifier_quota">Modifier la limite</string>
     <string name="reglages_cache_liberer">Libérer l\'espace</string>
     <string name="reglages_cache_choix_titre">Limite du cache hors ligne</string>
@@ -351,6 +369,40 @@
     <string name="reglages_deconnexion_explication">La déconnexion efface le token, la configuration et le cache local de cet appareil. Les notes restent sur le serveur.</string>
     <string name="reglages_deconnexion_titre">Se déconnecter ?</string>
     <string name="reglages_deconnexion_confirmation">Le token, la configuration et le cache local seront effacés. Vos notes restent sur le serveur.</string>
+    <string name="reglages_local_titre">Stockage local</string>
+    <string name="reglages_local_explication">Toutes les notes vivent uniquement sur cet appareil. Aucune synchronisation n\'est effectuée.</string>
+    <string name="reglages_local_connecter">Connecter un serveur</string>
+    <string name="reglages_local_utiliser">Utiliser uniquement cet appareil</string>
+    <string name="reglages_local_utiliser_explication">Les notes absentes de l\'appareil seront d\'abord rapatriées. Les copies présentes sur le serveur ne seront pas supprimées.</string>
+    <string name="reglages_local_plan_titre">Passer en mode local ?</string>
+    <string name="reglages_local_plan">Notes dans l\'espace : %1$d. Contenus à rapatrier : %2$d (%3$s environ).</string>
+    <plurals name="reglages_local_plan_attente">
+        <item quantity="one">%d modification doit d\'abord être envoyée au serveur.</item>
+        <item quantity="other">%d modifications doivent d\'abord être envoyées au serveur.</item>
+    </plurals>
+    <string name="reglages_local_plan_quota">Il faudra %1$s sur l\'appareil, au-delà de la limite actuelle de %2$s. Augmentez d\'abord la limite du stockage.</string>
+    <string name="reglages_local_rapatrier">Rapatrier et continuer</string>
+    <string name="reglages_local_rapatriement_titre">Rapatriement des notes…</string>
+    <string name="reglages_local_rapatriement_progression">Progression : %1$d/%2$d</string>
+    <string name="reglages_local_rapatriement_erreur">Le serveur a cessé de répondre. Rien n\'a été débranché ; réessayez lorsque le réseau sera revenu.</string>
+    <string name="reglages_local_indisponibles_titre">Des notes restent indisponibles</string>
+    <plurals name="reglages_local_indisponibles">
+        <item quantity="one">Le contenu d\'une note n\'a pas pu être rapatrié. Elle restera sur le serveur mais ne sera plus accessible depuis cet appareil. Continuer malgré tout ?</item>
+        <item quantity="other">Le contenu de %d notes n\'a pas pu être rapatrié. Elles resteront sur le serveur mais ne seront plus accessibles depuis cet appareil. Continuer malgré tout ?</item>
+    </plurals>
+    <string name="reglages_local_continuer">Continuer malgré tout</string>
+    <plurals name="reglages_local_active">
+        <item quantity="one">Mode local activé. Une note est conservée sur cet appareil.</item>
+        <item quantity="other">Mode local activé. %d notes sont conservées sur cet appareil.</item>
+    </plurals>
+    <plurals name="reglages_local_abandonnees">
+        <item quantity="one">Mode local activé. Une note restée sur le serveur n\'est pas disponible sur cet appareil.</item>
+        <item quantity="other">Mode local activé. %d notes restées sur le serveur ne sont pas disponibles sur cet appareil.</item>
+    </plurals>
+    <string name="reglages_local_effacer">Effacer toutes les notes</string>
+    <string name="reglages_local_effacer_explication">Réinitialise l\'application. En mode local, ces notes n\'existent nulle part ailleurs.</string>
+    <string name="reglages_local_effacer_titre">Effacer définitivement toutes les notes ?</string>
+    <string name="reglages_local_effacer_confirmation">Toutes les notes et tous les dossiers de cet appareil seront définitivement supprimés. Cette action est irréversible.</string>
     <!-- Des modifications non envoyées seraient perdues : c'est la seule mise
          en garde de l'écran, elle compte ce qui est en jeu. -->
     <plurals name="reglages_deconnexion_attente">

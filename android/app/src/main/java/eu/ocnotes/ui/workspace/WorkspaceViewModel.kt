@@ -6,9 +6,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import eu.ocnotes.AppContainer
+import eu.ocnotes.data.AppMode
 import eu.ocnotes.data.DriveDto
 import eu.ocnotes.data.OCnotesException
 import eu.ocnotes.data.OCnotesRepository
+import eu.ocnotes.sync.SyncScheduler
 import eu.ocnotes.ui.common.Texte
 import eu.ocnotes.ui.common.texte
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +26,10 @@ data class WorkspaceUiState(
     val racine: String = "",
     val validation: Boolean = false,
     val erreur: Texte? = null,
+    val modeLocal: Boolean = false,
+    val notesLocales: Int = 0,
+    val confirmationBranchement: Boolean = false,
+    val annule: Boolean = false,
     val termine: Boolean = false,
 ) {
     val peutValider: Boolean
@@ -39,6 +45,7 @@ data class WorkspaceUiState(
  */
 class WorkspaceViewModel(
     private val repository: OCnotesRepository,
+    private val syncScheduler: SyncScheduler,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WorkspaceUiState())
@@ -55,6 +62,8 @@ class WorkspaceViewModel(
             try {
                 val drives = repository.listDrives()
                 val etatCourant = repository.state()
+                val modeLocal = etatCourant.mode == AppMode.LOCAL
+                val notesLocales = if (modeLocal) repository.listAll().entries.size else 0
 
                 // Présélection : l'espace déjà retenu, sinon le premier
                 // utilisable — dans la pratique l'espace personnel, que le
@@ -71,6 +80,8 @@ class WorkspaceViewModel(
                         drives = drives,
                         driveChoisi = it.driveChoisi ?: presel?.id,
                         racine = it.racine.ifBlank { racineProposee },
+                        modeLocal = modeLocal,
+                        notesLocales = notesLocales,
                     )
                 }
             } catch (e: OCnotesException) {
@@ -96,13 +107,54 @@ class WorkspaceViewModel(
      */
     fun valider() {
         val etat = _uiState.value
+        if (etat.driveChoisi == null) return
+
+        if (etat.modeLocal) {
+            _uiState.update { it.copy(confirmationBranchement = true, erreur = null) }
+            return
+        }
+
+        terminerBranchement(adopt = null)
+    }
+
+    fun fermerConfirmation() = _uiState.update { it.copy(confirmationBranchement = false) }
+
+    fun annulerBranchement() {
+        if (!_uiState.value.modeLocal || _uiState.value.validation) return
+        _uiState.update { it.copy(validation = true, confirmationBranchement = false) }
+        viewModelScope.launch {
+            try {
+                repository.startLocal()
+                _uiState.update { it.copy(validation = false, annule = true) }
+            } catch (e: OCnotesException) {
+                _uiState.update { it.copy(validation = false, erreur = e.texte()) }
+            }
+        }
+    }
+
+    fun annulationConsommee() = _uiState.update { it.copy(annule = false) }
+
+    fun confirmerBranchement(adopt: Boolean) {
+        _uiState.update { it.copy(confirmationBranchement = false) }
+        terminerBranchement(adopt)
+    }
+
+    /** `adopt == null` désigne le premier branchement, sans notes à arbitrer. */
+    private fun terminerBranchement(adopt: Boolean?) {
+        val etat = _uiState.value
         val drive = etat.driveChoisi ?: return
 
         _uiState.update { it.copy(validation = true, erreur = null) }
 
         viewModelScope.launch {
             try {
-                repository.selectWorkspace(drive, etat.racine.trim())
+                if (adopt == null) {
+                    repository.selectWorkspace(drive, etat.racine.trim())
+                } else {
+                    repository.attach(drive, etat.racine.trim(), adopt)
+                    syncScheduler.setLocalOnly(false)
+                    if (adopt) syncScheduler.syncNow()
+                }
                 _uiState.update { it.copy(validation = false, termine = true) }
             } catch (e: OCnotesException) {
                 _uiState.update { it.copy(validation = false, erreur = e.texte()) }
@@ -114,7 +166,7 @@ class WorkspaceViewModel(
 
     companion object {
         fun factory(container: AppContainer): ViewModelProvider.Factory = viewModelFactory {
-            initializer { WorkspaceViewModel(container.repository) }
+            initializer { WorkspaceViewModel(container.repository, container.syncScheduler) }
         }
     }
 }

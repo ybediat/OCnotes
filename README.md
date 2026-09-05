@@ -2,7 +2,7 @@
 
 # OCnotes
 
-**Notes Markdown sur votre serveur OpenCloud — sur Android, même hors connexion.**
+**Notes Markdown sur Android — en local ou synchronisées avec OpenCloud.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.txt)
 [![Go 1.26](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](go.mod)
@@ -13,17 +13,20 @@
 
 ## Ce que fait OCnotes
 
-OCnotes est une application Android d'édition de notes **Markdown** stockées
-sur un serveur [**OpenCloud**](https://opencloud.eu) (fork d'ownCloud Infinite
-Scale). Vos notes restent de simples fichiers `.md` dans votre espace personnel :
-lisibles depuis l'interface web, synchronisables avec n'importe quel autre
-client, récupérables sans l'application.
+OCnotes est une application Android d'édition de notes **Markdown**. Elles
+peuvent vivre uniquement sur l'appareil, sans compte, ou être synchronisées
+avec un serveur [**OpenCloud**](https://opencloud.eu) (fork d'ownCloud Infinite
+Scale). Avec un serveur, elles restent de simples fichiers `.md` dans votre
+espace personnel : lisibles depuis l'interface web et synchronisables avec
+n'importe quel autre client.
 
 - 📝 **Éditeur Markdown** avec barre de mise en forme et aperçu rendu nativement
   en Compose (typographie Material 3, thème sombre, sélection de texte).
 - 📴 **Local-first** — l'application s'ouvre, se lit et s'écrit hors connexion.
   Les modifications partent dans une file d'attente persistée et se
   synchronisent dès que le réseau revient.
+- 📱 **Mode local** — aucun serveur ni compte requis ; les notes restent
+  exclusivement sur l'appareil et peuvent être envoyées vers un serveur plus tard.
 - 🗂️ **Navigation en arbre** dans vos dossiers de notes, avec création,
   renommage et déplacement.
 - ⚔️ **Détection de conflits** par ETag : une note modifiée des deux côtés n'est
@@ -44,14 +47,16 @@ client, récupérables sans l'application.
 Aucune version signée n'est publiée pour l'instant : l'application se construit
 depuis les sources (voir [Construire depuis les sources](#construire-depuis-les-sources)).
 
-**Prérequis côté serveur** : un serveur OpenCloud accessible en HTTPS et un App
-Token créé depuis *Réglages du compte → App Tokens → + New*.
+**Pour la synchronisation** : un serveur OpenCloud accessible en HTTPS et un App
+Token créé depuis *Réglages du compte → App Tokens → + New*. Aucun serveur
+n'est requis pour utiliser le mode local.
 
 **Prérequis côté appareil** : Android 8.0 (API 26) ou supérieur.
 
-Au premier lancement, l'application demande l'URL du serveur, le nom
-d'utilisateur et l'App Token, puis crée un dossier `Notes/` dans votre espace
-personnel s'il n'existe pas.
+Au premier lancement, l'application propose de continuer sans serveur ou de
+saisir l'URL du serveur, le nom d'utilisateur et l'App Token. Le serveur peut
+être connecté ou déconnecté plus tard depuis les réglages ; les transitions
+annoncent précisément quelles notes seront envoyées, rapatriées ou supprimées.
 
 ## Architecture
 
@@ -74,8 +79,9 @@ Trois principes structurent le reste :
 
 1. **Le cœur ignore Android.** Rien sous `internal/` ne connaît gomobile ni
    Compose : tout s'y compile et s'y teste sur desktop.
-2. **Local-first.** Une écriture va d'abord dans un cache local et une file
-   d'attente persistée, puis part vers le serveur.
+2. **Local-first.** Une écriture va d'abord sur le disque de l'appareil. En mode
+   serveur, elle rejoint ensuite une file persistante et part vers le serveur ;
+   en mode local, ce disque est son stockage définitif.
 3. **`mobile/` est un adaptateur, pas une couche métier.** Il sérialise,
    désérialise, délègue. Toute règle qui mérite un test vit en dessous.
 

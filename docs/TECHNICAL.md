@@ -2,9 +2,10 @@
 
 ## Objet
 
-OCnotes est une application Android de prise de notes Markdown synchronisées
-avec un serveur OpenCloud. Les notes restent des fichiers : l'application ne
-leur impose ni base de données distante ni format propriétaire.
+OCnotes est une application Android de prise de notes Markdown, utilisable en
+stockage local seul ou synchronisée avec un serveur OpenCloud. Les notes
+restent des fichiers : l'application ne leur impose ni base de données distante
+ni format propriétaire.
 
 Le projet vise Android 8 (API 26) et versions ultérieures. Son interface est
 écrite en Kotlin avec Jetpack Compose ; le cœur métier est écrit en Go.
@@ -35,6 +36,12 @@ de vie Android et du stockage chiffré du jeton de connexion.
 OCnotes est *local-first* : une modification est d'abord enregistrée dans le
 stockage local, puis placée dans une file persistante. Elle est envoyée au
 serveur lorsque le réseau est disponible.
+
+En mode `local`, le Store devient le dépositaire unique : aucune opération de
+synchronisation n'est mise en file et aucun contenu n'est évincé. Le passage
+vers un serveur permet soit d'adopter les notes locales, soit de repartir des
+notes distantes. Dans l'autre sens, l'application pousse d'abord les écritures
+en attente et rapatrie les contenus manquants avant d'oublier le serveur.
 
 Les écritures distantes utilisent les ETags et les préconditions HTTP. Si une
 note a été modifiée à la fois localement et sur le serveur, OCnotes n'écrase

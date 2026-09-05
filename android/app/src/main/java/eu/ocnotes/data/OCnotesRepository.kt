@@ -24,6 +24,9 @@ enum class RestoreOutcome {
     /** Bibliothèque montée, l'utilisateur peut aller à ses notes. */
     PRETE,
 
+    /** Le stockage local est prêt ; aucun token ni serveur n'est nécessaire. */
+    LOCALE,
+
     /**
      * Un compte est enregistré mais aucun espace n'a été choisi. Il faut
      * `Connect` puis la sélection d'espace — et donc du réseau.
@@ -68,13 +71,15 @@ class OCnotesRepository(
 
     private val initMutex = Mutex()
     private val sessionMutex = Mutex()
+    /** Empêche une passe WorkManager de chevaucher une transition de stockage. */
+    private val operationMutex = Mutex()
 
     @Volatile
     private var goApp: GoApp? = null
 
     /**
-     * Vrai quand la bibliothèque Go est montée et utilisable — par `Restore`
-     * comme par `Connect`.
+     * Vrai quand la façade Go est utilisable : bibliothèque distante montée,
+     * ou Store ouvert comme stockage définitif en mode local.
      *
      * Distinct de `AppStateDto.connected`, qui signifie seulement qu'un
      * serveur et un compte sont enregistrés : après un redémarrage, il faut
@@ -106,6 +111,11 @@ class OCnotesRepository(
     val lastSync: StateFlow<SyncResultDto?> = _lastSync.asStateFlow()
 
     private val _sessionExpired = MutableStateFlow(false)
+
+    private val _mode = MutableStateFlow(AppMode.UNSET)
+
+    /** Mode courant, partagé par les écrans qui doivent adapter leurs gestes. */
+    val mode: StateFlow<String> = _mode.asStateFlow()
 
     /**
      * Passe à vrai quand le serveur a refusé le token en arrière-plan.
@@ -173,8 +183,11 @@ class OCnotesRepository(
 
     // --- État et session ---------------------------------------------------
 
-    suspend fun state(): AppStateDto =
-        json.decodeFromString(call { it.stateJSON() })
+    suspend fun state(): AppStateDto {
+        val result: AppStateDto = json.decodeFromString(call { it.stateJSON() })
+        _mode.value = result.mode
+        return result
+    }
 
     suspend fun cacheState(): CacheStateDto =
         json.decodeFromString(call { it.cacheStateJSON() })
@@ -185,6 +198,18 @@ class OCnotesRepository(
 
     suspend fun pruneCache() {
         call { it.pruneCache() }
+    }
+
+    /** Choisit le stockage exclusivement local au premier lancement. */
+    suspend fun startLocal() {
+        call { it.startLocal() }
+        retainCoreQuota()
+        tokenStore.clear()
+        sessionOpen = true
+        _sessionValidee.value = false
+        _sessionExpired.value = false
+        _pendingCount.value = 0
+        _mode.value = AppMode.LOCAL
     }
 
     /**
@@ -217,9 +242,24 @@ class OCnotesRepository(
      * qui fait échouer jusqu'aux appels capables de se replier sur le cache.
      */
     suspend fun restore(): RestoreOutcome = sessionMutex.withLock {
-        if (sessionOpen) return@withLock RestoreOutcome.PRETE
+        if (sessionOpen) {
+            return@withLock if (_mode.value == AppMode.LOCAL) {
+                RestoreOutcome.LOCALE
+            } else {
+                RestoreOutcome.PRETE
+            }
+        }
 
         val current = state()
+        if (current.mode == AppMode.LOCAL) {
+            // NewApp a déjà rouvert le Store persistant. Le mode local n'a ni
+            // bibliothèque distante à monter, ni secret à récupérer.
+            sessionOpen = true
+            _sessionValidee.value = false
+            _sessionExpired.value = false
+            _pendingCount.value = 0
+            return@withLock RestoreOutcome.LOCALE
+        }
         val token = tokenStore.appToken()
         if (!current.connected || token == null) return@withLock RestoreOutcome.AUCUNE_SESSION
 
@@ -295,12 +335,15 @@ class OCnotesRepository(
      * reconnecter.
      */
     suspend fun disconnect() {
-        call { it.disconnect() }
-        tokenStore.clear()
-        sessionOpen = false
-        _sessionValidee.value = false
-        _pendingCount.value = 0
-        _lastSync.value = null
+        operationMutex.withLock {
+            call { it.disconnect() }
+            tokenStore.clear()
+            sessionOpen = false
+            _sessionValidee.value = false
+            _pendingCount.value = 0
+            _lastSync.value = null
+            _mode.value = AppMode.UNSET
+        }
     }
 
     // --- Espaces -----------------------------------------------------------
@@ -310,6 +353,56 @@ class OCnotesRepository(
 
     suspend fun selectWorkspace(driveId: String, root: String) {
         call { it.selectWorkspace(driveId, root) }
+    }
+
+    /** Termine le branchement commencé par [connect] depuis le mode local. */
+    suspend fun attach(driveId: String, root: String, adopt: Boolean): AttachResultDto {
+        return operationMutex.withLock {
+            val request = json.encodeToString(AttachRequestDto(driveId, root, adopt))
+            val result: AttachResultDto = json.decodeFromString(call { it.attachJSON(request) })
+            sessionOpen = true
+            _sessionValidee.value = true
+            _sessionExpired.value = false
+            _mode.value = AppMode.SERVER
+            refreshPending()
+            result
+        }
+    }
+
+    suspend fun detachPlan(): DetachPlanDto = operationMutex.withLock {
+        json.decodeFromString(call { it.detachPlanJSON() })
+    }
+
+    suspend fun downloadBatch(max: Int = 25): DownloadReportDto = operationMutex.withLock {
+        json.decodeFromString(call { it.downloadBatchJSON(max.toLong()) })
+    }
+
+    /** Coupe le serveur une fois les écritures poussées et les contenus rapatriés. */
+    suspend fun detach(): DetachResultDto {
+        return operationMutex.withLock {
+            val result: DetachResultDto = json.decodeFromString(call { it.detachJSON() })
+            retainCoreQuota()
+            tokenStore.clear()
+            sessionOpen = true
+            _sessionValidee.value = false
+            _sessionExpired.value = false
+            _pendingCount.value = 0
+            _lastSync.value = null
+            _mode.value = AppMode.LOCAL
+            result
+        }
+    }
+
+    /**
+     * Le cœur relève le seuil à l'entrée en mode local. Sans recopier cette
+     * valeur, le prochain démarrage réappliquerait l'ancienne préférence
+     * Android (250 Mio par défaut) et annulerait silencieusement ce garde-fou.
+     */
+    private suspend fun retainCoreQuota() {
+        val adjusted = cacheState().quota
+        if (preferences.quotaCache.value != adjusted) {
+            preferences.definirQuotaCache(adjusted)
+        }
     }
 
     /** Nom de dossier proposé au premier démarrage (`Notes`). */
@@ -425,10 +518,12 @@ class OCnotesRepository(
      * l'absence d'espace de travail fait lever.
      */
     suspend fun sync(): SyncResultDto {
-        val result: SyncResultDto = json.decodeFromString(call { it.syncJSON() })
-        _lastSync.value = result
-        _pendingCount.value = result.remaining
-        return result
+        return operationMutex.withLock {
+            val result: SyncResultDto = json.decodeFromString(call { it.syncJSON() })
+            _lastSync.value = result
+            _pendingCount.value = result.remaining
+            result
+        }
     }
 
     /** Conflits ouverts, conservés par le cœur Go au-delà d'une passe Sync. */
@@ -437,8 +532,10 @@ class OCnotesRepository(
 
     /** Applique une décision explicite, protégée côté Go par l'ETag mémorisé. */
     suspend fun resolveConflict(id: String, resolution: String): ResolveConflictResultDto {
-        val request = json.encodeToString(ResolveConflictRequestDto(id, resolution))
-        return json.decodeFromString(call { it.resolveConflictJSON(request) })
+        return operationMutex.withLock {
+            val request = json.encodeToString(ResolveConflictRequestDto(id, resolution))
+            json.decodeFromString(call { it.resolveConflictJSON(request) })
+        }
     }
 
     suspend fun refreshPending() {

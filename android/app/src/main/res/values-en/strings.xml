@@ -88,6 +88,9 @@
     <string name="err_url_serveur_manquante">Enter the server address.</string>
     <string name="err_url_serveur_invalide">Invalid server address. It must start with http:// or https://</string>
     <string name="err_utilisateur_manquant">Enter your username.</string>
+    <string name="err_mode_local">This action requires a connected server.</string>
+    <string name="err_quota_local">The storage limit is too low to keep all notes on this device.</string>
+    <string name="err_modifications_attente">Some changes still need to be synchronized before disconnecting the server.</string>
 
     <!-- ================================================================
          Démarrage
@@ -104,7 +107,7 @@
          Le chemin de menu doit rester celui d'OpenCloud, dans la langue où
          OpenCloud l'affiche.
          ================================================================ -->
-    <string name="login_accroche">Your Markdown notes, on your OpenCloud server.</string>
+    <string name="login_accroche">Your Markdown notes, on this device or with OpenCloud.</string>
     <string name="login_serveur_label">Server address</string>
     <string name="login_serveur_exemple">https://cloud.example.com</string>
     <string name="login_utilisateur_label">Username</string>
@@ -115,6 +118,10 @@
          réessayer, pas à recommencer la saisie. -->
     <string name="login_connecter">Sign in</string>
     <string name="login_reessayer">Try again</string>
+    <string name="login_continuer_local">Continue without a server</string>
+    <string name="login_continuer_local_aide">Your notes will remain on this device only. You can connect a server later.</string>
+    <string name="login_rester_local">Stay in local mode</string>
+    <string name="login_rester_local_aide">The connection is cancelled and your local notes remain untouched.</string>
     <string name="login_aide_titre">Don\'t have an App Token yet?</string>
     <string name="login_aide_chemin">In OpenCloud: Account Settings → App Tokens → + New. Give it a name and an expiration date. The token is shown only once, so copy it immediately.</string>
     <string name="login_aide_revocation">It is not your password: an App Token can be revoked without changing your credentials.</string>
@@ -133,6 +140,10 @@
     <string name="espace_chemin_aide">The folder is created if it does not exist. Leave the field empty to use the root of the space, for example if your notes are already there.</string>
     <string name="espace_continuer">Continue</string>
     <string name="espace_preparation">Preparing…</string>
+    <string name="espace_local_titre">What should happen to local notes?</string>
+    <string name="espace_local_explication">Notes currently on this device: %1$d. You can upload them to the server, or delete them and use only the notes already online.</string>
+    <string name="espace_local_envoyer">Upload to server</string>
+    <string name="espace_local_remplacer">Delete local notes</string>
     <string name="espace_virtuel">A collection of folders shared with you, not a storage space: you cannot create a notes folder here.</string>
     <string name="espace_inutilisable">This space cannot host notes.</string>
     <string name="espace_personnel">Your personal space</string>
@@ -171,10 +182,13 @@
     <string name="sync_hors_ligne">Server unreachable. Nothing to send for now.</string>
 
     <string name="reglages_cache_titre">Offline cache</string>
+    <string name="reglages_stockage_local_titre">Notes on this device</string>
     <string name="reglages_cache_quota">Storage limit</string>
     <string name="reglages_cache_utilisation">Usage</string>
     <string name="reglages_cache_usage">%1$s used out of %2$s</string>
+    <string name="reglages_stockage_local_usage">%1$s stored · warning at %2$s</string>
     <string name="reglages_cache_explication">Local drafts, conflict copies, and pending operations are never deleted automatically.</string>
+    <string name="reglages_cache_explication_locale">All your notes live on this device. The limit is only a warning: notes are never deleted automatically.</string>
     <string name="reglages_cache_modifier_quota">Change limit</string>
     <string name="reglages_cache_liberer">Free up space</string>
     <string name="reglages_cache_choix_titre">Offline cache limit</string>
@@ -305,12 +319,16 @@
     <string name="dialogue_supprimer_titre">Delete “%1$s”?</string>
     <string name="dialogue_supprimer_dossier">The folder and all notes it contains will be deleted from the server. This action is permanent.</string>
     <string name="dialogue_supprimer_note">The note will be deleted from the server. This action is permanent.</string>
+    <string name="dialogue_supprimer_dossier_local">The folder and all its notes will be permanently deleted from this device. No server copy exists.</string>
+    <string name="dialogue_supprimer_note_local">The note will be permanently deleted from this device. No server copy exists.</string>
     <plurals name="dialogue_supprimer_lot_titre">
         <item quantity="one">Delete %d item?</item>
         <item quantity="other">Delete %d items?</item>
     </plurals>
     <string name="dialogue_supprimer_lot_notes">The selected items will be deleted from the server. This action is permanent.</string>
     <string name="dialogue_supprimer_lot_dossiers">The selected items will be deleted from the server, including folders with everything they contain. This action is permanent.</string>
+    <string name="dialogue_supprimer_lot_dossiers_local">The selected items will be permanently deleted from this device, including folders and their contents. No server copy exists.</string>
+    <string name="dialogue_supprimer_lot_notes_local">The selected notes will be permanently deleted from this device. No server copy exists.</string>
 
     <!-- ================================================================
          Menu latéral
@@ -318,7 +336,7 @@
     <string name="menu_reglages">Settings</string>
     <string name="menu_a_propos">About</string>
     <string name="a_propos_titre">About OCnotes</string>
-    <string name="a_propos_description">A manager for notes stored on an OpenCloud server. Created by Yannis Bediat. v1.0 August 2026</string>
+    <string name="a_propos_description">A Markdown notes manager, stored on this device or synchronized with OpenCloud. Created by Yannis Bediat. v1.0 August 2026</string>
     <string name="a_propos_licence">License: MIT https://github.com/ybediat/OpenNote/tree/main?tab=MIT-1-ov-file</string>
     <string name="a_propos_depot">Git repository</string>
 
@@ -355,6 +373,40 @@
     <string name="reglages_deconnexion_explication">Signing out clears the token, configuration, and local cache from this device. Your notes remain on the server.</string>
     <string name="reglages_deconnexion_titre">Sign out?</string>
     <string name="reglages_deconnexion_confirmation">The token, configuration, and local cache will be cleared. Your notes remain on the server.</string>
+    <string name="reglages_local_titre">Local storage</string>
+    <string name="reglages_local_explication">All notes live on this device only. Nothing is synchronized.</string>
+    <string name="reglages_local_connecter">Connect a server</string>
+    <string name="reglages_local_utiliser">Use this device only</string>
+    <string name="reglages_local_utiliser_explication">Notes missing from the device will be downloaded first. Server copies will not be deleted.</string>
+    <string name="reglages_local_plan_titre">Switch to local mode?</string>
+    <string name="reglages_local_plan">Notes in the space: %1$d. Contents to download: %2$d (about %3$s).</string>
+    <plurals name="reglages_local_plan_attente">
+        <item quantity="one">%d change must be uploaded to the server first.</item>
+        <item quantity="other">%d changes must be uploaded to the server first.</item>
+    </plurals>
+    <string name="reglages_local_plan_quota">The device will need %1$s, above the current %2$s limit. Increase the storage limit first.</string>
+    <string name="reglages_local_rapatrier">Download and continue</string>
+    <string name="reglages_local_rapatriement_titre">Downloading notes…</string>
+    <string name="reglages_local_rapatriement_progression">Progress: %1$d/%2$d</string>
+    <string name="reglages_local_rapatriement_erreur">The server stopped responding. Nothing was disconnected; try again when the network is available.</string>
+    <string name="reglages_local_indisponibles_titre">Some notes remain unavailable</string>
+    <plurals name="reglages_local_indisponibles">
+        <item quantity="one">One note could not be downloaded. It will remain on the server but will no longer be available on this device. Continue anyway?</item>
+        <item quantity="other">%d notes could not be downloaded. They will remain on the server but will no longer be available on this device. Continue anyway?</item>
+    </plurals>
+    <string name="reglages_local_continuer">Continue anyway</string>
+    <plurals name="reglages_local_active">
+        <item quantity="one">Local mode enabled. One note is kept on this device.</item>
+        <item quantity="other">Local mode enabled. %d notes are kept on this device.</item>
+    </plurals>
+    <plurals name="reglages_local_abandonnees">
+        <item quantity="one">Local mode enabled. One note left on the server is unavailable on this device.</item>
+        <item quantity="other">Local mode enabled. %d notes left on the server are unavailable on this device.</item>
+    </plurals>
+    <string name="reglages_local_effacer">Delete all notes</string>
+    <string name="reglages_local_effacer_explication">Resets the app. In local mode, these notes do not exist anywhere else.</string>
+    <string name="reglages_local_effacer_titre">Permanently delete all notes?</string>
+    <string name="reglages_local_effacer_confirmation">All notes and folders on this device will be permanently deleted. This cannot be undone.</string>
     <!-- Des modifications non envoyées seraient perdues : c'est la seule mise
          en garde de l'écran, elle compte ce qui est en jeu. -->
     <plurals name="reglages_deconnexion_attente">
