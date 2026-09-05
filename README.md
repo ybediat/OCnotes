@@ -34,7 +34,8 @@ n'importe quel autre client.
   renommage et déplacement.
 - ⚔️ **Détection de conflits** par ETag : une note modifiée des deux côtés n'est
   jamais écrasée en silence.
-- 📄 **Lecture des `.txt`**, parce qu'OpenCloud crée ses fichiers dans ce format.
+- 📄 **Fichiers Markdown et texte brut** — création et édition des `.md` et
+  `.txt` ; lecture seule des documents `.docx` et `.odt`.
 - 🌍 **Français, anglais, espagnol, allemand.**
 - 🔐 **Authentification par App Token** OpenCloud, stocké en
   `EncryptedSharedPreferences` et jamais écrit sur disque côté Go.
@@ -47,8 +48,12 @@ n'importe quel autre client.
 
 ## Installation
 
-Aucune version signée n'est publiée pour l'instant : l'application se construit
-depuis les sources (voir [Construire depuis les sources](#construire-depuis-les-sources)).
+La version signée **0.1.2** est disponible sur la
+[page des releases](https://github.com/ybediat/OCnotes/releases/tag/v0.1.2)
+(téléchargement :
+[`OCnotes-0.1.2.apk`](https://github.com/ybediat/OCnotes/releases/download/v0.1.2/OCnotes-0.1.2.apk)).
+Elle peut être installée directement sur Android. L'application peut aussi être
+construite depuis les sources (voir [Construire depuis les sources](#construire-depuis-les-sources)).
 
 **Pour la synchronisation** : un serveur OpenCloud accessible en HTTPS et un App
 Token créé depuis *Réglages du compte → App Tokens → + New*. Aucun serveur
@@ -75,7 +80,7 @@ internal/config/      réglages non sensibles                            [Go pur
 mobile/               façade gomobile — contrat gelé avec Kotlin
 cmd/ocnotes-cli/     harnais de test desktop
 android/              projet Gradle, UI Compose
-scripts/              outillage de développement (PowerShell)
+scripts/              outillage de développement et de build (PowerShell, Bash)
 ```
 
 Trois principes structurent le reste :
@@ -224,13 +229,18 @@ Les options (`-server`, `-user`, `-drive`, `-timeout`) précèdent la commande.
 
 ## État du projet
 
-**Alpha.** L'application fonctionne au quotidien, mais rien n'est encore
-distribué et les interfaces peuvent bouger.
+**Alpha.** La version signée **0.1.2** est disponible sur
+[GitHub Releases](https://github.com/ybediat/OCnotes/releases/tag/v0.1.2).
+L'application fonctionne en mode local, sans compte, ou avec un serveur
+OpenCloud ; ses notes Markdown et texte brut continuent alors à se synchroniser
+hors ligne.
 
-- Le **cœur Go est vérifié** : ~200 cas unitaires plus une suite d'intégration
-  contre un vrai serveur.
-- L'**interface Compose compile et tourne**, mais sa couverture repose sur des
-  essais manuels — aucun test instrumenté.
+- Le cœur Go et les adaptations Android sont couverts par des tests unitaires ;
+  une suite d'intégration peut aussi s'exécuter contre un serveur OpenCloud.
+- L'interface est testée manuellement sur appareil. Il n'y a pas encore de test
+  instrumenté Android.
+- Les fichiers `.md` et `.txt` sont modifiables. Les `.docx` et `.odt` sont
+  affichés en lecture seule afin de ne jamais réécrire leur format binaire.
 
 Limites connues :
 
@@ -238,13 +248,11 @@ Limites connues :
 - Pas d'OIDC : l'authentification passe uniquement par App Token.
 - Le HTML brut d'une note est ignoré à l'aperçu, et les images en `data:` ne
   sont pas affichées (seul leur texte alternatif l'est).
-- Les traductions n'ont pas été relues par des locuteurs natifs sur appareil.
-- Aucun APK signé n'est publié.
-- La chaîne de signature release est prête et testée sur appareil ; la clé doit
-  encore être sauvegardée hors ligne avant la première publication.
+- Les traductions n'ont pas encore été relues par des locuteurs natifs sur
+  appareil.
 
-Feuille de route, par ordre de priorité : virtualisation de l'éditeur, langues
-supplémentaires, OIDC, sauvegarde de la clé et distribution de l'APK.
+Prochaines priorités : virtualisation de l'éditeur, langues supplémentaires,
+OIDC et publication sur F-Droid.
 
 ## Contribuer
 
