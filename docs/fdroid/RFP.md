@@ -46,15 +46,15 @@ MIT — `LICENSE.txt` at the repository root.
 
 ### Source Code
 
-<https://github.com/ybediat/OpenNote>
+<https://github.com/ybediat/OCnotes>
 
 ### Issue Tracker
 
-<https://github.com/ybediat/OpenNote/issues>
+<https://github.com/ybediat/OCnotes/issues>
 
 ### Changelog
 
-<https://github.com/ybediat/OpenNote/releases>
+<https://github.com/ybediat/OCnotes/releases>
 
 ### Categories
 
@@ -107,8 +107,8 @@ that a user can move between an F-Droid install, a direct APK download and
 Obtainium without uninstalling. The recipe sets:
 
 ```yaml
-Binaries: https://github.com/ybediat/OpenNote/releases/download/V%v/OCnotes-%v.apk
-AllowedAPKSigningKeys: 9eda46c9fdb2756cdad00a548c27261d1a5bfb25b06e11892071bbd19f35e6ec
+Binaries: https://github.com/ybediat/OCnotes/releases/download/v%v/OCnotes-%v.apk
+AllowedAPKSigningKeys: b81ebfae3753d5b8fdb703cc0f5177d20bde66a57297f63759d40e771dca9ca4
 ```
 
 The published APK is the one built by the project's Linux CI from the tag, then
@@ -123,7 +123,7 @@ inclusion if you prefer that order.
 
 ### Notes
 
-- Current release: `V0.1.2` (versionCode 3).
+- Current release: `v0.1.2` (versionCode 3).
 - The app is **alpha**. It works day to day, but the UI has no instrumented
   tests, and the Spanish and German translations have not been reviewed by
   native speakers on device.

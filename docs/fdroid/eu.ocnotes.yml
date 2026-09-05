@@ -14,9 +14,9 @@ Categories:
   - Internet
 License: MIT
 AuthorName: Yannis Bediat
-SourceCode: https://github.com/ybediat/OpenNote
-IssueTracker: https://github.com/ybediat/OpenNote/issues
-Changelog: https://github.com/ybediat/OpenNote/releases
+SourceCode: https://github.com/ybediat/OCnotes
+IssueTracker: https://github.com/ybediat/OCnotes/issues
+Changelog: https://github.com/ybediat/OCnotes/releases
 
 # `Summary` et `Description` ne sont pas répétés ici : F-Droid les lit dans
 # `fastlane/metadata/android/<locale>/` du dépôt source, qui porte déjà le
@@ -24,12 +24,12 @@ Changelog: https://github.com/ybediat/OpenNote/releases
 # l'icône 512×512 et les captures.
 
 RepoType: git
-Repo: https://github.com/ybediat/OpenNote.git
+Repo: https://github.com/ybediat/OCnotes.git
 
 Builds:
   - versionName: 0.1.2
     versionCode: 3
-    commit: V0.1.2
+    commit: v0.1.2
     subdir: android/app
     gradle:
       - yes
@@ -95,10 +95,10 @@ Builds:
 # publication, elle l'empêche. C'est le prix de la signature unique.
 # ---------------------------------------------------------------------------
 
-Binaries: https://github.com/ybediat/OpenNote/releases/download/V%v/OCnotes-%v.apk
+Binaries: https://github.com/ybediat/OCnotes/releases/download/v%v/OCnotes-%v.apk
 AllowedAPKSigningKeys: b81ebfae3753d5b8fdb703cc0f5177d20bde66a57297f63759d40e771dca9ca4
 
-AutoUpdateMode: Version V%v
-UpdateCheckMode: Tags ^V[0-9]+\.[0-9]+\.[0-9]+$
+AutoUpdateMode: Version v%v
+UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
 CurrentVersion: 0.1.2
 CurrentVersionCode: 3

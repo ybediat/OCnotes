@@ -85,8 +85,8 @@ Ce mode rend l'étape 3 non négociable : l'APK publié doit venir de la CI Linu
 Un APK construit ailleurs fait échouer la vérification, et le mode 2 échoue
 fermé — l'application n'est alors pas publiée du tout.
 
-Une release destinée à F-Droid demande en plus : un tag `V<version>` poussé sur
+Une release destinée à F-Droid demande en plus : un tag `v<version>` poussé sur
 le dépôt public — c'est lui que suit `UpdateCheckMode: Tags` —, un journal
 `fastlane/metadata/android/<locale>/changelogs/<versionCode>.txt` par langue
 traduite, et l'APK signé publié en pièce jointe de la release GitHub à l'URL que
-`Binaries` attend : `.../releases/download/V<version>/OCnotes-<version>.apk`.
+`Binaries` attend : `.../releases/download/v<version>/OCnotes-<version>.apk`.
