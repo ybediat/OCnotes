@@ -79,6 +79,7 @@
     <string name="err_fichier_trop_volumineux">Ce document est trop volumineux à ouvrir.</string>
     <string name="err_stockage">Impossible d\'écrire sur le stockage de l\'appareil. Vérifiez l\'espace disponible ou synchronisez d\'abord vos modifications locales.</string>
     <string name="err_contenu_a_telecharger">Le contenu de cette note n\'est pas disponible hors connexion. Téléchargez-la une fois le réseau revenu.</string>
+    <string name="err_contenu_perdu">Le contenu de cette note est introuvable sur cet appareil, et aucune copie n\'existe ailleurs pour le récupérer.</string>
     <string name="err_url_serveur_manquante">Indiquez l\'adresse du serveur.</string>
     <string name="err_url_serveur_invalide">Adresse de serveur invalide. Elle doit commencer par http:// ou https://</string>
     <string name="err_utilisateur_manquant">Indiquez votre nom d\'utilisateur.</string>

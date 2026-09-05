@@ -65,6 +65,7 @@ private fun texteLocal(code: String): Texte? = when (code) {
     "FILE_TOO_LARGE" -> Texte.de(R.string.err_fichier_trop_volumineux)
     "STORAGE_IO" -> Texte.de(R.string.err_stockage)
     "CONTENT_NOT_CACHED" -> Texte.de(R.string.err_contenu_a_telecharger)
+    "CONTENT_MISSING" -> Texte.de(R.string.err_contenu_perdu)
     "SERVER_URL_MISSING" -> Texte.de(R.string.err_url_serveur_manquante)
     "SERVER_URL_INVALID" -> Texte.de(R.string.err_url_serveur_invalide)
     "USERNAME_MISSING" -> Texte.de(R.string.err_utilisateur_manquant)

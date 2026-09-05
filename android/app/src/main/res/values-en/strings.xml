@@ -85,6 +85,7 @@
     <string name="err_fichier_trop_volumineux">This document is too large to open.</string>
     <string name="err_stockage">Unable to write to the device storage. Check the available space or sync local changes first.</string>
     <string name="err_contenu_a_telecharger">This note is not available offline. Download it again once the network is back.</string>
+    <string name="err_contenu_perdu">This note\'s content can\'t be found on this device, and no other copy exists to recover it.</string>
     <string name="err_url_serveur_manquante">Enter the server address.</string>
     <string name="err_url_serveur_invalide">Invalid server address. It must start with http:// or https://</string>
     <string name="err_utilisateur_manquant">Enter your username.</string>

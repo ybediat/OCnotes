@@ -68,6 +68,7 @@
     <string name="err_fichier_trop_volumineux">Dieses Dokument ist zu groß, um geöffnet zu werden.</string>
     <string name="err_stockage">Es kann nicht auf den Gerätespeicher geschrieben werden. Überprüfen Sie den verfügbaren Speicherplatz oder synchronisieren Sie zunächst Ihre lokalen Änderungen.</string>
     <string name="err_contenu_a_telecharger">Der Inhalt dieser Notiz ist offline nicht verfügbar. Laden Sie sie herunter, sobald die Netzwerkverbindung wiederhergestellt ist.</string>
+    <string name="err_contenu_perdu">Der Inhalt dieser Notiz ist auf diesem Gerät nicht auffindbar, und es existiert keine andere Kopie zur Wiederherstellung.</string>
     <string name="err_url_serveur_manquante">Geben Sie die Serveradresse an.</string>
     <string name="err_url_serveur_invalide">Ungültige Serveradresse. Sie muss mit http:// oder https:// beginnen.</string>
     <string name="err_utilisateur_manquant">Geben Sie Ihren Benutzernamen an.</string>

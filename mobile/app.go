@@ -213,7 +213,14 @@ func (a *App) StartLocal() error {
 		return err
 	}
 
-	a.cfg = config.Config{Mode: config.ModeLocal}
+	// Appelable aussi pour annuler un branchement en cours depuis le mode
+	// local : Connect a pu poser un client authentifié et des identifiants en
+	// mémoire sans jamais les persister. Les deux doivent disparaître avec le
+	// reste de la configuration, comme le fait DetachJSON — sinon un geste
+	// suivant en mode local trouverait un client vivant que plus rien
+	// n'attend, avec un token qu'on croyait abandonné.
+	a.client, a.lib = nil, nil
+	a.cfg = config.Config{Mode: config.ModeLocal, LastPath: a.cfg.LastPath}
 	return config.Save(a.dataDir, a.cfg)
 }
 
