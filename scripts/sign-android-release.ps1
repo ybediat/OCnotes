@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Signe et vérifie l'APK release OCnotes avec apksigner 34.0.0.
 
@@ -61,6 +61,8 @@ function Resolve-ReleasePath {
 
     return [IO.Path]::GetFullPath($Path)
 }
+
+. (Join-Path $PSScriptRoot 'lib\apk-version.ps1')
 
 function Get-CiUnsignedApk {
     # Télécharge l'APK non signé produit par la CI Linux pour le commit
@@ -130,13 +132,9 @@ if (-not $UnsignedApk) {
         $UnsignedApk = Get-CiUnsignedApk
     }
 }
-if (-not $OutputApk) {
-    $OutputApk = Join-Path $repoDirectory 'dist\OCnotes-release-signed.apk'
-}
 
 $keystorePath = Resolve-ReleasePath $Keystore
 $unsignedPath = Resolve-ReleasePath $UnsignedApk
-$outputPath = Resolve-ReleasePath $OutputApk
 
 if (-not (Test-Path -LiteralPath $keystorePath -PathType Leaf)) {
     throw "Clé introuvable : $keystorePath"
@@ -144,6 +142,14 @@ if (-not (Test-Path -LiteralPath $keystorePath -PathType Leaf)) {
 if (-not (Test-Path -LiteralPath $unsignedPath -PathType Leaf)) {
     throw "APK non signé introuvable : $unsignedPath`nLancez d'abord le build release."
 }
+
+if (-not $OutputApk) {
+    $versionName = Get-ApkVersionName -ApkPath $unsignedPath
+    Write-Host "Version lue dans l'APK   : $versionName"
+    $OutputApk = Join-Path $repoDirectory ('dist\OCnotes-{0}.apk' -f $versionName)
+}
+$outputPath = Resolve-ReleasePath $OutputApk
+
 if ($unsignedPath -eq $outputPath) {
     throw "L'APK signé doit avoir un chemin différent de l'APK non signé."
 }

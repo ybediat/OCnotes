@@ -31,7 +31,7 @@ par Git.
 Sur une machine qui possède la clé et les Android Build Tools 34.0.0 :
 
 ```powershell
-.\scripts\sign-android-release.ps1 -Keystore "$env:USERPROFILE\.ocnotes\signing\ocnotes-release.p12" -OutputApk "dist\OCnotes-<version>.apk"
+.\scripts\sign-android-release.ps1 -Keystore "$env:USERPROFILE\.ocnotes\signing\ocnotes-release.p12"
 ```
 
 Sans autre indication, le script signe **l'APK non signé produit par la CI pour
@@ -48,9 +48,12 @@ Deux échappatoires, toutes deux explicites :
   avertissement. À réserver à un essai d'installation sur appareil — cet APK
   n'est pas publiable.
 
-`-Source` est un alias de `-UnsignedApk`, conservé pour compatibilité. Nommez la
-sortie `dist/OCnotes-<version>.apk` : c'est le nom qu'attend l'URL `Binaries`
-de la recette F-Droid.
+`-Source` est un alias de `-UnsignedApk`, conservé pour compatibilité. Sans
+`-OutputApk`, la sortie est nommée d'après le `versionName` **lu dans l'APK
+lui-même** avec `aapt2 dump badging` — jamais deviné à partir de ce qui traîne
+déjà dans `dist/` : `OCnotes-<version>.apk`, par exemple `OCnotes-0.1.3.apk`.
+C'est le nom qu'attend l'URL `Binaries` de la recette F-Droid. Vous pouvez
+toujours imposer un nom différent avec `-OutputApk`.
 
 Le script demande le mot de passe dans le terminal, vérifie la signature avec
 `apksigner` et affiche l'empreinte SHA-256 de l'APK final. Installez-le sur un

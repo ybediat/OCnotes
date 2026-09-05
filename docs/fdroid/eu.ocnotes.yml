@@ -96,7 +96,7 @@ Builds:
 # ---------------------------------------------------------------------------
 
 Binaries: https://github.com/ybediat/OpenNote/releases/download/V%v/OCnotes-%v.apk
-AllowedAPKSigningKeys: 9eda46c9fdb2756cdad00a548c27261d1a5bfb25b06e11892071bbd19f35e6ec
+AllowedAPKSigningKeys: b81ebfae3753d5b8fdb703cc0f5177d20bde66a57297f63759d40e771dca9ca4
 
 AutoUpdateMode: Version V%v
 UpdateCheckMode: Tags ^V[0-9]+\.[0-9]+\.[0-9]+$

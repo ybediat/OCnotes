@@ -8,7 +8,10 @@
 [![Go 1.26](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](go.mod)
 [![Android 8+](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](#installation)
 [![Statut : alpha](https://img.shields.io/badge/statut-alpha-orange.svg)](#état-du-projet)
-
+![Français](https://img.shields.io/badge/language-Fr-blue)
+![Anglais](https://img.shields.io/badge/language-En-blue)
+![Allemand](https://img.shields.io/badge/language-DE-blue)
+![Espagnol](https://img.shields.io/badge/language-Es-blue)
 </div>
 
 ## Ce que fait OCnotes

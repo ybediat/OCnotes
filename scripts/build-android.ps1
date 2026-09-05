@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Chaîne complète : binding gomobile, APK debug ou release signé, install.
 
@@ -77,6 +77,8 @@ if ($Release -and -not $Keystore) {
 $racine = Split-Path -Parent $PSScriptRoot
 Set-Location $racine
 
+. (Join-Path $PSScriptRoot 'lib\apk-version.ps1')
+
 # --- 1. Environnement ---------------------------------------------------------
 $env:PATH = "C:\Program Files\Go\bin;$env:USERPROFILE\go\bin;$env:PATH"
 $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
@@ -106,7 +108,9 @@ if ($SansBind) {
     Write-Host "gomobile bind sauté (-SansBind)." -ForegroundColor Yellow
 } else {
     Write-Host "gomobile bind -> android/app/libs/ocnotes.aar" -ForegroundColor Cyan
-    gomobile bind -target=android/arm64,android/amd64 -androidapi 26 -ldflags="-s -w" `
+    # La virgule doit rester dans un seul argument : sinon PowerShell l'interprète
+    # comme un séparateur de liste avant même de lancer gomobile.
+    gomobile bind "-target=android/arm64,android/amd64" -androidapi 26 -ldflags="-s -w" `
         -o android/app/libs/ocnotes.aar ./mobile
     if ($LASTEXITCODE -ne 0) { throw "gomobile bind a échoué." }
 }
@@ -125,15 +129,20 @@ try {
 if ($Release) {
     $apkBrut = Join-Path $racine "android\app\build\outputs\apk\release\app-release-unsigned.apk"
     if (-not (Test-Path $apkBrut)) { throw "APK release introuvable : $apkBrut" }
+    # Lu dans l'APK qu'on vient de construire, pas deviné à partir de ce qui
+    # traîne déjà dans dist/ : c'est ce qui garantit que le nom de fichier et
+    # la version réellement embarquée ne peuvent jamais diverger.
+    $versionName = Get-ApkVersionName -ApkPath $apkBrut
+    Write-Host "Version buildée : $versionName" -ForegroundColor Cyan
+    $apk = Join-Path $racine ("dist\OCnotes-{0}.apk" -f $versionName)
 
     # --- 4 bis. Signature ---------------------------------------------------
     Write-Host "Signature via sign-android-release.ps1" -ForegroundColor Cyan
     Write-Host "Le mot de passe de la clé sera demandé par apksigner." -ForegroundColor Yellow
     & (Join-Path $PSScriptRoot "sign-android-release.ps1") `
-        -Keystore $Keystore -Alias $Alias -UnsignedApk $apkBrut
+        -Keystore $Keystore -Alias $Alias -UnsignedApk $apkBrut -OutputApk $apk
     if ($LASTEXITCODE -ne 0) { throw "La signature a échoué." }
 
-    $apk = Join-Path $racine "dist\OCnotes-release-signed.apk"
     $paquet = "eu.ocnotes"
 } else {
     $apk = Join-Path $racine "android\app\build\outputs\apk\debug\app-debug.apk"
