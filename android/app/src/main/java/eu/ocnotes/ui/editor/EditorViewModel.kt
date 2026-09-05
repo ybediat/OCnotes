@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import eu.ocnotes.AppContainer
+import eu.ocnotes.data.AppMode
 import eu.ocnotes.data.FormatAction
 import eu.ocnotes.data.MoteurEdition
 import eu.ocnotes.data.NoteBlockDto
@@ -117,6 +118,15 @@ data class EditorUiState(
     val modifiable: Boolean = true,
     /** Choix figé à la construction du ViewModel pour toute cette session. */
     val moteurEdition: MoteurEdition = MoteurEdition.DEFAUT,
+
+    /**
+     * Vrai quand les notes ne vivent que sur cet appareil.
+     *
+     * Décide de la formulation d'un contenu introuvable : « rouvrez-la une
+     * fois la connexion revenue » n'a pas de sens à écrire à quelqu'un qui n'a
+     * pas de serveur — il n'y a pas de connexion à attendre.
+     */
+    val modeLocal: Boolean = false,
 ) {
     /**
      * Vrai quand [valeur] peut être écrit dans la note sans risquer de la
@@ -291,6 +301,9 @@ class EditorViewModel(
             texteBrut = !documentBureautique && repository.isPlainText(nom),
             documentBureautique = documentBureautique,
             moteurEdition = moteurEdition,
+            // Lu une fois à l'ouverture, comme documentBureautique : le mode
+            // ne change pas pendant qu'une note est en train de s'éditer.
+            modeLocal = repository.mode.value == AppMode.LOCAL,
         ),
     )
     val uiState: StateFlow<EditorUiState> = _uiState.asStateFlow()

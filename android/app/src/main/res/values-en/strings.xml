@@ -220,6 +220,7 @@
     <string name="browser_deplacer_titre">Move “%1$s”</string>
     <string name="browser_dossier_parent">Parent folder</string>
     <string name="browser_rafraichir">Refresh and sync</string>
+    <string name="browser_rafraichir_local">Refresh</string>
     <string name="browser_nouvelle_note">New note</string>
     <string name="browser_nouveau_dossier">New folder</string>
     <string name="browser_type_dossier">Folder</string>
@@ -437,6 +438,7 @@
     <string name="editeur_saisie_vide">Write here…</string>
     <string name="editeur_illisible_titre">Note not loaded</string>
     <string name="editeur_illisible_detail">Its contents could not be read. Nothing was changed: reopen it once the connection is back.</string>
+    <string name="editeur_illisible_detail_local">Its contents could not be read. Nothing was changed, but no other copy exists on this device to recover it.</string>
     <string name="editeur_defilement_rapide">Fast document scroll</string>
     <string name="editeur_ouverture_longue">Opening a large note…</string>
 

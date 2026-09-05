@@ -198,6 +198,8 @@
     <string name="browser_deplacer_titre">Déplacer « %1$s »</string>
     <string name="browser_dossier_parent">Dossier parent</string>
     <string name="browser_rafraichir">Rafraîchir et synchroniser</string>
+    <!-- Mode local : rien à synchroniser, seulement à relire depuis le disque. -->
+    <string name="browser_rafraichir_local">Rafraîchir</string>
     <string name="browser_nouvelle_note">Nouvelle note</string>
     <string name="browser_nouveau_dossier">Nouveau dossier</string>
     <string name="browser_type_dossier">Dossier</string>
@@ -433,6 +435,8 @@
     <string name="editeur_saisie_vide">Écrivez ici…</string>
     <string name="editeur_illisible_titre">Note non chargée</string>
     <string name="editeur_illisible_detail">Son contenu n\'a pas pu être lu. Rien n\'a été modifié : rouvrez-la une fois la connexion revenue.</string>
+    <!-- Mode local : pas de serveur à attendre, donc pas de reconnexion à promettre. -->
+    <string name="editeur_illisible_detail_local">Son contenu n\'a pas pu être lu. Rien n\'a été modifié, mais aucune copie n\'existe ailleurs sur cet appareil pour le récupérer.</string>
     <string name="editeur_defilement_rapide">Défilement rapide du document</string>
     <string name="editeur_ouverture_longue">Ouverture d\'une grande note…</string>
 

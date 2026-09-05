@@ -183,6 +183,7 @@
     <string name="browser_deplacer_titre">„%1$s“ verschieben</string>
     <string name="browser_dossier_parent">Übergeordneter Ordner</string>
     <string name="browser_rafraichir">Aktualisieren und synchronisieren</string>
+    <string name="browser_rafraichir_local">Aktualisieren</string>
     <string name="browser_nouvelle_note">Neue Notiz</string>
     <string name="browser_nouveau_dossier">Neuer Ordner</string>
     <string name="browser_type_dossier">Ordner</string>
@@ -416,6 +417,7 @@
     <string name="editeur_saisie_vide">Hier schreiben…</string>
     <string name="editeur_illisible_titre">Notiz nicht geladen</string>
     <string name="editeur_illisible_detail">Ihr Inhalt konnte nicht gelesen werden. Nichts wurde geändert: Öffnen Sie sie erneut, sobald die Verbindung wiederhergestellt ist.</string>
+    <string name="editeur_illisible_detail_local">Ihr Inhalt konnte nicht gelesen werden. Es wurde nichts geändert, aber auf diesem Gerät existiert keine andere Kopie zur Wiederherstellung.</string>
     <string name="editeur_defilement_rapide">Schneller Dokumentbildlauf</string>
     <string name="editeur_ouverture_longue">Große Notiz wird geöffnet…</string>
 

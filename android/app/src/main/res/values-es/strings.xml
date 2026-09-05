@@ -201,6 +201,7 @@
     <string name="browser_deplacer_titre">Mover «%1$s»</string>
     <string name="browser_dossier_parent">Carpeta superior</string>
     <string name="browser_rafraichir">Actualizar y sincronizar</string>
+    <string name="browser_rafraichir_local">Actualizar</string>
     <string name="browser_nouvelle_note">Nueva nota</string>
     <string name="browser_nouveau_dossier">Nueva carpeta</string>
     <string name="browser_type_dossier">Carpeta</string>
@@ -422,6 +423,7 @@
     <string name="editeur_saisie_vide">Escriba aquí…</string>
     <string name="editeur_illisible_titre">Nota no cargada</string>
     <string name="editeur_illisible_detail">No se ha podido leer su contenido. No se ha modificado nada: vuelva a abrirla cuando se restablezca la conexión.</string>
+    <string name="editeur_illisible_detail_local">No se ha podido leer su contenido. No se ha modificado nada, pero no existe ninguna otra copia en este dispositivo para recuperarlo.</string>
     <string name="editeur_defilement_rapide">Desplazamiento rápido del documento</string>
     <string name="editeur_ouverture_longue">Abriendo una nota grande…</string>
 

@@ -229,7 +229,16 @@ fun EditorScreen(
         if (!etat.charge) {
             EtatVide(
                 titre = stringResource(R.string.editeur_illisible_titre),
-                detail = stringResource(R.string.editeur_illisible_detail),
+                // En mode local, il n'y a pas de serveur à attendre : la
+                // formulation ne doit pas promettre une reconnexion qui
+                // n'aura jamais lieu.
+                detail = stringResource(
+                    if (etat.modeLocal) {
+                        R.string.editeur_illisible_detail_local
+                    } else {
+                        R.string.editeur_illisible_detail
+                    },
+                ),
                 modifier = Modifier.padding(paddings),
             )
             return@Scaffold

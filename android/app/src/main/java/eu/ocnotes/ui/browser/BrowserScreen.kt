@@ -192,10 +192,22 @@ fun BrowserScreen(
                     // ce qui agit sur la liste affichée.
                     actions = {
                         BoutonTri(tri = etat.tri, onChanger = viewModel::changerTri)
-                        IconButton(onClick = viewModel::rafraichir) {
+                        // En mode local il n'y a personne à qui pousser : le
+                        // geste ne relit que le disque, et le dire autrement
+                        // laisserait croire à une synchronisation qui n'existe
+                        // pas.
+                        IconButton(
+                            onClick = if (etat.modeLocal) viewModel::recharger else viewModel::rafraichir,
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
-                                contentDescription = stringResource(R.string.browser_rafraichir),
+                                contentDescription = stringResource(
+                                    if (etat.modeLocal) {
+                                        R.string.browser_rafraichir_local
+                                    } else {
+                                        R.string.browser_rafraichir
+                                    },
+                                ),
                             )
                         }
                     },
