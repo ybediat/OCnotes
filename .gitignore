@@ -48,6 +48,7 @@
 
 # Documentation et instructions de travail internes (conservées localement)
 /docs/ARCHITECTURE.md
+/docs/CARNET.md
 /docs/CHANTIER-*.md
 /docs/FACADE.md
 /docs/SETUP.md

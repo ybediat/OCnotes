@@ -4,6 +4,8 @@
 
 **Notes Markdown sur Android — en local ou synchronisées avec OpenCloud.**
 
+[English version](README.en.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.txt)
 [![Go 1.26](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](go.mod)
 [![Android 8+](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](#installation)
@@ -244,15 +246,14 @@ hors ligne.
 
 Limites connues :
 
-- Les performances sur les notes très longues restent à améliorer.
 - Pas d'OIDC : l'authentification passe uniquement par App Token.
 - Le HTML brut d'une note est ignoré à l'aperçu, et les images en `data:` ne
   sont pas affichées (seul leur texte alternatif l'est).
 - Les traductions n'ont pas encore été relues par des locuteurs natifs sur
   appareil.
 
-Prochaines priorités : virtualisation de l'éditeur, langues supplémentaires,
-OIDC et publication sur F-Droid.
+Prochaines priorités : langues supplémentaires, OIDC et publication sur
+F-Droid.
 
 ## Contribuer
 
