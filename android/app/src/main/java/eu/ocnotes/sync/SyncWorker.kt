@@ -53,7 +53,9 @@ class SyncWorker(
                 !report.hasError -> Result.success()
 
                 report.categorieErreur == ErrorCategory.AUTH -> {
-                    Log.w(TAG, "token refusé pendant la synchronisation : ${report.error}")
+                    // Le message Go peut contenir une URL ou un chemin. Le
+                    // code stable suffit au diagnostic et ne révèle rien.
+                    Log.w(TAG, "token refusé pendant la synchronisation (${report.errorCode})")
                     container.repository.invalidateSession()
                     Result.failure()
                 }
@@ -73,7 +75,7 @@ class SyncWorker(
             // Seuls deux cas arrivent ici : aucun espace de travail choisi, ou
             // un token devenu invalide. Réessayer ne servirait à rien, il faut
             // un geste de l'utilisateur.
-            Log.w(TAG, "synchronisation abandonnée (${e.category}) : ${e.rawMessage}")
+            Log.w(TAG, "synchronisation abandonnée (${e.category}/${e.code})")
             if (e.category == ErrorCategory.AUTH) {
                 container.repository.invalidateSession()
             }

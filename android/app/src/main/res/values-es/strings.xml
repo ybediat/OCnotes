@@ -483,4 +483,11 @@
     <string name="sync_conflits_deplacement">\n• traslado cancelado; copia conservada: %1$s</string>
     <string name="reglages_conflits_suppression">• Eliminación cancelada: %1$s cambió de forma remota</string>
     <string name="reglages_conflits_deplacement">• Traslado cancelado; copia conservada: %1$s</string>
+    <!-- Diagnóstico de cierre inesperado. -->
+    <string name="diagnostic_crash_titre">La aplicación se ha detenido</string>
+    <string name="diagnostic_crash_explication">Android detectó un cierre inesperado. Este informe no contiene notas, credenciales ni la dirección del servidor. No se enviará nada sin su consentimiento.</string>
+    <string name="diagnostic_signaler_github">Informar en GitHub</string>
+    <string name="diagnostic_partage_sujet">Informe de diagnóstico de OCnotes</string>
+    <string name="diagnostic_partage_via">Compartir el informe de diagnóstico</string>
+    <string name="diagnostic_github_copie">Informe copiado. Péguelo en la incidencia de GitHub antes de publicarla.</string>
 </resources>

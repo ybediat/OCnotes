@@ -92,3 +92,19 @@ modification de l'éditeur ou de la synchronisation, vérifiez au minimum :
 
 Pour un changement de comportement de conflit, utilisez un compte de test sur
 deux clients plutôt que des notes personnelles.
+
+### Rapport de crash
+
+L'APK debug contient une activité sans interface qui provoque une exception
+contrôlée. Elle est absente de la release et ne se lance que par composant
+explicite :
+
+```bash
+adb shell am start -n \
+  eu.ocnotes.debug/eu.ocnotes.diagnostic.CrashProbeActivity
+```
+
+Relancez ensuite OCnotes. Le rapport doit apparaître avant l'interface normale,
+ne jamais contenir `OCNOTES_PRIVATE_PROBE`, et disparaître après « Supprimer »
+ou « Partager ». Cette sonde ferme réellement le processus debug : ne pas la
+lancer pendant une saisie à conserver.

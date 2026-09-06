@@ -500,4 +500,11 @@
     <string name="sync_conflits_deplacement">\n• move cancelled; copy kept: %1$s</string>
     <string name="reglages_conflits_suppression">• Deletion cancelled: %1$s changed remotely</string>
     <string name="reglages_conflits_deplacement">• Move cancelled; copy kept: %1$s</string>
+    <!-- Unexpected-exit diagnostics. -->
+    <string name="diagnostic_crash_titre">The application stopped</string>
+    <string name="diagnostic_crash_explication">Android detected an unexpected exit. This report contains no note, credentials, or server address. Nothing will be sent without your approval.</string>
+    <string name="diagnostic_signaler_github">Report on GitHub</string>
+    <string name="diagnostic_partage_sujet">OCnotes diagnostic report</string>
+    <string name="diagnostic_partage_via">Share the diagnostic report</string>
+    <string name="diagnostic_github_copie">Report copied. Paste it into the GitHub issue before publishing it.</string>
 </resources>

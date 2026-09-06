@@ -62,5 +62,8 @@ jobs:
             android/app/build/outputs/apk/release/app-release-unsigned.apk
             android/app/libs/ocnotes.aar
             android/app/build/reports/lint-results-release.*
+            android/app/build/outputs/mapping/release/mapping.txt
           if-no-files-found: error
-          retention-days: 14
+          # Une trace d'une version obfusquée n'est exploitable qu'avec le
+          # mapping exact de son build. GitHub limite cette conservation à 90 j.
+          retention-days: 90

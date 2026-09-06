@@ -477,4 +477,11 @@
     <string name="sync_conflits_deplacement">\n• Verschiebung abgebrochen; Kopie beibehalten: %1$s</string>
     <string name="reglages_conflits_suppression">• Löschung abgebrochen: %1$s wurde remote geändert</string>
     <string name="reglages_conflits_deplacement">• Verschiebung abgebrochen; Kopie beibehalten: %1$s</string>
+    <!-- Diagnose eines unerwarteten Endes. -->
+    <string name="diagnostic_crash_titre">Die Anwendung wurde beendet</string>
+    <string name="diagnostic_crash_explication">Android hat ein unerwartetes Ende erkannt. Dieser Bericht enthält weder Notizen noch Zugangsdaten oder die Serveradresse. Ohne Ihre Zustimmung wird nichts gesendet.</string>
+    <string name="diagnostic_signaler_github">Auf GitHub melden</string>
+    <string name="diagnostic_partage_sujet">OCnotes-Diagnosebericht</string>
+    <string name="diagnostic_partage_via">Diagnosebericht teilen</string>
+    <string name="diagnostic_github_copie">Bericht kopiert. Fügen Sie ihn vor der Veröffentlichung in das GitHub-Issue ein.</string>
 </resources>

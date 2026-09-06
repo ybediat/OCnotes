@@ -23,6 +23,7 @@ import androidx.navigation.compose.rememberNavController
 import eu.ocnotes.appContainer
 import eu.ocnotes.data.AppMode
 import eu.ocnotes.ui.common.ChargementPleinEcran
+import eu.ocnotes.ui.common.CrashReportGate
 import eu.ocnotes.ui.common.TiroirApplication
 import eu.ocnotes.ui.root.DemarrageState
 import eu.ocnotes.ui.root.RootViewModel
@@ -51,7 +52,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             OCnotesTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    OCnotesApp()
+                    CrashReportGate(appContainer.crashReporter) {
+                        OCnotesApp()
+                    }
                 }
             }
         }

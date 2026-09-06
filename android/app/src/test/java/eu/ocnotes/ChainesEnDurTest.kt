@@ -210,6 +210,7 @@ class ChainesEnDurTest {
          * vider — un message de `Log.w` n'a pas de lecteur à ménager.
          */
         val HORS_INTERFACE = setOf(
+            "diagnostic/CrashReporter.kt",
             "sync/SyncWorker.kt",
         )
     }

@@ -66,6 +66,9 @@ Avant de publier un binaire :
 - vérifiez que le dépôt et les artefacts ne contiennent aucune donnée privée ;
 - publiez le checksum SHA-256 de l'APK si un téléchargement direct est proposé ;
 - conservez l'APK non signé utilisé pour contrôler la reproductibilité ;
+- conservez avec lui `outputs/mapping/release/mapping.txt` : un rapport de
+  crash d'une version obfusquée n'est pas relisible avec le mapping d'un autre
+  build, et l'artefact CI expire après 90 jours ;
 - notez les changements visibles par les utilisateurs ;
 - assurez-vous que les mises à jour utilisent toujours la même clé de signature.
 

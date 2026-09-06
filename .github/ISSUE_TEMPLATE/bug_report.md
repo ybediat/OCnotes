@@ -47,7 +47,10 @@ Ajoutez ici des captures d'écran si elles permettent de comprendre le problème
 
 ## Logs
 
-Si vous disposez de logs pertinents, ajoutez-les ici.
+Si OCnotes a proposé un rapport de diagnostic après un arrêt, collez-le ici.
+Il ne contient volontairement ni message d'erreur, ni note, ni identifiant, ni
+adresse de serveur. Vérifiez tout de même son contenu avant de publier l'issue.
 
 ```text
 Collez les logs ici.
+```

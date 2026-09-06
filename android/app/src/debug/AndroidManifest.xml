@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <!-- Sonde de crash locale, invoquée explicitement par adb. Elle
+             n'existe pas dans l'APK release et n'a aucun filtre d'intent. -->
+        <activity
+            android:name=".diagnostic.CrashProbeActivity"
+            android:exported="true"
+            android:theme="@style/Theme.OCnotes" />
+
         <activity
             android:name=".ui.editor.NativeEditTextProbeActivity"
             android:exported="true"

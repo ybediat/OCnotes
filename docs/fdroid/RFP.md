@@ -85,7 +85,9 @@ registry by CI on every run
 
 **Dependencies** are AndroidX, Kotlin, kotlinx.serialization, WorkManager and
 [goldmark](https://github.com/yuin/goldmark) (MIT). No Google Play Services, no
-Firebase, no analytics, no ad SDK, no crash reporter.
+Firebase, no analytics, no ad SDK, no remote crash reporter. A single sanitized
+crash report may remain in the app's private cache until the user deletes or
+explicitly shares it; it is never uploaded automatically.
 
 **Permissions**: `INTERNET`, `ACCESS_NETWORK_STATE`, `POST_NOTIFICATIONS` —
 the last one for sync-conflict notifications.

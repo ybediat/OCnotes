@@ -112,4 +112,13 @@ Ne publiez jamais de jeton, mot de passe, URL de serveur privée, contenu de
 note, clé de signature ou journal non expurgé. Les fichiers de configuration
 locale, clés et sorties de scripts sont exclus par `.gitignore`.
 
+Les arrêts inattendus produisent au plus un rapport dans le cache privé Android.
+Il contient la version, l'environnement Android, les types d'exception et les
+cadres de pile, mais jamais les messages d'exception : ceux du binding Go
+peuvent contenir un chemin ou une URL. Au lancement suivant, l'interface permet
+de le supprimer, de le partager avec la feuille Android ou de le copier avant
+d'ouvrir le formulaire GitHub. Aucun envoi n'est automatique. À partir de
+l'API 30, `ApplicationExitInfo` ajoute seulement la catégorie d'un crash natif
+ou d'un ANR ; ses traces brutes ne sont pas recopiées.
+
 Les vulnérabilités se signalent conformément à [SECURITY.md](../SECURITY.md).

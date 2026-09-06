@@ -502,4 +502,13 @@
     <string name="sync_conflits_deplacement">\n• déplacement annulé ; copie conservée : %1$s</string>
     <string name="reglages_conflits_suppression">• Suppression annulée : %1$s a changé à distance</string>
     <string name="reglages_conflits_deplacement">• Déplacement annulé ; copie conservée : %1$s</string>
+    <!-- ================================================================
+         Diagnostic d'arrêt inattendu
+         ================================================================ -->
+    <string name="diagnostic_crash_titre">L\'application s\'est arrêtée</string>
+    <string name="diagnostic_crash_explication">Android a détecté un arrêt inattendu. Ce rapport ne contient ni note, ni identifiant, ni adresse de serveur. Rien ne sera envoyé sans votre accord.</string>
+    <string name="diagnostic_signaler_github">Signaler sur GitHub</string>
+    <string name="diagnostic_partage_sujet">Rapport de diagnostic OCnotes</string>
+    <string name="diagnostic_partage_via">Partager le rapport de diagnostic</string>
+    <string name="diagnostic_github_copie">Rapport copié. Collez-le dans l\'issue GitHub avant de la publier.</string>
 </resources>

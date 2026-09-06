@@ -139,8 +139,10 @@ en particulier, obtient un avertissement et non un échec. `OCNOTES_GRADLE_BIN`,
 `OCNOTES_NDK_VERSION` et `ANDROID_NDK_HOME` permettent d'imposer chacun des
 outils.
 
-Après chaque build CI, l'APK release non signé, l'AAR régénéré et le rapport
-lint restent téléchargeables pendant 14 jours dans les artefacts du workflow.
+Après chaque build CI, l'APK release non signé, l'AAR régénéré, le rapport
+lint et le mapping R8 restent téléchargeables pendant 90 jours dans les
+artefacts du workflow. Ce mapping exact permet de relire un rapport de crash
+d'une version release obfusquée.
 
 Pour une génération manuelle :
 

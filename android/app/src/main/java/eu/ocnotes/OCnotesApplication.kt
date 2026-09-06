@@ -8,6 +8,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import eu.ocnotes.data.OCnotesRepository
 import eu.ocnotes.data.PreferencesAffichage
 import eu.ocnotes.data.TokenStore
+import eu.ocnotes.diagnostic.CrashReporter
 import eu.ocnotes.sync.SyncNotifier
 import eu.ocnotes.sync.SyncScheduler
 import kotlinx.coroutines.CoroutineScope
@@ -17,10 +18,13 @@ import kotlinx.coroutines.SupervisorJob
 /**
  * Conteneur de dépendances, construit à la main.
  *
- * L'application a cinq objets à durée de vie processus et aucun graphe
+ * L'application a quelques objets à durée de vie processus et aucun graphe
  * d'injection à démêler : Hilt coûterait plus cher qu'il ne rapporterait.
  */
-class AppContainer(context: Context) {
+class AppContainer(
+    context: Context,
+    val crashReporter: CrashReporter,
+) {
 
     val tokenStore = TokenStore(context)
 
@@ -59,7 +63,10 @@ class OCnotesApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        container = AppContainer(this)
+        // Premier composant installé : il couvre aussi un échec pendant la
+        // construction du dépôt Go ou des autres objets du processus.
+        val crashReporter = CrashReporter.install(this)
+        container = AppContainer(this, crashReporter)
         container.syncNotifier.ensureChannel()
         container.syncScheduler.schedulePeriodic()
 
