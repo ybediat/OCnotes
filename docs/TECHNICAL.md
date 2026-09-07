@@ -48,10 +48,11 @@ note a été modifiée à la fois localement et sur le serveur, OCnotes n'écras
 pas silencieusement la version distante : la situation est signalée afin que
 l'utilisateur puisse choisir la suite.
 
-L'authentification utilise un App Token OpenCloud. Le jeton est conservé côté
-Android avec le mécanisme de chiffrement de la plateforme ; il ne doit jamais
-être ajouté à un fichier du dépôt, à une commande partagée ou à un rapport de
-bug.
+L'authentification principale utilise un App Token OpenCloud. Une connexion
+OIDC expérimentale emploie Authorization Code avec PKCE dans le navigateur,
+puis des jetons Bearer renouvelables. App Token, access token et refresh token
+sont conservés côté Android avec le mécanisme de chiffrement de la plateforme ;
+aucun secret n'est persisté par le cœur Go.
 
 ## Formats pris en charge
 
@@ -117,8 +118,26 @@ Il contient la version, l'environnement Android, les types d'exception et les
 cadres de pile, mais jamais les messages d'exception : ceux du binding Go
 peuvent contenir un chemin ou une URL. Au lancement suivant, l'interface permet
 de le supprimer, de le partager avec la feuille Android ou de le copier avant
-d'ouvrir le formulaire GitHub. Aucun envoi n'est automatique. À partir de
-l'API 30, `ApplicationExitInfo` ajoute seulement la catégorie d'un crash natif
-ou d'un ANR ; ses traces brutes ne sont pas recopiées.
+d'ouvrir le formulaire GitHub. Aucun envoi n'est automatique.
+
+À partir de l'API 30, `ApplicationExitInfo` couvre en plus les crashs natifs,
+les ANR et les mises à mort par le système, que le gestionnaire Kotlin ne peut
+pas voir. Le rapport en retient le motif, l'importance du processus, sa mémoire
+au moment de la mort et un fil d'Ariane que l'application dépose elle-même —
+l'écran courant et, dans l'éditeur, le nombre de lignes et de caractères du
+document. Ni nom de note, ni contenu.
+
+Deux textes ne sont pas décidés par l'application, et sont donc traités à part :
+
+- **la description composée par le système** ne traverse jamais en clair. Elle
+  est ramenée à un vocabulaire fermé (`input_dispatching_timeout`,
+  `native_crash`, `other`…) : une formulation inconnue devient `other`, jamais
+  son texte. Un filtre de caractères ne suffirait pas, un nom d'hôte survivrait
+  à la suppression des `:` et des `/` ;
+- **la trace d'un ANR** est réduite à ses cadres de pile, qui ne portent que des
+  noms venus du programme. Les noms de fils, les états et les verrous sont
+  écartés. La tombstone d'un crash natif, elle, n'est **jamais** lue : elle
+  contient des registres et des extraits de mémoire, donc possiblement des
+  fragments de note.
 
 Les vulnérabilités se signalent conformément à [SECURITY.md](../SECURITY.md).

@@ -8,6 +8,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import eu.ocnotes.data.OCnotesRepository
 import eu.ocnotes.data.PreferencesAffichage
 import eu.ocnotes.data.TokenStore
+import eu.ocnotes.data.auth.OidcManager
 import eu.ocnotes.diagnostic.CrashReporter
 import eu.ocnotes.sync.SyncNotifier
 import eu.ocnotes.sync.SyncScheduler
@@ -27,6 +28,7 @@ class AppContainer(
 ) {
 
     val tokenStore = TokenStore(context)
+    val oidcManager = OidcManager(context)
 
     /** Réglages d'affichage : l'ordre de tri de la liste de notes. */
     val preferencesAffichage = PreferencesAffichage(context)
@@ -39,6 +41,7 @@ class AppContainer(
     val repository = OCnotesRepository(
         dataDir = context.filesDir.absolutePath,
         tokenStore = tokenStore,
+        oidcManager = oidcManager,
         preferences = preferencesAffichage,
     )
 

@@ -29,6 +29,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -37,6 +39,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import eu.ocnotes.R
 import eu.ocnotes.appContainer
 import eu.ocnotes.ui.common.Texte
@@ -64,6 +68,13 @@ fun LoginScreen(
     ),
 ) {
     val etat by viewModel.uiState.collectAsStateWithLifecycle()
+    val oidcLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result -> viewModel.terminerConnexionOidc(result.data) }
+
+    LaunchedEffect(viewModel) {
+        viewModel.ouvrirNavigateurOidc.collect { intent -> oidcLauncher.launch(intent) }
+    }
 
     LaunchedEffect(etat.suite) {
         etat.suite?.let {
@@ -73,6 +84,11 @@ fun LoginScreen(
     }
 
     var tokenVisible by remember { mutableStateOf(false) }
+    val serverFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(etat.erreurAdresse) {
+        if (etat.erreurAdresse) serverFocusRequester.requestFocus()
+    }
 
     Column(
         modifier = modifier
@@ -102,11 +118,19 @@ fun LoginScreen(
             placeholder = { Text(stringResource(R.string.login_serveur_exemple)) },
             singleLine = true,
             enabled = !etat.enCours,
+            isError = etat.erreurAdresse,
+            supportingText = {
+                if (etat.erreurAdresse) {
+                    Text(stringResource(R.string.err_url_serveur_manquante))
+                }
+            },
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Uri,
                 imeAction = ImeAction.Next,
             ),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(serverFocusRequester),
         )
 
         OutlinedTextField(
@@ -230,6 +254,21 @@ fun LoginScreen(
                         R.string.login_continuer_local_aide
                     },
                 ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        if (etat.configurationChargee) {
+            OutlinedButton(
+                onClick = viewModel::connecterAvecNavigateur,
+                enabled = !etat.enCours,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.login_oidc_connecter))
+            }
+            Text(
+                text = stringResource(R.string.login_oidc_aide),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

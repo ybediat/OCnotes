@@ -1,7 +1,10 @@
 package eu.ocnotes.ui.login
 
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -11,12 +14,16 @@ import eu.ocnotes.data.ErrorCategory
 import eu.ocnotes.data.OCnotesException
 import eu.ocnotes.data.OCnotesRepository
 import eu.ocnotes.data.TokenStore
+import eu.ocnotes.data.auth.OidcManager
 import eu.ocnotes.ui.common.Texte
 import eu.ocnotes.ui.common.texte
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
@@ -35,6 +42,8 @@ data class LoginUiState(
     val enCours: Boolean = false,
     /** Message d'erreur affiché sous le formulaire, s'il y en a un. */
     val erreur: Texte? = null,
+    /** L'action OIDC ne peut démarrer sans adresse : l'erreur vise ce champ. */
+    val erreurAdresse: Boolean = false,
     /**
      * Distingue « identifiants refusés » d'un « serveur injoignable ».
      *
@@ -55,15 +64,23 @@ data class LoginUiState(
             serverUrl.isNotBlank() &&
             username.isNotBlank() &&
             appToken.isNotBlank()
+
 }
 
 class LoginViewModel(
     private val repository: OCnotesRepository,
     private val tokenStore: TokenStore,
+    private val oidcManager: OidcManager,
+    private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LoginUiState())
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
+    private val _ouvrirNavigateurOidc = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
+    val ouvrirNavigateurOidc: SharedFlow<Intent> = _ouvrirNavigateurOidc
+    private var serveurOidcEnCours: String?
+        get() = savedStateHandle[KEY_OIDC_SERVER]
+        set(value) { savedStateHandle[KEY_OIDC_SERVER] = value }
 
     init {
         // Repré-remplissage : après un token expiré ou un démarrage hors
@@ -87,7 +104,9 @@ class LoginViewModel(
         repository.acknowledgeSessionExpired()
     }
 
-    fun onServerUrlChange(valeur: String) = _uiState.update { it.copy(serverUrl = valeur, erreur = null) }
+    fun onServerUrlChange(valeur: String) = _uiState.update {
+        it.copy(serverUrl = valeur, erreur = null, erreurAdresse = false)
+    }
 
     fun onUsernameChange(valeur: String) = _uiState.update { it.copy(username = valeur, erreur = null) }
 
@@ -136,6 +155,76 @@ class LoginViewModel(
         }
     }
 
+    /** Découvre l'IdP puis confie Authorization Code + PKCE au navigateur. */
+    fun connecterAvecNavigateur() {
+        val etat = _uiState.value
+        if (etat.enCours) return
+        if (etat.serverUrl.isBlank()) {
+            _uiState.update { it.copy(erreur = null, erreurAdresse = true) }
+            return
+        }
+        _uiState.update {
+            it.copy(enCours = true, erreur = null, erreurAdresse = false, erreurEstAuth = false)
+        }
+
+        viewModelScope.launch {
+            try {
+                serveurOidcEnCours = etat.serverUrl
+                _ouvrirNavigateurOidc.emit(oidcManager.authorizationIntent(etat.serverUrl))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                serveurOidcEnCours = null
+                _uiState.update {
+                    it.copy(enCours = false, erreur = Texte.de(eu.ocnotes.R.string.login_oidc_erreur))
+                }
+            }
+        }
+    }
+
+    /** Reçoit le deep link AppAuth, échange le code et valide LibreGraph. */
+    fun terminerConnexionOidc(data: Intent?) {
+        val server = serveurOidcEnCours ?: _uiState.value.serverUrl
+        if (data == null) {
+            serveurOidcEnCours = null
+            _uiState.update {
+                it.copy(enCours = false, erreur = Texte.de(eu.ocnotes.R.string.login_oidc_annulee))
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val connexion = oidcManager.finishAuthorization(data)
+                repository.connectOidc(
+                    serverUrl = server,
+                    accountId = connexion.accountId,
+                    accessToken = connexion.accessToken,
+                    serializedState = connexion.serializedState,
+                )
+                val apres = repository.state()
+                _uiState.update {
+                    it.copy(
+                        enCours = false,
+                        suite = if (apres.hasWorkspace) {
+                            SuiteConnexion.NAVIGATEUR
+                        } else {
+                            SuiteConnexion.CHOIX_ESPACE
+                        },
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                _uiState.update {
+                    it.copy(enCours = false, erreur = Texte.de(eu.ocnotes.R.string.login_oidc_erreur))
+                }
+            } finally {
+                serveurOidcEnCours = null
+            }
+        }
+    }
+
     /** Démarre sans serveur, ou abandonne un branchement sans toucher aux notes. */
     fun continuerEnLocal() {
         if (_uiState.value.enCours) return
@@ -155,8 +244,17 @@ class LoginViewModel(
     fun suiteConsommee() = _uiState.update { it.copy(suite = null) }
 
     companion object {
+        private const val KEY_OIDC_SERVER = "oidc_server"
+
         fun factory(container: AppContainer): ViewModelProvider.Factory = viewModelFactory {
-            initializer { LoginViewModel(container.repository, container.tokenStore) }
+            initializer {
+                LoginViewModel(
+                    container.repository,
+                    container.tokenStore,
+                    container.oidcManager,
+                    createSavedStateHandle(),
+                )
+            }
         }
     }
 }

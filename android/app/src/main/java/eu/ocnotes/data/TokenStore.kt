@@ -62,8 +62,29 @@ class TokenStore(private val context: Context) {
     /** Chiffre et enregistre un token après une connexion validée. */
     suspend fun saveAppToken(token: String) = withContext(Dispatchers.IO) {
         val encrypted = encrypt(token)
-        check(prefs().edit().putString(KEY_APP_TOKEN, encrypted).commit()) {
+        check(prefs().edit().remove(KEY_OIDC_STATE).putString(KEY_APP_TOKEN, encrypted).commit()) {
             "écriture du token chiffré impossible" // i18n-ok: exception technique, non affichée
+        }
+    }
+
+    /** État AppAuth complet, chiffré : access token, refresh token et issuer. */
+    suspend fun oidcState(): String? = withContext(Dispatchers.IO) {
+        val encoded = prefs().getString(KEY_OIDC_STATE, null) ?: return@withContext null
+        try {
+            decrypt(encoded)?.takeIf { it.isNotBlank() }
+        } catch (_: GeneralSecurityException) {
+            discardUnreadableToken()
+            null
+        } catch (_: IllegalArgumentException) {
+            discardUnreadableToken()
+            null
+        }
+    }
+
+    suspend fun saveOidcState(state: String) = withContext(Dispatchers.IO) {
+        val encrypted = encrypt(state)
+        check(prefs().edit().remove(KEY_APP_TOKEN).putString(KEY_OIDC_STATE, encrypted).commit()) {
+            "écriture de la session OIDC chiffrée impossible" // i18n-ok
         }
     }
 
@@ -131,13 +152,14 @@ class TokenStore(private val context: Context) {
     }
 
     private fun discardUnreadableToken() {
-        prefs().edit().remove(KEY_APP_TOKEN).commit()
+        prefs().edit().remove(KEY_APP_TOKEN).remove(KEY_OIDC_STATE).commit()
         runCatching { keyStore().deleteEntry(KEY_ALIAS) }
     }
 
     private companion object {
         const val FILE_NAME = "ocnotes_secrets_v2"
         const val KEY_APP_TOKEN = "app_token"
+        const val KEY_OIDC_STATE = "oidc_state"
         const val KEY_ALIAS = "ocnotes_app_token_v2"
         const val KEYSTORE_PROVIDER = "AndroidKeyStore"
         const val TRANSFORMATION = "AES/GCM/NoPadding"

@@ -95,16 +95,49 @@ deux clients plutôt que des notes personnelles.
 
 ### Rapport de crash
 
-L'APK debug contient une activité sans interface qui provoque une exception
-contrôlée. Elle est absente de la release et ne se lance que par composant
+L'APK debug contient une activité sans interface qui provoque un arrêt
+contrôlé. Elle est absente de la release et ne se lance que par composant
 explicite :
 
 ```bash
 adb shell am start -n \
-  eu.ocnotes.debug/eu.ocnotes.diagnostic.CrashProbeActivity
+  eu.ocnotes.debug/eu.ocnotes.diagnostic.CrashProbeActivity -e mode kotlin
 ```
+
+Cinq modes, un par chemin de collecte. Les trois derniers ne passent pas par le
+gestionnaire Kotlin : ils ne remontent qu'au lancement suivant, par
+`ApplicationExitInfo`, et sont donc les seuls à éprouver ce chemin-là.
+
+| `mode`   | ce qui se passe         | ce qu'on doit lire ensuite                |
+|----------|-------------------------|-------------------------------------------|
+| `kotlin` | `IllegalStateException` | `source: uncaught_exception`              |
+| `oom`    | `OutOfMemoryError`      | `source: uncaught_exception`              |
+| `native` | `SIGABRT`               | `reason: native_crash`, `anr_trace: none` |
+| `kill`   | `SIGKILL`               | `reason: killed_by_signal`                |
+| `anr`    | fil principal gelé 30 s | `reason: anr`, puis des cadres `at …`     |
+
+Le mode `anr` demande de **toucher l'écran pendant le gel** : sans événement
+d'entrée, le système n'a rien à faire expirer. Le mode `native` est celui qui
+compte le plus — il produit une tombstone, que le rapport ne doit surtout pas
+recopier. `anr_trace: none` est la vérification.
 
 Relancez ensuite OCnotes. Le rapport doit apparaître avant l'interface normale,
 ne jamais contenir `OCNOTES_PRIVATE_PROBE`, et disparaître après « Supprimer »
-ou « Partager ». Cette sonde ferme réellement le processus debug : ne pas la
-lancer pendant une saisie à conserver.
+ou « Partager ». Le bouton retour et un appui à côté le masquent sans l'effacer :
+il doit revenir au lancement suivant. Cette sonde ferme réellement le processus
+debug : ne pas la lancer pendant une saisie à conserver.
+
+Trois lignes demandent un contrôle sur appareil, faute de test automatisé :
+
+- `last_screen` doit porter l'écran quitté, et `editeur;lines=…;chars=…` si la
+  sonde est lancée depuis une note ouverte. C'est le fil d'Ariane, seul lien
+  entre un crash natif et ce que faisait l'application ;
+- `consecutive_abnormal_exits` doit augmenter si l'on relance la sonde sans
+  laisser l'interface s'afficher, et retomber à 1 après un démarrage normal ;
+- `description` ne doit jamais contenir autre chose qu'un mot du vocabulaire
+  fermé de `DiagnosticReportFormatter`. Toute phrase du système y serait un
+  défaut, pas une amélioration.
+
+Après un `-e mode anr`, `anr_trace` ne doit contenir que des lignes `at …` et
+des séparateurs `--- thread N ---` : aucun nom de fil, aucun verrou, aucune
+ligne d'en-tête.

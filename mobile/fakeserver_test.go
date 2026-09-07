@@ -119,8 +119,9 @@ func (f *fakeServer) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, pass, ok := r.BasicAuth()
-	if !ok || user != fakeUser || pass != fakeToken {
+	user, pass, basicOK := r.BasicAuth()
+	bearerOK := r.Header.Get("Authorization") == "Bearer "+fakeToken
+	if (!basicOK || user != fakeUser || pass != fakeToken) && !bearerOK {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}

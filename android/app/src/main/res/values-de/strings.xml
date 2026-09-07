@@ -102,6 +102,10 @@
     <string name="login_reessayer">Erneut versuchen</string>
     <string name="login_continuer_local">Ohne Server fortfahren</string>
     <string name="login_continuer_local_aide">Ihre Notizen bleiben nur auf diesem Gerät. Sie können später einen Server verbinden.</string>
+    <string name="login_oidc_connecter">Mit dem Browser anmelden</string>
+    <string name="login_oidc_aide">Experimentell — erfordert einen für OCnotes konfigurierten Server.</string>
+    <string name="login_oidc_annulee">Browser-Anmeldung wurde abgebrochen.</string>
+    <string name="login_oidc_erreur">Die Browser-Anmeldung war nicht erfolgreich. Prüfen Sie, ob dieser Server OCnotes erlaubt.</string>
     <string name="login_rester_local">Im lokalen Modus bleiben</string>
     <string name="login_rester_local_aide">Die Verbindung wird abgebrochen und Ihre lokalen Notizen bleiben unverändert.</string>
     <string name="login_aide_titre">Noch kein App-Token?</string>
@@ -299,7 +303,7 @@
     <string name="menu_a_propos">Über</string>
     <string name="a_propos_titre">Über OCnotes</string>
     <string name="a_propos_description">Manager für Markdown-Notizen auf diesem Gerät oder synchronisiert mit OpenCloud. Erstellt von Yannis Bediat. V1.0 August 2026</string>
-    <string name="a_propos_licence">Lizenz: MIT https://github.com/ybediat/OpenNote/tree/main?tab=MIT-1-ov-file</string>
+    <string name="a_propos_licence">Lizenz: MIT https://github.com/ybediat/OCnotes/tree/main?tab=MIT-1-ov-file</string>
     <string name="a_propos_depot">Git-Repository</string>
 
     <!-- ================================================================

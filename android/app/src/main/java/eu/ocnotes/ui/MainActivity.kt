@@ -83,7 +83,15 @@ private fun OCnotesApp(
     // écoute toute la surface et peut voler un défilement vertical dès que le
     // doigt dérive légèrement à l'horizontale.
     val destination by navController.currentBackStackEntryAsState()
-    val gestesActifs = gestesTiroirActifs(destination?.destination?.route)
+    val route = destination?.destination?.route
+    val gestesActifs = gestesTiroirActifs(route)
+
+    // Fil d'Ariane du diagnostic. Une route porte ses arguments — `editeur/{
+    // chemin}` — dont aucun n'a à traverser : seul le segment de tête part.
+    // L'éditeur affine ensuite avec les mesures du document.
+    LaunchedEffect(route) {
+        container.crashReporter.noterEcran(route?.substringBefore('/').orEmpty())
+    }
 
     // Un token rejeté en arrière-plan ne se répare pas tout seul : on ramène
     // l'utilisateur à la saisie plutôt que de le laisser devant une liste qui

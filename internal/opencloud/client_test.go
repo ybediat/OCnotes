@@ -91,6 +91,35 @@ func TestAppTokenAuthEnvoieBasicAuth(t *testing.T) {
 	}
 }
 
+func TestBearerAuthEnvoieEtRenouvelleLeJeton(t *testing.T) {
+	auth := NewBearerAuth("premier")
+	var got []string
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"value":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+	c, err := New(srv.URL, auth)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	c.SetHTTPClient(srv.Client())
+
+	if _, err := c.ListDrives(context.Background()); err != nil {
+		t.Fatalf("premier ListDrives: %v", err)
+	}
+	if err := auth.SetToken("second"); err != nil {
+		t.Fatalf("SetToken: %v", err)
+	}
+	if _, err := c.ListDrives(context.Background()); err != nil {
+		t.Fatalf("second ListDrives: %v", err)
+	}
+	if len(got) != 2 || got[0] != "Bearer premier" || got[1] != "Bearer second" {
+		t.Fatalf("Authorization = %v", got)
+	}
+}
+
 func TestListDrives(t *testing.T) {
 	var gotPath string
 	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {

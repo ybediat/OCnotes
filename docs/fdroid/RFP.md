@@ -87,7 +87,12 @@ registry by CI on every run
 [goldmark](https://github.com/yuin/goldmark) (MIT). No Google Play Services, no
 Firebase, no analytics, no ad SDK, no remote crash reporter. A single sanitized
 crash report may remain in the app's private cache until the user deletes or
-explicitly shares it; it is never uploaded automatically.
+explicitly shares it; it is never uploaded automatically. It holds exception
+types, stack frames and — on API 30+ — the exit reason, process importance and
+memory reported by `ApplicationExitInfo`, plus the current screen. Exception
+messages are dropped, the system description is mapped to a closed vocabulary,
+an ANR trace is stripped to its stack frames, and a native-crash tombstone is
+never read.
 
 **Permissions**: `INTERNET`, `ACCESS_NETWORK_STATE`, `POST_NOTIFICATIONS` —
 the last one for sync-conflict notifications.

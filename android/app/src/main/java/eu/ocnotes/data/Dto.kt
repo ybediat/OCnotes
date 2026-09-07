@@ -27,6 +27,8 @@ data class AppStateDto(
     val root: String = "",
     val lastPath: String = "",
     val pending: Int = 0,
+    /** `app_token` ou `oidc`; les anciennes configurations valent App Token. */
+    val authMode: String = "app_token",
 )
 
 /** Valeurs stables du champ [AppStateDto.mode], définies par la façade Go. */
@@ -34,6 +36,11 @@ object AppMode {
     const val UNSET = ""
     const val LOCAL = "local"
     const val SERVER = "server"
+}
+
+object AuthMode {
+    const val APP_TOKEN = "app_token"
+    const val OIDC = "oidc"
 }
 
 /** Occupation des seuls contenus récupérables du cache local. */

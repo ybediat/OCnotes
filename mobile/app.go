@@ -66,6 +66,7 @@ type App struct {
 	dataDir  string
 	cfg      config.Config
 	client   *opencloud.Client
+	oidcAuth *opencloud.BearerAuth
 	lib      *notes.Library
 	cache    *store.Store
 
@@ -135,6 +136,7 @@ type appState struct {
 	Root         string `json:"root"`
 	LastPath     string `json:"lastPath"`
 	Pending      int    `json:"pending"`
+	AuthMode     string `json:"authMode"`
 }
 
 // cacheState est l'état d'espace présenté dans les réglages. Quota vaut zéro
@@ -165,6 +167,7 @@ func (a *App) StateJSON() (string, error) {
 		Root:         a.cfg.Root,
 		LastPath:     a.cfg.LastPath,
 		Pending:      len(a.cache.Pending()),
+		AuthMode:     a.cfg.EffectiveAuthMode(),
 	})
 }
 
@@ -219,7 +222,7 @@ func (a *App) StartLocal() error {
 	// reste de la configuration, comme le fait DetachJSON — sinon un geste
 	// suivant en mode local trouverait un client vivant que plus rien
 	// n'attend, avec un token qu'on croyait abandonné.
-	a.client, a.lib = nil, nil
+	a.client, a.oidcAuth, a.lib = nil, nil, nil
 	a.cfg = config.Config{Mode: config.ModeLocal, LastPath: a.cfg.LastPath}
 	return config.Save(a.dataDir, a.cfg)
 }
@@ -259,6 +262,23 @@ func (a *App) Connect(serverURL, username, appToken string) error {
 		return err
 	}
 
+	return a.connectClient(serverURL, username, config.AuthAppToken, client, nil)
+}
+
+// ConnectOIDC ouvre et valide une session obtenue par Authorization Code +
+// PKCE côté Android. Le refresh token ne traverse jamais la frontière : seul
+// l'access token, court, vit en mémoire dans le client Go.
+func (a *App) ConnectOIDC(serverURL, accountID, accessToken string) error {
+	serverURL = config.NormalizeServerURL(serverURL)
+	auth := opencloud.NewBearerAuth(accessToken)
+	client, err := opencloud.New(serverURL, auth)
+	if err != nil {
+		return err
+	}
+	return a.connectClient(serverURL, accountID, config.AuthOIDC, client, auth)
+}
+
+func (a *App) connectClient(serverURL, username, authMode string, client *opencloud.Client, oidcAuth *opencloud.BearerAuth) error {
 	ctx, cancel := a.ctx()
 	defer cancel()
 
@@ -273,8 +293,17 @@ func (a *App) Connect(serverURL, username, appToken string) error {
 	defer a.mu.Unlock()
 
 	a.client = client
+	a.oidcAuth = oidcAuth
 	a.cfg.ServerURL = serverURL
 	a.cfg.Username = username
+	// La valeur vide reste la représentation persistée de l'App Token : les
+	// installations existantes n'ont ainsi aucune migration à subir et le mot
+	// "token" n'apparaît pas inutilement dans la configuration non secrète.
+	if authMode == config.AuthOIDC {
+		a.cfg.AuthMode = config.AuthOIDC
+	} else {
+		a.cfg.AuthMode = ""
+	}
 
 	// Branchement en cours depuis le mode local : rien n'est écrit tant que
 	// l'utilisateur n'a pas choisi son espace **et** le sort de ses notes.
@@ -316,7 +345,7 @@ func (a *App) Disconnect() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	a.client, a.lib, a.cfg = nil, nil, config.Config{}
+	a.client, a.oidcAuth, a.lib, a.cfg = nil, nil, nil, config.Config{}
 	if err := a.cache.Clear(); err != nil {
 		return err
 	}
@@ -681,7 +710,7 @@ func (a *App) DetachJSON() (string, error) {
 
 	// Le token n'a jamais été écrit ici ; c'est Android qui le retire du
 	// Keystore de son côté.
-	a.client, a.lib = nil, nil
+	a.client, a.oidcAuth, a.lib = nil, nil, nil
 	a.cfg = config.Config{Mode: config.ModeLocal, LastPath: a.cfg.LastPath}
 	if err := config.Save(a.dataDir, a.cfg); err != nil {
 		return "", err
@@ -734,19 +763,34 @@ func (a *App) openWorkspaceLocked(ctx context.Context, drive opencloud.Drive, ro
 // Renvoie une erreur si aucun espace n'a encore été choisi : il faut alors
 // passer par Connect puis SelectWorkspace.
 func (a *App) Restore(appToken string) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if !a.cfg.HasWorkspace() {
-		return errors.New("mobile: aucun espace enregistré, passer par Connect puis SelectWorkspace")
-	}
-
 	client, err := opencloud.New(a.cfg.ServerURL, opencloud.AppTokenAuth{
 		Username: a.cfg.Username,
 		Token:    appToken,
 	})
 	if err != nil {
 		return err
+	}
+	return a.restoreClient(client, nil)
+}
+
+// RestoreOIDC remonte une session OIDC sans réseau, comme Restore pour un
+// App Token. Un access token expiré reste suffisant pour ouvrir le cache ;
+// Android tentera son renouvellement ensuite, en arrière-plan.
+func (a *App) RestoreOIDC(accessToken string) error {
+	auth := opencloud.NewBearerAuth(accessToken)
+	client, err := opencloud.New(a.cfg.ServerURL, auth)
+	if err != nil {
+		return err
+	}
+	return a.restoreClient(client, auth)
+}
+
+func (a *App) restoreClient(client *opencloud.Client, oidcAuth *opencloud.BearerAuth) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if !a.cfg.HasWorkspace() {
+		return errors.New("mobile: aucun espace enregistré, passer par Connect puis SelectWorkspace")
 	}
 
 	space, err := client.Space(opencloud.Drive{
@@ -767,8 +811,21 @@ func (a *App) Restore(appToken string) error {
 	}
 
 	a.client = client
+	a.oidcAuth = oidcAuth
 	a.lib = lib
 	return nil
+}
+
+// UpdateOIDCAccessToken applique un refresh effectué par Android au client
+// déjà ouvert, sans perdre le cache ni l'espace courant.
+func (a *App) UpdateOIDCAccessToken(accessToken string) error {
+	a.mu.Lock()
+	auth := a.oidcAuth
+	a.mu.Unlock()
+	if auth == nil {
+		return errors.New("mobile: aucune session OIDC ouverte")
+	}
+	return auth.SetToken(accessToken)
 }
 
 // DefaultRoot est le nom du dossier proposé au premier démarrage.

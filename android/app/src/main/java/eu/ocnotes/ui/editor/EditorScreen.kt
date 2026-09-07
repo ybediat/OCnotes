@@ -100,6 +100,19 @@ fun EditorScreen(
     }
     val moteurNatif = etat.moteurEdition == MoteurEdition.NATIF
 
+    // Fil d'Ariane du diagnostic : une mort de processus sur une note trop
+    // lourde ne laisse aucune trace Kotlin, et ces deux mesures sont les
+    // seules qui la relient à quelque chose. Réévaluées par paliers, pour ne
+    // pas ajouter un appel système à chaque frappe.
+    val rapporteur = LocalContext.current.appContainer.crashReporter
+    LaunchedEffect(rapporteur, chemin, etat.document.length / PALIER_FIL_ARIANE) {
+        rapporteur.noterEcran(
+            ecran = ECRAN_EDITEUR,
+            lignes = etat.document.count { it == '\n' } + 1,
+            caracteres = etat.document.length,
+        )
+    }
+
     // Mémorisée pour que `EditeurNatif` reste « skippable » : recréée à chaque
     // frappe, cette lambda forcerait la recomposition de l'`AndroidView` natif
     // et le réglage des styles qu'elle porte, alors que le champ se suffit.
@@ -585,3 +598,14 @@ private fun BandeauLectureSeule(documentBureautique: Boolean) {
         }
     }
 }
+
+/** Nom d'écran du fil d'Ariane de diagnostic. */
+private const val ECRAN_EDITEUR = "editeur" // i18n-ok
+
+/**
+ * Palier de réévaluation du fil d'Ariane, en caractères.
+ *
+ * Le mettre à jour à chaque frappe ajouterait un appel système par caractère,
+ * sur l'écran qui est déjà le plus coûteux de l'application.
+ */
+private const val PALIER_FIL_ARIANE = 4096

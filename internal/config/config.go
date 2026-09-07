@@ -54,6 +54,13 @@ const (
 	ModeServer = "server"
 )
 
+// Modes d'authentification. Une valeur vide signifie App Token pour rester
+// compatible avec les configurations version 2 déjà installées.
+const (
+	AuthAppToken = "app_token"
+	AuthOIDC     = "oidc"
+)
+
 // Config rassemble ce qu'il faut retrouver au démarrage pour reconstituer la
 // session — tout sauf le secret.
 type Config struct {
@@ -63,6 +70,10 @@ type Config struct {
 	// Il commande la validation — un mode local n'a ni URL ni compte à
 	// vérifier — et l'écran de départ.
 	Mode string `json:"mode,omitempty"`
+
+	// AuthMode choisit le secret qu'Android doit restituer au démarrage.
+	// Il ne contient lui-même aucun secret.
+	AuthMode string `json:"authMode,omitempty"`
 
 	// ServerURL est la racine du serveur, sans chemin ni slash final.
 	ServerURL string `json:"serverUrl"`
@@ -169,6 +180,9 @@ func (c Config) Validate() error {
 	if c.Mode == ModeLocal {
 		return nil
 	}
+	if c.AuthMode != "" && c.AuthMode != AuthOIDC {
+		return fmt.Errorf("config: mode d'authentification inconnu %q", c.AuthMode)
+	}
 	if c.ServerURL == "" {
 		return fmt.Errorf("config: [%s] URL de serveur manquante", CodeServerURLMissing)
 	}
@@ -206,6 +220,15 @@ func (c Config) IsLocal() bool {
 // chercherait un serveur qui n'existe pas.
 func (c Config) IsConnected() bool {
 	return !c.IsLocal() && c.Validate() == nil
+}
+
+// EffectiveAuthMode interprète les anciennes configurations sans authMode
+// comme des connexions par App Token.
+func (c Config) EffectiveAuthMode() string {
+	if c.AuthMode == AuthOIDC {
+		return AuthOIDC
+	}
+	return AuthAppToken
 }
 
 // HasWorkspace indique qu'un espace a été choisi et que la bibliothèque de

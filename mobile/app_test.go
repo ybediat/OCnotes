@@ -117,6 +117,45 @@ func TestRestoreOuvreLApplicationSansReseau(t *testing.T) {
 	}
 }
 
+func TestOIDCConnexionRenouvellementEtRestauration(t *testing.T) {
+	server := newFakeServer(t)
+	dataDir := t.TempDir()
+	app, err := NewApp(dataDir)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if err := app.ConnectOIDC(server.URL, "compte-oidc", fakeToken); err != nil {
+		t.Fatalf("ConnectOIDC: %v", err)
+	}
+	if err := app.SelectWorkspace(fakeSpaceID, "Notes"); err != nil {
+		t.Fatalf("SelectWorkspace: %v", err)
+	}
+	if err := app.UpdateOIDCAccessToken(fakeToken); err != nil {
+		t.Fatalf("UpdateOIDCAccessToken: %v", err)
+	}
+
+	raw, err := app.StateJSON()
+	if err != nil {
+		t.Fatalf("StateJSON: %v", err)
+	}
+	var state appState
+	decodeJSON(t, raw, &state)
+	if state.AuthMode != "oidc" || state.Username != "compte-oidc" {
+		t.Fatalf("état OIDC = %+v", state)
+	}
+
+	restored, err := NewApp(dataDir)
+	if err != nil {
+		t.Fatalf("NewApp restaurée: %v", err)
+	}
+	if err := restored.RestoreOIDC(fakeToken); err != nil {
+		t.Fatalf("RestoreOIDC: %v", err)
+	}
+	if _, err := restored.ListFolderJSON(""); err != nil {
+		t.Fatalf("ListFolderJSON après RestoreOIDC: %v", err)
+	}
+}
+
 // Une note évincée reste dans l'inventaire, se retélécharge quand le serveur
 // répond, et ne doit jamais s'ouvrir comme une note vide sans réseau.
 func TestNoteEvinceeRelueEnLignePuisSignaleeHorsLigne(t *testing.T) {

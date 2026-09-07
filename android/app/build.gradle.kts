@@ -30,6 +30,7 @@ android {
         targetSdk = 35
         versionCode = 3
         versionName = "0.1.2"
+        manifestPlaceholders["appAuthRedirectScheme"] = "eu.ocnotes"
 
         // Le .aar de gomobile n'embarque que les ABI passées au bind : cette
         // liste et la commande `gomobile bind` bougent ensemble. Une ABI
@@ -156,5 +157,6 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.appauth)
     testImplementation(libs.junit)
 }

@@ -29,8 +29,8 @@ space: readable from the web interface and usable by any other client.
 - Create and edit `.md` and `.txt` files; view `.docx` and `.odt` documents in
   read-only mode.
 - French, English, Spanish, and German interfaces.
-- OpenCloud App Token authentication stored with Android Keystore-backed
-  `EncryptedSharedPreferences` and never written to disk by the Go core.
+- OpenCloud App Token authentication, plus experimental browser-based OIDC on
+  servers where the OCnotes client has been registered.
 
 ## Screenshots
 
@@ -47,7 +47,9 @@ You can download and install
 directly on an Android device.
 
 Android 8.0 (API 26) or later is required. To synchronize, configure an HTTPS
-OpenCloud server and an App Token. The app also works fully in local-only mode.
+OpenCloud server and an App Token. A configured server can alternatively use
+the [experimental OIDC login](docs/OIDC.md). The app also works fully in
+local-only mode.
 
 ## Building from source
 
@@ -112,11 +114,12 @@ instrumented tests yet.
 
 Known limitations:
 
-- Authentication uses App Tokens; OIDC is not supported yet.
+- OIDC login is experimental and requires the server administrator to register
+  the `OCnotesAndroid` client; App Tokens remain the default compatible path.
 - Raw HTML and `data:` images are not rendered in previews.
 - Translations have not yet been reviewed by native speakers on device.
 
-Planned priorities include additional languages, OIDC, and F-Droid publication.
+Planned priorities include additional languages, OIDC stabilization, and F-Droid publication.
 
 ## Documentation and contribution
 

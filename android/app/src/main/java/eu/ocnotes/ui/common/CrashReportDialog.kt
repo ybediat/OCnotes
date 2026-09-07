@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.PersistableBundle
 import android.widget.Toast
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -18,12 +19,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import eu.ocnotes.R
@@ -41,27 +44,64 @@ fun CrashReportGate(
     reporter: CrashReporter,
     content: @Composable () -> Unit,
 ) {
-    val context = LocalContext.current
-    var report by remember(reporter) { mutableStateOf(reporter.pendingReport()) }
-    val pending = report
-    if (pending == null) {
-        content()
-        return
+    var etat by remember(reporter) { mutableStateOf<EtatRapport>(EtatRapport.Lecture) }
+
+    LaunchedEffect(reporter) {
+        val texte = reporter.pendingReport()
+        etat = if (texte == null) EtatRapport.Aucun else EtatRapport.Present(texte)
     }
 
-    fun discard() {
-        reporter.discardPending()
-        report = null
+    when (val courant = etat) {
+        // Un écran vide le temps de lire le cache. Composer `content()` dès
+        // maintenant relancerait le ViewModel qui vient peut-être de faire
+        // tomber l'application, avant même d'avoir montré pourquoi.
+        EtatRapport.Lecture -> Unit
+
+        EtatRapport.Aucun -> {
+            // L'interface s'affiche : la série d'arrêts est rompue. C'est le
+            // seul endroit qui le sache — `Application.onCreate` s'exécute
+            // aussi pour un réveil de `SyncWorker`, sans interface.
+            LaunchedEffect(reporter) { reporter.signalerDemarrageSain() }
+            content()
+        }
+
+        is EtatRapport.Present -> RapportDialogue(
+            rapport = courant.texte,
+            onMasquer = { etat = EtatRapport.Aucun },
+            onOublier = {
+                reporter.discardPending()
+                etat = EtatRapport.Aucun
+            },
+        )
     }
+}
+
+private sealed interface EtatRapport {
+    data object Lecture : EtatRapport
+    data object Aucun : EtatRapport
+    data class Present(val texte: String) : EtatRapport
+}
+
+@Composable
+private fun RapportDialogue(
+    rapport: String,
+    onMasquer: () -> Unit,
+    onOublier: () -> Unit,
+) {
+    val context = LocalContext.current
 
     AlertDialog(
-        onDismissRequest = ::discard,
-        title = { Text(text = context.getString(R.string.diagnostic_crash_titre)) },
+        // Le rejet implicite — retour, appui à côté — masque seulement. Le
+        // rapport n'existe qu'en un exemplaire : le geste le plus facile à
+        // faire par mégarde ne doit pas être celui qui le détruit. Il
+        // reviendra au lancement suivant tant qu'on n'en aura rien fait.
+        onDismissRequest = onMasquer,
+        title = { Text(text = stringResource(R.string.diagnostic_crash_titre)) },
         text = {
-            androidx.compose.foundation.layout.Column {
-                Text(text = context.getString(R.string.diagnostic_crash_explication))
+            Column {
+                Text(text = stringResource(R.string.diagnostic_crash_explication))
                 Text(
-                    text = pending,
+                    text = rapport,
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 220.dp)
@@ -74,23 +114,23 @@ fun CrashReportGate(
         confirmButton = {
             TextButton(
                 onClick = {
-                    if (ouvrirIssueGitHub(context, pending)) discard()
+                    if (ouvrirIssueGitHub(context, rapport)) onOublier()
                 },
             ) {
-                Text(text = context.getString(R.string.diagnostic_signaler_github))
+                Text(text = stringResource(R.string.diagnostic_signaler_github))
             }
         },
         dismissButton = {
             Row {
-                TextButton(onClick = ::discard) {
-                    Text(text = context.getString(R.string.action_supprimer))
+                TextButton(onClick = onOublier) {
+                    Text(text = stringResource(R.string.action_supprimer))
                 }
                 TextButton(
                     onClick = {
-                        if (partagerRapport(context, pending)) discard()
+                        if (partagerRapport(context, rapport)) onOublier()
                     },
                 ) {
-                    Text(text = context.getString(R.string.action_partager))
+                    Text(text = stringResource(R.string.action_partager))
                 }
             }
         },
@@ -123,11 +163,11 @@ private fun ouvrirIssueGitHub(context: Context, report: String): Boolean = runCa
     clipboard.setPrimaryClip(clip)
 
     Toast.makeText(context, R.string.diagnostic_github_copie, Toast.LENGTH_LONG).show()
-    val uri = Uri.Builder()
-        .scheme("https")
-        .authority("github.com")
-        .appendPath("ybediat")
-        .appendPath("OCnotes")
+    // Le dépôt n'a qu'une adresse, celle qu'affiche déjà « À propos ». La
+    // réécrire ici ferait un second endroit à corriger au prochain
+    // renommage — et le premier a déjà été manqué une fois.
+    val uri = Uri.parse(context.getString(R.string.a_propos_depot_url))
+        .buildUpon()
         .appendPath("issues")
         .appendPath("new")
         .appendQueryParameter("template", "bug_report.md")

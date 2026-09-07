@@ -115,6 +115,10 @@
     <string name="login_reessayer">Réessayer</string>
     <string name="login_continuer_local">Continuer sans serveur</string>
     <string name="login_continuer_local_aide">Vos notes resteront uniquement sur cet appareil. Vous pourrez connecter un serveur plus tard.</string>
+    <string name="login_oidc_connecter">Se connecter avec le navigateur</string>
+    <string name="login_oidc_aide">Expérimental — nécessite un serveur configuré pour OCnotes.</string>
+    <string name="login_oidc_annulee">Connexion par navigateur annulée.</string>
+    <string name="login_oidc_erreur">La connexion par navigateur n’a pas abouti. Vérifiez que ce serveur autorise OCnotes.</string>
     <string name="login_rester_local">Rester en mode local</string>
     <string name="login_rester_local_aide">Le branchement est annulé et vos notes locales restent intactes.</string>
     <string name="login_aide_titre">Pas encore d\'App Token ?</string>
@@ -318,9 +322,9 @@
     <string name="menu_a_propos">À propos</string>
     <string name="a_propos_titre">À propos d\'OCnotes</string>
     <string name="a_propos_description">Gestionnaire de notes Markdown, sur cet appareil ou synchronisées avec OpenCloud. Créé par Yannis Bediat. V1.0 Août 2026</string>
-    <string name="a_propos_licence">Licence : MIT https://github.com/ybediat/OpenNote/tree/main?tab=MIT-1-ov-file</string>
+    <string name="a_propos_licence">Licence : MIT https://github.com/ybediat/OCnotes/tree/main?tab=MIT-1-ov-file</string>
     <string name="a_propos_depot">Dépôt Git</string>
-    <string name="a_propos_depot_url" translatable="false">https://github.com/ybediat/OpenNote</string>
+    <string name="a_propos_depot_url" translatable="false">https://github.com/ybediat/OCnotes</string>
 
     <!-- ================================================================
          Réglages

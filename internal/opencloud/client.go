@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -39,6 +40,47 @@ func (a AppTokenAuth) Apply(req *http.Request) error {
 		return fmt.Errorf("opencloud: nom d'utilisateur ou App Token manquant")
 	}
 	req.SetBasicAuth(a.Username, a.Token)
+	return nil
+}
+
+// BearerAuth authentifie les appels LibreGraph et WebDAV avec un jeton OIDC.
+//
+// Le pointeur est conservé par le client afin qu'Android puisse remplacer
+// l'access token après un refresh sans reconstruire la bibliothèque ouverte.
+// Le verrou couvre le cas réel où WorkManager renouvelle le jeton pendant que
+// l'interface lit une note.
+type BearerAuth struct {
+	mu    sync.RWMutex
+	token string
+}
+
+func NewBearerAuth(token string) *BearerAuth {
+	return &BearerAuth{token: strings.TrimSpace(token)}
+}
+
+func (a *BearerAuth) Apply(req *http.Request) error {
+	if a == nil {
+		return fmt.Errorf("opencloud: jeton OIDC manquant")
+	}
+	a.mu.RLock()
+	token := a.token
+	a.mu.RUnlock()
+	if token == "" {
+		return fmt.Errorf("opencloud: jeton OIDC manquant")
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	return nil
+}
+
+// SetToken remplace atomiquement l'access token après son renouvellement.
+func (a *BearerAuth) SetToken(token string) error {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return fmt.Errorf("opencloud: jeton OIDC manquant")
+	}
+	a.mu.Lock()
+	a.token = token
+	a.mu.Unlock()
 	return nil
 }
 

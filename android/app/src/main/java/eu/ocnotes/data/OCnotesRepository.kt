@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import eu.ocnotes.data.auth.OidcManager
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -61,6 +62,7 @@ enum class ValidationSession {
 class OCnotesRepository(
     private val dataDir: String,
     private val tokenStore: TokenStore,
+    private val oidcManager: OidcManager,
     private val preferences: PreferencesAffichage,
 ) {
 
@@ -181,6 +183,12 @@ class OCnotesRepository(
         }
     }
 
+    /** Renouvelle OIDC avant un geste susceptible de joindre le serveur. */
+    private suspend fun <T> authenticatedCall(block: (GoApp) -> T): T {
+        refreshOidcToken(allowStaleOnFailure = true)
+        return call(block)
+    }
+
     // --- État et session ---------------------------------------------------
 
     suspend fun state(): AppStateDto {
@@ -229,6 +237,21 @@ class OCnotesRepository(
         refreshPending()
     }
 
+    /** Termine le parcours navigateur et ouvre le même espace qu'une session classique. */
+    suspend fun connectOidc(
+        serverUrl: String,
+        accountId: String,
+        accessToken: String,
+        serializedState: String,
+    ) {
+        call { it.connectOIDC(serverUrl.trim(), accountId, accessToken) }
+        tokenStore.saveOidcState(serializedState)
+        sessionOpen = true
+        _sessionValidee.value = true
+        _sessionExpired.value = false
+        refreshPending()
+    }
+
     /**
      * Remonte la session depuis la configuration, **sans aucun appel réseau**.
      *
@@ -260,11 +283,20 @@ class OCnotesRepository(
             _pendingCount.value = 0
             return@withLock RestoreOutcome.LOCALE
         }
-        val token = tokenStore.appToken()
-        if (!current.connected || token == null) return@withLock RestoreOutcome.AUCUNE_SESSION
+        if (!current.connected) return@withLock RestoreOutcome.AUCUNE_SESSION
 
         try {
-            call { it.restore(token) }
+            if (current.authMode == AuthMode.OIDC) {
+                val serialized = tokenStore.oidcState()
+                    ?: return@withLock RestoreOutcome.AUCUNE_SESSION
+                val accessToken = oidcManager.lastAccessToken(serialized)
+                    ?: return@withLock RestoreOutcome.AUCUNE_SESSION
+                call { it.restoreOIDC(accessToken) }
+            } else {
+                val token = tokenStore.appToken()
+                    ?: return@withLock RestoreOutcome.AUCUNE_SESSION
+                call { it.restore(token) }
+            }
             sessionOpen = true
             _sessionExpired.value = false
             refreshPending()
@@ -291,10 +323,16 @@ class OCnotesRepository(
      */
     suspend fun validerSession(): ValidationSession {
         val current = state()
-        val token = tokenStore.appToken() ?: return ValidationSession.TOKEN_REFUSE
 
         return try {
-            call { it.connect(current.serverUrl, current.username, token) }
+            if (current.authMode == AuthMode.OIDC) {
+                val token = refreshOidcToken(allowStaleOnFailure = false)
+                    ?: return ValidationSession.TOKEN_REFUSE
+                call { it.connectOIDC(current.serverUrl, current.username, token) }
+            } else {
+                val token = tokenStore.appToken() ?: return ValidationSession.TOKEN_REFUSE
+                call { it.connect(current.serverUrl, current.username, token) }
+            }
             sessionOpen = true
             _sessionValidee.value = true
             _sessionExpired.value = false
@@ -349,17 +387,17 @@ class OCnotesRepository(
     // --- Espaces -----------------------------------------------------------
 
     suspend fun listDrives(): List<DriveDto> =
-        json.decodeFromString(call { it.listDrivesJSON() })
+        json.decodeFromString(authenticatedCall { it.listDrivesJSON() })
 
     suspend fun selectWorkspace(driveId: String, root: String) {
-        call { it.selectWorkspace(driveId, root) }
+        authenticatedCall { it.selectWorkspace(driveId, root) }
     }
 
     /** Termine le branchement commencé par [connect] depuis le mode local. */
     suspend fun attach(driveId: String, root: String, adopt: Boolean): AttachResultDto {
         return operationMutex.withLock {
             val request = json.encodeToString(AttachRequestDto(driveId, root, adopt))
-            val result: AttachResultDto = json.decodeFromString(call { it.attachJSON(request) })
+            val result: AttachResultDto = json.decodeFromString(authenticatedCall { it.attachJSON(request) })
             sessionOpen = true
             _sessionValidee.value = true
             _sessionExpired.value = false
@@ -370,17 +408,17 @@ class OCnotesRepository(
     }
 
     suspend fun detachPlan(): DetachPlanDto = operationMutex.withLock {
-        json.decodeFromString(call { it.detachPlanJSON() })
+        json.decodeFromString(authenticatedCall { it.detachPlanJSON() })
     }
 
     suspend fun downloadBatch(max: Int = 25): DownloadReportDto = operationMutex.withLock {
-        json.decodeFromString(call { it.downloadBatchJSON(max.toLong()) })
+        json.decodeFromString(authenticatedCall { it.downloadBatchJSON(max.toLong()) })
     }
 
     /** Coupe le serveur une fois les écritures poussées et les contenus rapatriés. */
     suspend fun detach(): DetachResultDto {
         return operationMutex.withLock {
-            val result: DetachResultDto = json.decodeFromString(call { it.detachJSON() })
+            val result: DetachResultDto = json.decodeFromString(authenticatedCall { it.detachJSON() })
             retainCoreQuota()
             tokenStore.clear()
             sessionOpen = true
@@ -417,7 +455,7 @@ class OCnotesRepository(
      * Un `fromCache` à vrai signale un listing servi hors connexion.
      */
     suspend fun listFolder(dir: String): FolderListingDto =
-        json.decodeFromString(call { it.listFolderJSON(dir) })
+        json.decodeFromString(authenticatedCall { it.listFolderJSON(dir) })
 
     /**
      * Inventaire complet, à plat : toutes les notes, aucun dossier.
@@ -426,7 +464,7 @@ class OCnotesRepository(
      * préfixe — la façade n'ajoute pas de champ pour ça.
      */
     suspend fun listAll(): FolderListingDto =
-        json.decodeFromString(call { it.listAllJSON() })
+        json.decodeFromString(authenticatedCall { it.listAllJSON() })
 
     /**
      * Reconstruit l'inventaire sans rien renvoyer.
@@ -438,7 +476,7 @@ class OCnotesRepository(
      */
     suspend fun refreshIndex() {
         try {
-            call { it.refreshIndex() }
+            authenticatedCall { it.refreshIndex() }
         } catch (_: OCnotesException) {
             // Sans conséquence : le prochain affichage réessaiera.
         }
@@ -453,7 +491,7 @@ class OCnotesRepository(
     suspend fun folders(): List<FolderRefDto> =
         json.decodeFromString(call { it.foldersJSON() })
 
-    suspend fun readNote(notePath: String): String = call { it.readNote(notePath) }
+    suspend fun readNote(notePath: String): String = authenticatedCall { it.readNote(notePath) }
 
     /**
      * Enregistre une note.
@@ -468,7 +506,7 @@ class OCnotesRepository(
     }
 
     suspend fun refreshNote(notePath: String) {
-        call { it.refreshNote(notePath) }
+        authenticatedCall { it.refreshNote(notePath) }
     }
 
     suspend fun createNote(dir: String, name: String, content: String): NoteRefDto =
@@ -519,10 +557,35 @@ class OCnotesRepository(
      */
     suspend fun sync(): SyncResultDto {
         return operationMutex.withLock {
+            refreshOidcToken(allowStaleOnFailure = true)
             val result: SyncResultDto = json.decodeFromString(call { it.syncJSON() })
             _lastSync.value = result
             _pendingCount.value = result.remaining
             result
+        }
+    }
+
+    /**
+     * Renouvelle l'access token si AppAuth le juge nécessaire, puis le pousse
+     * dans le client Go. Hors connexion, le dernier token reste en place afin
+     * que le cœur puisse constater la panne réseau et servir son cache.
+     */
+    private suspend fun refreshOidcToken(allowStaleOnFailure: Boolean): String? {
+        val current = state()
+        if (current.authMode != AuthMode.OIDC) return null
+        val serialized = tokenStore.oidcState() ?: return null
+        return try {
+            val fresh = oidcManager.freshToken(serialized)
+            tokenStore.saveOidcState(fresh.serializedState)
+            if (sessionOpen) call { it.updateOIDCAccessToken(fresh.accessToken) }
+            fresh.accessToken
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            if (!allowStaleOnFailure) throw OCnotesException.from(t)
+            oidcManager.lastAccessToken(serialized)?.also { stale ->
+                if (sessionOpen) call { it.updateOIDCAccessToken(stale) }
+            }
         }
     }
 
@@ -534,7 +597,7 @@ class OCnotesRepository(
     suspend fun resolveConflict(id: String, resolution: String): ResolveConflictResultDto {
         return operationMutex.withLock {
             val request = json.encodeToString(ResolveConflictRequestDto(id, resolution))
-            json.decodeFromString(call { it.resolveConflictJSON(request) })
+            json.decodeFromString(authenticatedCall { it.resolveConflictJSON(request) })
         }
     }
 
@@ -602,7 +665,7 @@ class OCnotesRepository(
      * serveur quand il est disponible et retombe sur le cache hors connexion.
      */
     suspend fun renderFile(filePath: String): List<NoteBlockDto> =
-        json.decodeFromString(call { it.renderFileJSON(filePath) })
+        json.decodeFromString(authenticatedCall { it.renderFileJSON(filePath) })
 
     /**
      * Vrai pour un fichier affiché tel quel, sans interprétation.

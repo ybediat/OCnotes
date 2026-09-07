@@ -39,8 +39,8 @@ n'importe quel autre client.
 - 📄 **Fichiers Markdown et texte brut** — création et édition des `.md` et
   `.txt` ; lecture seule des documents `.docx` et `.odt`.
 - 🌍 **Français, anglais, espagnol, allemand.**
-- 🔐 **Authentification par App Token** OpenCloud, stocké en
-  `EncryptedSharedPreferences` et jamais écrit sur disque côté Go.
+- 🔐 **Authentification par App Token**, avec connexion OIDC expérimentale
+  via le navigateur sur les serveurs qui ont enregistré OCnotes.
 
 ## Captures d'écran
 
@@ -58,7 +58,8 @@ Elle peut être installée directement sur Android. L'application peut aussi êt
 construite depuis les sources (voir [Construire depuis les sources](#construire-depuis-les-sources)).
 
 **Pour la synchronisation** : un serveur OpenCloud accessible en HTTPS et un App
-Token créé depuis *Réglages du compte → App Tokens → + New*. Aucun serveur
+Token créé depuis *Réglages du compte → App Tokens → + New*. Un serveur
+configuré peut aussi proposer la [connexion OIDC](docs/OIDC.md). Aucun serveur
 n'est requis pour utiliser le mode local.
 
 **Prérequis côté appareil** : Android 8.0 (API 26) ou supérieur.
@@ -248,13 +249,15 @@ hors ligne.
 
 Limites connues :
 
-- Pas d'OIDC : l'authentification passe uniquement par App Token.
+- La connexion OIDC est expérimentale et exige l'enregistrement du client
+  `OCnotesAndroid` par l'administrateur du serveur ; l'App Token reste le
+  chemin compatible par défaut.
 - Le HTML brut d'une note est ignoré à l'aperçu, et les images en `data:` ne
   sont pas affichées (seul leur texte alternatif l'est).
 - Les traductions n'ont pas encore été relues par des locuteurs natifs sur
   appareil.
 
-Prochaines priorités : langues supplémentaires, OIDC et publication sur
+Prochaines priorités : langues supplémentaires, stabilisation OIDC et publication sur
 F-Droid.
 
 ## Contribuer

@@ -102,6 +102,10 @@
     <string name="login_reessayer">Volver a intentarlo</string>
     <string name="login_continuer_local">Continuar sin servidor</string>
     <string name="login_continuer_local_aide">Sus notas permanecerán únicamente en este dispositivo. Podrá conectar un servidor más adelante.</string>
+    <string name="login_oidc_connecter">Iniciar sesión con el navegador</string>
+    <string name="login_oidc_aide">Experimental: requiere un servidor configurado para OCnotes.</string>
+    <string name="login_oidc_annulee">Se canceló el inicio de sesión en el navegador.</string>
+    <string name="login_oidc_erreur">No se completó el inicio de sesión. Comprueba que este servidor permita OCnotes.</string>
     <string name="login_rester_local">Permanecer en modo local</string>
     <string name="login_rester_local_aide">Se cancela la conexión y sus notas locales permanecen intactas.</string>
     <string name="login_aide_titre">¿Todavía no tiene un App Token?</string>
@@ -320,7 +324,7 @@
     <string name="menu_a_propos">Acerca de</string>
     <string name="a_propos_titre">Acerca de OCnotes</string>
     <string name="a_propos_description">Gestor de notas Markdown, almacenadas en este dispositivo o sincronizadas con OpenCloud. Creado por Yannis Bediat. v1.0 agosto de 2026</string>
-    <string name="a_propos_licence">Licencia: MIT https://github.com/ybediat/OpenNote/tree/main?tab=MIT-1-ov-file</string>
+    <string name="a_propos_licence">Licencia: MIT https://github.com/ybediat/OCnotes/tree/main?tab=MIT-1-ov-file</string>
     <string name="a_propos_depot">Repositorio Git</string>
 
     <!-- ================================================================
