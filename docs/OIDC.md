@@ -32,30 +32,82 @@ Deux façons d'y parvenir, selon la façon dont le serveur authentifie :
 
 Pour limiter ce risque :
 
-1. **Partez de la liste de *votre* serveur, pas de ce document.** Récupérez-la
-   depuis le fichier généré par `opencloud init` (ou la sortie d'un
-   `opencloud init` neuf dans un répertoire jetable, à comparer). Ne recopiez
-   jamais une liste « standard » trouvée ailleurs : elle est datée.
-2. **Ajoutez uniquement l'entrée OCnotes** ci-dessous, en cinquième position,
-   sans toucher aux autres.
-3. **Re-vérifiez après chaque montée de version d'OpenCloud** : un
-   `opencloud init` neuf, un `diff` contre votre liste, vous reportez les
-   écarts sur les entrées standard.
+1. **La liste par défaut n'est dans aucun fichier de votre serveur** : c'est un
+   défaut *compilé* du service IDP. `opencloud init` ne l'écrit pas. La
+   référence qui fait foi est la page
+   [IDP YAML config](https://docs.opencloud.eu/docs/dev/server/services/idp/yaml-config)
+   de la documentation — un export autogénéré de la config par défaut — **à la
+   version de votre serveur** (sélecteur de version de la doc, ou le dossier
+   `services/idp` du dépôt `opencloud-eu/opencloud` au tag correspondant).
+2. **Recopiez ce bloc `clients` de référence** dans votre fichier, en
+   remplaçant `{{OC_URL}}` par l'URL publique de votre serveur dans l'entrée
+   `web`.
+3. **Ajoutez l'entrée `OCnotesAndroid`** en fin de liste, sans toucher aux
+   autres.
+4. **À chaque montée de version d'OpenCloud**, rouvrez la même page de doc pour
+   la nouvelle version, `diff` contre votre fichier, reportez les écarts sur
+   les entrées standard.
+
+Liste par défaut au moment d'écrire ces lignes — **à revérifier** contre la
+page ci-dessus pour votre version, elle peut changer :
 
 ```yaml
-# À AJOUTER à la liste existante, sans retirer les entrées standard.
-- id: OCnotesAndroid
-  name: OCnotes Android App
-  trusted: false
-  secret: ""
-  redirect_uris:
-    - eu.ocnotes://oauth2redirect
-  post_logout_redirect_uris: []
-  origins: []
-  application_type: native
+clients:
+  - id: web
+    name: OpenCloud Web App
+    trusted: true
+    secret: ""
+    redirect_uris:
+      - '{{OC_URL}}/'
+      - '{{OC_URL}}/oidc-callback.html'
+      - '{{OC_URL}}/oidc-silent-redirect.html'
+    post_logout_redirect_uris: []
+    origins:
+      - '{{OC_URL}}'
+    application_type: ""
+  - id: OpenCloudDesktop
+    name: OpenCloud Desktop Client
+    trusted: false
+    secret: ""
+    redirect_uris:
+      - http://127.0.0.1
+      - http://localhost
+    post_logout_redirect_uris: []
+    origins: []
+    application_type: native
+  - id: OpenCloudAndroid
+    name: OpenCloud Android App
+    trusted: false
+    secret: ""
+    redirect_uris:
+      - oc://android.opencloud.eu
+    post_logout_redirect_uris:
+      - oc://android.opencloud.eu
+    origins: []
+    application_type: native
+  - id: OpenCloudIOS
+    name: OpenCloud iOS App
+    trusted: false
+    secret: ""
+    redirect_uris:
+      - oc://ios.opencloud.eu
+    post_logout_redirect_uris:
+      - oc://ios.opencloud.eu
+    origins: []
+    application_type: native
+  # --- ajout OCnotes, ne touche pas aux entrées ci-dessus ---
+  - id: OCnotesAndroid
+    name: OCnotes Android App
+    trusted: false
+    secret: ""
+    redirect_uris:
+      - eu.ocnotes://oauth2redirect
+    post_logout_redirect_uris: []
+    origins: []
+    application_type: native
 ```
 
-Le client est public : aucun secret statique ne doit être embarqué dans
+Le client OCnotes est public : aucun secret statique ne doit être embarqué dans
 l'APK. OCnotes demande les scopes `openid profile email offline_access` et
 génère une preuve PKCE S256 pour chaque connexion.
 
@@ -75,9 +127,9 @@ Trois pièges de configuration :
   `idp.yaml` l'emporte sur `opencloud.yaml`. Si des `IDP_*` ou un bloc
   `idp: { clients: [...] }` de `opencloud.yaml` définissent déjà des clients,
   votre `idp.yaml` peut être masqué ou fusionné de façon inattendue.
-- **`idp.yaml` est souvent autogénéré** par `opencloud init` ; une ré-init ou
-  une mise à jour peut le réécrire. Certains préfèrent pour ça mettre la liste
-  dans `opencloud.yaml`.
+- **`idp.yaml` peut être régénéré** par l'outillage de déploiement (templates,
+  ré-init, montée de version), ce qui écraserait votre liste. Si c'est le cas
+  chez vous, mettez plutôt le bloc `clients` dans `opencloud.yaml`.
 - Les clés `flow`, `pkce` et `scopes` ne font **pas** partie des entrées
   `clients` : le protocole et les scopes sont portés par la requête de
   l'application, inutile de les ajouter au YAML.
