@@ -29,10 +29,6 @@ Le client est public : aucun secret statique ne doit être embarqué dans
 l'APK. OCnotes demande les scopes `openid profile email offline_access` et
 génère une preuve PKCE S256 pour chaque connexion.
 
-Les clés `flow`, `pkce` et `scopes` ne font pas partie des entrées `clients`
-documentées par OpenCloud 7.2. Le protocole et les scopes sont portés par la
-requête de l'application ; il est préférable de ne pas dépendre de clés YAML
-supplémentaires que le serveur peut simplement ignorer.
 
 Il n'est pas nécessaire de remplacer `OpenCloudAndroid` dans WebFinger.
 OCnotes utilise WebFinger pour découvrir l'issuer et les scopes, puis emploie
