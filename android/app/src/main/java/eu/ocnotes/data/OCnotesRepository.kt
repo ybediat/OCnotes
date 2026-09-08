@@ -75,6 +75,17 @@ class OCnotesRepository(
     private val sessionMutex = Mutex()
     /** Empêche une passe WorkManager de chevaucher une transition de stockage. */
     private val operationMutex = Mutex()
+    /**
+     * Sérialise le renouvellement OIDC : deux appels concurrents
+     * dérouleraient `freshToken` en parallèle, dépenseraient le même refresh
+     * token et — avec la rotation activée côté OpenCloud — invalideraient la
+     * session.
+     */
+    private val oidcRefreshMutex = Mutex()
+
+    /** Dernier access token OIDC poussé au cœur Go, pour ne pas le repasser en boucle. */
+    @Volatile
+    private var oidcTokenPousseAuCoeur: String? = null
 
     @Volatile
     private var goApp: GoApp? = null
@@ -131,6 +142,7 @@ class OCnotesRepository(
      * l'écran de connexion le repropose, le nom d'utilisateur et l'URL avec. */
     fun invalidateSession() {
         sessionOpen = false
+        oidcTokenPousseAuCoeur = null
         _sessionValidee.value = false
         _sessionExpired.value = true
     }
@@ -287,11 +299,12 @@ class OCnotesRepository(
 
         try {
             if (current.authMode == AuthMode.OIDC) {
+                // L'état AppAuth suffit : un access token vide ou expiré ouvre
+                // quand même le cache, et le premier appel en ligne déclenchera
+                // son renouvellement.
                 val serialized = tokenStore.oidcState()
                     ?: return@withLock RestoreOutcome.AUCUNE_SESSION
-                val accessToken = oidcManager.lastAccessToken(serialized)
-                    ?: return@withLock RestoreOutcome.AUCUNE_SESSION
-                call { it.restoreOIDC(accessToken) }
+                call { it.restoreOIDC(oidcManager.lastAccessToken(serialized).orEmpty()) }
             } else {
                 val token = tokenStore.appToken()
                     ?: return@withLock RestoreOutcome.AUCUNE_SESSION
@@ -326,7 +339,7 @@ class OCnotesRepository(
 
         return try {
             if (current.authMode == AuthMode.OIDC) {
-                val token = refreshOidcToken(allowStaleOnFailure = false)
+                val token = refreshOidcToken(allowStaleOnFailure = false, force = true)
                     ?: return ValidationSession.TOKEN_REFUSE
                 call { it.connectOIDC(current.serverUrl, current.username, token) }
             } else {
@@ -377,6 +390,7 @@ class OCnotesRepository(
             call { it.disconnect() }
             tokenStore.clear()
             sessionOpen = false
+            oidcTokenPousseAuCoeur = null
             _sessionValidee.value = false
             _pendingCount.value = 0
             _lastSync.value = null
@@ -422,6 +436,7 @@ class OCnotesRepository(
             retainCoreQuota()
             tokenStore.clear()
             sessionOpen = true
+            oidcTokenPousseAuCoeur = null
             _sessionValidee.value = false
             _sessionExpired.value = false
             _pendingCount.value = 0
@@ -570,23 +585,42 @@ class OCnotesRepository(
      * dans le client Go. Hors connexion, le dernier token reste en place afin
      * que le cœur puisse constater la panne réseau et servir son cache.
      */
-    private suspend fun refreshOidcToken(allowStaleOnFailure: Boolean): String? {
-        val current = state()
-        if (current.authMode != AuthMode.OIDC) return null
+    private suspend fun refreshOidcToken(
+        allowStaleOnFailure: Boolean,
+        force: Boolean = false,
+    ): String? {
+        if (state().authMode != AuthMode.OIDC) return null
         val serialized = tokenStore.oidcState() ?: return null
-        return try {
-            val fresh = oidcManager.freshToken(serialized)
-            tokenStore.saveOidcState(fresh.serializedState)
-            if (sessionOpen) call { it.updateOIDCAccessToken(fresh.accessToken) }
-            fresh.accessToken
-        } catch (e: CancellationException) {
-            throw e
-        } catch (t: Throwable) {
-            if (!allowStaleOnFailure) throw OCnotesException.from(t)
-            oidcManager.lastAccessToken(serialized)?.also { stale ->
-                if (sessionOpen) call { it.updateOIDCAccessToken(stale) }
+
+        // Chemin rapide : jeton encore valide, aucun verrou, aucune écriture.
+        if (!force) oidcManager.accessTokenIfFresh(serialized)?.let { return pousserAuCoeur(it) }
+
+        return oidcRefreshMutex.withLock {
+            // Un autre appel a pu renouveler pendant l'attente du verrou.
+            val courant = tokenStore.oidcState() ?: serialized
+            if (!force) {
+                oidcManager.accessTokenIfFresh(courant)?.let { return@withLock pousserAuCoeur(it) }
+            }
+            try {
+                val fresh = oidcManager.freshToken(courant)
+                if (fresh.serializedState != courant) tokenStore.saveOidcState(fresh.serializedState)
+                pousserAuCoeur(fresh.accessToken)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                if (!allowStaleOnFailure) throw OCnotesException.from(t)
+                oidcManager.lastAccessToken(courant)?.let { pousserAuCoeur(it) }
             }
         }
+    }
+
+    /** Ne traverse la frontière Go que si le cœur n'a pas déjà cet access token. */
+    private suspend fun pousserAuCoeur(token: String): String {
+        if (sessionOpen && token != oidcTokenPousseAuCoeur) {
+            call { it.updateOIDCAccessToken(token) }
+            oidcTokenPousseAuCoeur = token
+        }
+        return token
     }
 
     /** Conflits ouverts, conservés par le cœur Go au-delà d'une passe Sync. */

@@ -1,5 +1,6 @@
 package eu.ocnotes.ui.editor
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Bundle
 import android.util.Log
@@ -180,6 +181,8 @@ private fun EditText.journaliserPremierDessin(debut: Long, chemin: String) {
 }
 
 /** Journalise seulement les opérations globales utilisées par le banc. */
+// Sonde : on mesure le `android.widget.EditText` brut, pas la variante AppCompat.
+@SuppressLint("AppCompatCustomView")
 private class ProbeEditText(context: Context) : EditText(context) {
     override fun onSelectionChanged(selStart: Int, selEnd: Int) {
         super.onSelectionChanged(selStart, selEnd)

@@ -34,6 +34,12 @@ data class JetonOidc(
 /** Parcours OIDC natif : WebFinger, navigateur, PKCE et renouvellement. */
 class OidcManager(private val context: Context) {
 
+    // Un seul AuthorizationService pour toute la vie du process : il porte la
+    // liaison Custom Tabs (warm-up du navigateur) et les fabriques de requêtes.
+    // En créer un par appel sans le `dispose()` fuyait une ServiceConnection à
+    // chaque tentative de connexion.
+    private val service by lazy { AuthorizationService(context) }
+
     suspend fun authorizationIntent(serverUrl: String): Intent {
         val server = normalizeServerUrl(serverUrl)
         val discovery = discover(server)
@@ -46,7 +52,7 @@ class OidcManager(private val context: Context) {
         )
             .setScope(discovery.scopes.joinToString(" "))
             .build()
-        return AuthorizationService(context).getAuthorizationRequestIntent(request)
+        return service.getAuthorizationRequestIntent(request)
     }
 
     suspend fun finishAuthorization(data: Intent?): OidcConnexion {
@@ -56,43 +62,45 @@ class OidcManager(private val context: Context) {
         if (response == null) throw exception ?: IllegalStateException("Réponse OIDC absente") // i18n-ok
 
         val state = AuthState(response, exception)
-        val service = AuthorizationService(context)
-        try {
-            val tokenResponse = suspendCancellableCoroutine { continuation ->
-                service.performTokenRequest(response.createTokenExchangeRequest()) { token, error ->
-                    if (token != null) continuation.resume(token)
-                    else continuation.resumeWithException(error ?: IllegalStateException("Jeton OIDC absent")) // i18n-ok
-                }
+        val tokenResponse = suspendCancellableCoroutine { continuation ->
+            service.performTokenRequest(response.createTokenExchangeRequest()) { token, error ->
+                if (token != null) continuation.resume(token)
+                else continuation.resumeWithException(error ?: IllegalStateException("Jeton OIDC absent")) // i18n-ok
             }
-            state.update(tokenResponse, null)
-            val accessToken = requireNotNull(state.accessToken) { "Access token OIDC absent" } // i18n-ok
-            val accountId = subject(state.idToken)
-            return OidcConnexion(accountId, accessToken, state.jsonSerializeString())
-        } finally {
-            service.dispose()
         }
+        state.update(tokenResponse, null)
+        val accessToken = requireNotNull(state.accessToken) { "Access token OIDC absent" } // i18n-ok
+        val accountId = subject(state.idToken)
+        return OidcConnexion(accountId, accessToken, state.jsonSerializeString())
     }
 
     suspend fun freshToken(serializedState: String): JetonOidc {
         val state = AuthState.jsonDeserialize(serializedState)
-        val service = AuthorizationService(context)
-        try {
-            return suspendCancellableCoroutine { continuation ->
-                state.performActionWithFreshTokens(service) { accessToken, _, error ->
-                    if (accessToken != null) {
-                        continuation.resume(JetonOidc(accessToken, state.jsonSerializeString()))
-                    } else {
-                        continuation.resumeWithException(error ?: IllegalStateException("Jeton OIDC absent")) // i18n-ok
-                    }
+        return suspendCancellableCoroutine { continuation ->
+            state.performActionWithFreshTokens(service) { accessToken, _, error ->
+                if (accessToken != null) {
+                    continuation.resume(JetonOidc(accessToken, state.jsonSerializeString()))
+                } else {
+                    continuation.resumeWithException(error ?: IllegalStateException("Jeton OIDC absent")) // i18n-ok
                 }
             }
-        } finally {
-            service.dispose()
         }
     }
 
     fun lastAccessToken(serializedState: String): String? =
         AuthState.jsonDeserialize(serializedState).accessToken
+
+    /**
+     * Access token encore valide selon AppAuth (tolérance d'expiration de
+     * 60 s incluse), sans I/O ni réseau. `null` si un renouvellement est dû.
+     */
+    fun accessTokenIfFresh(serializedState: String): String? {
+        val state = AuthState.jsonDeserialize(serializedState)
+        return state.accessToken?.takeIf { !state.needsTokenRefresh }
+    }
+
+    /** À appeler si le conteneur applicatif est démantelé (tests inclus). */
+    fun close() = service.dispose()
 
     private suspend fun fetchConfiguration(issuer: Uri): AuthorizationServiceConfiguration =
         suspendCancellableCoroutine { continuation ->

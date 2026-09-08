@@ -107,6 +107,8 @@ consignes de sécurité sont regroupés dans la
 - [Guide de développement](docs/DEVELOPMENT.md) — environnement, builds et
   itérations locales.
 - [Guide de test](docs/TESTING.md) — tests rapides, intégration et CLI.
+- [Connexion OIDC](docs/OIDC.md) — enregistrer le client `OCnotesAndroid` sur
+  son propre serveur OpenCloud (fonction expérimentale).
 - [Guide de publication](docs/RELEASING.md) — signature et préparation d'une
   release Android.
 - [Contribuer](CONTRIBUTING.md) — règles de contribution et validation d'une

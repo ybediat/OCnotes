@@ -138,6 +138,10 @@ func TestValidate(t *testing.T) {
 		{"HTTP interdit", Config{ServerURL: "http://x.fr", Username: "moi"}, false},
 		{"hôte manquant", Config{ServerURL: "https://", Username: "moi"}, false},
 		{"WebDAV HTTP interdit", Config{ServerURL: "https://x.fr", Username: "moi", DriveWebDavURL: "http://x.fr/dav"}, false},
+		{"authMode vide", Config{ServerURL: "https://x.fr", Username: "moi", AuthMode: ""}, true},
+		{"authMode app_token", Config{ServerURL: "https://x.fr", Username: "moi", AuthMode: AuthAppToken}, true},
+		{"authMode oidc", Config{ServerURL: "https://x.fr", Username: "moi", AuthMode: AuthOIDC}, true},
+		{"authMode inconnu", Config{ServerURL: "https://x.fr", Username: "moi", AuthMode: "saml"}, false},
 	}
 
 	for _, tc := range tests {

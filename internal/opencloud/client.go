@@ -60,13 +60,13 @@ func NewBearerAuth(token string) *BearerAuth {
 
 func (a *BearerAuth) Apply(req *http.Request) error {
 	if a == nil {
-		return fmt.Errorf("opencloud: jeton OIDC manquant")
+		return fmt.Errorf("opencloud: [%s] jeton OIDC manquant", CodeUnauthorized)
 	}
 	a.mu.RLock()
 	token := a.token
 	a.mu.RUnlock()
 	if token == "" {
-		return fmt.Errorf("opencloud: jeton OIDC manquant")
+		return fmt.Errorf("opencloud: [%s] jeton OIDC manquant", CodeUnauthorized)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	return nil
@@ -76,7 +76,7 @@ func (a *BearerAuth) Apply(req *http.Request) error {
 func (a *BearerAuth) SetToken(token string) error {
 	token = strings.TrimSpace(token)
 	if token == "" {
-		return fmt.Errorf("opencloud: jeton OIDC manquant")
+		return fmt.Errorf("opencloud: [%s] jeton OIDC manquant", CodeUnauthorized)
 	}
 	a.mu.Lock()
 	a.token = token

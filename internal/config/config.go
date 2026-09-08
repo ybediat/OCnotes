@@ -180,7 +180,7 @@ func (c Config) Validate() error {
 	if c.Mode == ModeLocal {
 		return nil
 	}
-	if c.AuthMode != "" && c.AuthMode != AuthOIDC {
+	if c.AuthMode != "" && c.AuthMode != AuthOIDC && c.AuthMode != AuthAppToken {
 		return fmt.Errorf("config: mode d'authentification inconnu %q", c.AuthMode)
 	}
 	if c.ServerURL == "" {

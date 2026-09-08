@@ -1,5 +1,6 @@
 package eu.ocnotes.diagnostic
 
+import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.app.ApplicationExitInfo
 import android.content.Context
@@ -119,6 +120,8 @@ class CrashReporter private constructor(
         )
     }
 
+    // `commit()` synchrone assumé : le processus ne survivra pas à un `apply` différé.
+    @SuppressLint("ApplySharedPref")
     private fun installHandler() {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
 
@@ -180,6 +183,9 @@ class CrashReporter private constructor(
         ).start()
     }
 
+    // `commit()` synchrone assumé : voir `installHandler`. Un nouveau crash ne
+    // doit pas reproposer indéfiniment le même ancien incident.
+    @SuppressLint("ApplySharedPref")
     @RequiresApi(Build.VERSION_CODES.R)
     private fun collectLastSystemExitApi30() {
         val activityManager = context.getSystemService(ActivityManager::class.java) ?: return
@@ -298,7 +304,10 @@ class CrashReporter private constructor(
         private const val MAX_FIL_ARIANE_CHARS = 96
         private const val CARACTERES_FIL_ARIANE = "_;="
 
+        // `REASON_*` sont des constantes `int` recopiées à la compilation, et
+        // tous les usages sont gardés par `Build.VERSION.SDK_INT >= R`.
         /** Des défauts du programme : signalés quel que soit le premier plan. */
+        @SuppressLint("InlinedApi")
         private val MOTIFS_DEFAUT_PROGRAMME = setOf(
             ApplicationExitInfo.REASON_ANR,
             ApplicationExitInfo.REASON_CRASH,
@@ -310,6 +319,7 @@ class CrashReporter private constructor(
          * Des mises à mort par le système. C'est là que tombe la mort de
          * processus muette d'une note trop lourde, que rien d'autre n'attrape.
          */
+        @SuppressLint("InlinedApi")
         private val MOTIFS_SI_VISIBLE = setOf(
             ApplicationExitInfo.REASON_SIGNALED,
             ApplicationExitInfo.REASON_LOW_MEMORY,

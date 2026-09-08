@@ -1,5 +1,6 @@
 package eu.ocnotes.data
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
@@ -151,6 +152,9 @@ class TokenStore(private val context: Context) {
         load(null)
     }
 
+    // `commit()` synchrone : le secret illisible doit avoir disparu avant que
+    // l'appelant ne conclue qu'il n'y a pas de session.
+    @SuppressLint("ApplySharedPref")
     private fun discardUnreadableToken() {
         prefs().edit().remove(KEY_APP_TOKEN).remove(KEY_OIDC_STATE).commit()
         runCatching { keyStore().deleteEntry(KEY_ALIAS) }

@@ -129,6 +129,7 @@ are in French:
 - [Technical documentation](docs/TECHNICAL.md)
 - [Development guide](docs/DEVELOPMENT.md)
 - [Testing guide](docs/TESTING.md)
+- [OIDC login](docs/OIDC.md) — registering the `OCnotesAndroid` client on your own OpenCloud server (experimental)
 - [Release guide](docs/RELEASING.md)
 - [Contributing](CONTRIBUTING.md)
 - [F-Droid submission notes](docs/fdroid/README.md)
