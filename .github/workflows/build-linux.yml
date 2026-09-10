@@ -11,6 +11,36 @@ permissions:
   actions: write
 
 jobs:
+  # Contrôles rapides du cœur Go, sans Android : ils rendent la main en
+  # quelques dizaines de secondes là où le build complet prend plusieurs
+  # minutes. `go vet` et `gofmt` sont les « à passer avant de conclure » de
+  # CLAUDE.md ; ils n'étaient jusqu'ici vérifiés qu'à la main.
+  verifs-go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: gofmt
+        run: |
+          mal_formates="$(gofmt -l .)"
+          if [ -n "$mal_formates" ]; then
+            echo "Fichiers mal formatés (lancer 'gofmt -w') :"
+            echo "$mal_formates"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 90
