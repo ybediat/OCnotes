@@ -1,0 +1,7 @@
+Experimental OIDC sign-in as an alternative to the App Token: the server can
+authenticate in the browser when the administrator has registered the
+OCnotesAndroid client. App Tokens remain the default method.
+
+After an unexpected shutdown, a local diagnostic report is offered on the next
+launch. It contains no note text and no server address, and is only sent with
+your consent.

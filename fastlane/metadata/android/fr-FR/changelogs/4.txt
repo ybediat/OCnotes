@@ -1,0 +1,7 @@
+Connexion OIDC expérimentale, en alternative au jeton d'application : le serveur
+peut authentifier dans le navigateur si l'administrateur a enregistré le client
+OCnotesAndroid. Le jeton d'application reste la méthode par défaut.
+
+Après un arrêt inattendu, un rapport de diagnostic local est proposé au
+lancement suivant. Il ne contient ni texte de note ni adresse de serveur, et
+n'est envoyé qu'avec votre accord.

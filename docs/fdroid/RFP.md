@@ -130,7 +130,7 @@ inclusion if you prefer that order.
 
 ### Notes
 
-- Current release: `v0.1.2` (versionCode 3).
+- Current release: `v0.1.3` (versionCode 4).
 - The app is **alpha**. It works day to day, but the UI has no instrumented
   tests, and the Spanish and German translations have not been reviewed by
   native speakers on device.

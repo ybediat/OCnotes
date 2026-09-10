@@ -50,10 +50,10 @@ n'importe quel autre client.
 
 ## Installation
 
-La version signée **0.1.2** est disponible sur la
-[page des releases](https://github.com/ybediat/OCnotes/releases/tag/v0.1.2)
+La version signée **0.1.3** est disponible sur la
+[page des releases](https://github.com/ybediat/OCnotes/releases/tag/v0.1.3)
 (téléchargement :
-[`OCnotes-0.1.2.apk`](https://github.com/ybediat/OCnotes/releases/download/v0.1.2/OCnotes-0.1.2.apk)).
+[`OCnotes-0.1.3.apk`](https://github.com/ybediat/OCnotes/releases/download/v0.1.3/OCnotes-0.1.3.apk)).
 Elle peut être installée directement sur Android. L'application peut aussi être
 construite depuis les sources (voir [Construire depuis les sources](#construire-depuis-les-sources)).
 
@@ -236,8 +236,8 @@ Les options (`-server`, `-user`, `-drive`, `-timeout`) précèdent la commande.
 
 ## État du projet
 
-**Alpha.** La version signée **0.1.2** est disponible sur
-[GitHub Releases](https://github.com/ybediat/OCnotes/releases/tag/v0.1.2).
+**Alpha.** La version signée **0.1.3** est disponible sur
+[GitHub Releases](https://github.com/ybediat/OCnotes/releases/tag/v0.1.3).
 L'application fonctionne en mode local, sans compte, ou avec un serveur
 OpenCloud ; ses notes Markdown et texte brut continuent alors à se synchroniser
 hors ligne.

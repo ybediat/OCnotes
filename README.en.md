@@ -40,10 +40,10 @@ space: readable from the web interface and usable by any other client.
 
 ## Installation
 
-Signed version **0.1.2** is available on the
-[release page](https://github.com/ybediat/OCnotes/releases/tag/v0.1.2).
+Signed version **0.1.3** is available on the
+[release page](https://github.com/ybediat/OCnotes/releases/tag/v0.1.3).
 You can download and install
-[`OCnotes-0.1.2.apk`](https://github.com/ybediat/OCnotes/releases/download/v0.1.2/OCnotes-0.1.2.apk)
+[`OCnotes-0.1.3.apk`](https://github.com/ybediat/OCnotes/releases/download/v0.1.3/OCnotes-0.1.3.apk)
 directly on an Android device.
 
 Android 8.0 (API 26) or later is required. To synchronize, configure an HTTPS
@@ -105,7 +105,7 @@ go test ./... -run TestIntegration -v
 
 ## Project status
 
-**Alpha.** Signed version **0.1.2** is available. The app works in local-only
+**Alpha.** Signed version **0.1.3** is available. The app works in local-only
 mode and with OpenCloud synchronization, including offline changes.
 
 The Go core and Android adapters have unit tests, and integration tests can run
