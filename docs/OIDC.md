@@ -39,17 +39,16 @@ Pour limiter ce risque :
    de la documentation — un export autogénéré de la config par défaut — **à la
    version de votre serveur** (sélecteur de version de la doc, ou le dossier
    `services/idp` du dépôt `opencloud-eu/opencloud` au tag correspondant).
-2. **Recopiez ce bloc `clients` de référence** dans votre fichier, en
-   remplaçant `{{OC_URL}}` par l'URL publique de votre serveur dans l'entrée
-   `web`.
-3. **Ajoutez l'entrée `OCnotesAndroid`** en fin de liste, sans toucher aux
+2. **Recopiez ce bloc `clients` de référence** dans votre fichier, normalement vous n'avez pas besoin de
+   remplacer `{{OC_URL}}` par l'URL publique de votre serveur dans l'entrée
+   `web`. Si ça ne marche pas vous pouvez essayer de remplacé par votre nom de domaine.
+4. **Ajoutez l'entrée `OCnotesAndroid`** en fin de liste, sans toucher aux
    autres.
-4. **À chaque montée de version d'OpenCloud**, rouvrez la même page de doc pour
+5. **À chaque montée de version d'OpenCloud**, rouvrez la même page de doc pour
    la nouvelle version, `diff` contre votre fichier, reportez les écarts sur
    les entrées standard.
 
-Liste par défaut au moment d'écrire ces lignes — **à revérifier** contre la
-page ci-dessus pour votre version, elle peut changer :
+La liste par défaut verifié en version 7.2.4 :
 
 ```yaml
 clients:
