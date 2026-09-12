@@ -7,12 +7,15 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Article
@@ -42,12 +45,14 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,6 +61,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
@@ -211,6 +217,12 @@ fun BrowserScreen(
                             )
                         }
                     },
+                    // Une teinte de surface, pas la couleur de fond brute : la
+                    // barre se détache légèrement du contenu sans devenir un
+                    // bandeau de couleur.
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    ),
                 )
             }
         },
@@ -465,6 +477,14 @@ private fun BarreSelection(
                 )
             }
         },
+        // Teinte distincte de la barre normale : le mode sélection doit se
+        // reconnaître d'un coup d'œil, pas seulement à son contenu.
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            titleContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            navigationIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            actionIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ),
     )
 }
 
@@ -589,6 +609,14 @@ private fun BarreRecherche(
         },
         singleLine = true,
         shape = MaterialTheme.shapes.extraLarge,
+        // Champ tonal plutôt qu'un simple contour : plus proche d'un bouton de
+        // recherche que d'un formulaire à remplir.
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            unfocusedBorderColor = Color.Transparent,
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+        ),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -668,25 +696,41 @@ private fun LigneEntree(
                 // Le format se demande au cœur, qui l'a mis dans le listing : la
                 // liste des extensions reconnues ne vit qu'à un endroit.
                 val document = !entree.isDir && entree.readOnly
-                Icon(
-                    imageVector = when {
-                        entree.isDir -> Icons.Default.Folder
-                        document -> Icons.AutoMirrored.Filled.Article
-                        else -> Icons.Default.EditNote
-                    },
-                    contentDescription = stringResource(
-                        when {
-                            entree.isDir -> R.string.browser_type_dossier
-                            document -> R.string.browser_type_document
-                            else -> R.string.browser_type_note
-                        },
-                    ),
-                    tint = if (document) {
-                        MaterialTheme.colorScheme.tertiary
+
+                // Un disque tonal derrière l'icône, plutôt qu'un pictogramme nu :
+                // la liste gagne un point d'ancrage visuel par ligne, sans rien
+                // ajouter au message porté par l'icône elle-même.
+                Surface(
+                    shape = CircleShape,
+                    color = if (document) {
+                        MaterialTheme.colorScheme.tertiaryContainer
                     } else {
-                        MaterialTheme.colorScheme.primary
+                        MaterialTheme.colorScheme.primaryContainer
                     },
-                )
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = when {
+                                entree.isDir -> Icons.Default.Folder
+                                document -> Icons.AutoMirrored.Filled.Article
+                                else -> Icons.Default.EditNote
+                            },
+                            contentDescription = stringResource(
+                                when {
+                                    entree.isDir -> R.string.browser_type_dossier
+                                    document -> R.string.browser_type_document
+                                    else -> R.string.browser_type_note
+                                },
+                            ),
+                            tint = if (document) {
+                                MaterialTheme.colorScheme.onTertiaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            },
+                        )
+                    }
+                }
             }
         },
         trailingContent = {

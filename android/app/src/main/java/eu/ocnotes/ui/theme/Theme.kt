@@ -1,7 +1,9 @@
 package eu.ocnotes.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -10,6 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 // Rôles publiés par le design system OpenCloud :
@@ -118,6 +121,16 @@ private val Typographie = Typography(
     ),
 )
 
+// Un cran plus rond que les valeurs par défaut de Material 3 (4/8/12/16/28dp) :
+// de quoi adoucir cartes, menus et dialogues sans sombrer dans le tout-pilule.
+private val Formes = Shapes(
+    extraSmall = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(14.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(28.dp),
+)
+
 @Composable
 fun OCnotesTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -128,6 +141,7 @@ fun OCnotesTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typographie,
+        shapes = Formes,
         content = content,
     )
 }
