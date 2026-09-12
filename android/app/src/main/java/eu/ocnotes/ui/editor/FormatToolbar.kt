@@ -2,16 +2,20 @@ package eu.ocnotes.ui.editor
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -33,6 +37,11 @@ import eu.ocnotes.data.FormatAction
  * en donne un joli.
  *
  * Chaque action est une bascule : la réappliquer retire la mise en forme.
+ *
+ * Pas de fond ni de boutons pleins : posée juste au-dessus du clavier, la
+ * barre n'a besoin que d'un filet pour marquer sa limite avec le texte. Un
+ * bandeau plein rempli de pilules pleines empilait deux teintes de gris pour
+ * dix boutons — plus lourd que ce qu'une barre d'outils doit peser.
  */
 @Composable
 fun FormatToolbar(
@@ -42,22 +51,34 @@ fun FormatToolbar(
 ) {
     if (actions.isEmpty()) return
 
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = modifier.fillMaxWidth(),
-    ) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
         Row(
             modifier = Modifier
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            actions.forEach { action ->
+            actions.forEachIndexed { index, action ->
                 val apparence = apparenceDe(action)
 
-                FilledTonalButton(
+                // Un filet entre deux groupes d'actions plutôt qu'entre
+                // chaque bouton : de quoi repérer la bonne zone d'un coup
+                // d'œil sans transformer la barre en grille.
+                if (index > 0 && categorieDe(action.id) != categorieDe(actions[index - 1].id)) {
+                    VerticalDivider(
+                        modifier = Modifier
+                            .height(24.dp)
+                            .padding(horizontal = 2.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                }
+
+                TextButton(
                     onClick = { onAction(action) },
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                     modifier = Modifier.semantics { contentDescription = apparence.description },
                 ) {
                     Text(
@@ -65,11 +86,21 @@ fun FormatToolbar(
                         fontWeight = apparence.graisse,
                         fontFamily = apparence.police,
                         textDecoration = apparence.decoration,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
         }
     }
+}
+
+/** Regroupement purement visuel : où poser un filet entre deux boutons. */
+private enum class Categorie { EN_LIGNE, TITRE, BLOC }
+
+private fun categorieDe(id: String): Categorie = when (id) {
+    "bold", "italic", "strikethrough", "code", "link" -> Categorie.EN_LIGNE
+    "h1", "h2", "h3" -> Categorie.TITRE
+    else -> Categorie.BLOC
 }
 
 /**
