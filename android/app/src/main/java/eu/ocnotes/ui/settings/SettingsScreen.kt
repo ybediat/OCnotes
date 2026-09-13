@@ -23,6 +23,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -179,6 +180,18 @@ fun SettingsScreen(
                 detail = stringResource(R.string.reglages_moteur_virtualise_detail),
                 selectionne = etat.moteurEdition == MoteurEdition.VIRTUALISE,
                 onClick = { viewModel.definirMoteurEdition(MoteurEdition.VIRTUALISE) },
+            )
+            OptionBascule(
+                titre = stringResource(R.string.reglages_garder_ecran_lecture_titre),
+                detail = stringResource(R.string.reglages_garder_ecran_lecture_explication),
+                actif = etat.garderEcranAllumeLecture,
+                onChangement = viewModel::definirGarderEcranAllumeLecture,
+            )
+            OptionBascule(
+                titre = stringResource(R.string.reglages_garder_ecran_edition_titre),
+                detail = stringResource(R.string.reglages_garder_ecran_edition_explication),
+                actif = etat.garderEcranAllumeEdition,
+                onChangement = viewModel::definirGarderEcranAllumeEdition,
             )
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -646,6 +659,38 @@ private fun Ligne(libelle: String, valeur: String) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(text = valeur, style = MaterialTheme.typography.bodyLarge)
+        }
+    }
+}
+
+@Composable
+private fun OptionBascule(
+    titre: String,
+    detail: String,
+    actif: Boolean,
+    onChangement: (Boolean) -> Unit,
+) {
+    Surface(
+        onClick = { onChangement(!actif) },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(titre, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = actif,
+                onCheckedChange = null,
+                modifier = Modifier.padding(start = 8.dp),
+            )
         }
     }
 }

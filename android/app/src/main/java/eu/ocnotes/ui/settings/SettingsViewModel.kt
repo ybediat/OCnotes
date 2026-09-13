@@ -48,6 +48,8 @@ data class SettingsUiState(
     val erreur: Texte? = null,
     val deconnecte: Boolean = false,
     val moteurEdition: MoteurEdition = MoteurEdition.DEFAUT,
+    val garderEcranAllumeLecture: Boolean = false,
+    val garderEcranAllumeEdition: Boolean = false,
     val preparationModeLocal: Boolean = false,
     val planModeLocal: DetachPlanDto? = null,
     val rapatriementEnCours: Boolean = false,
@@ -67,7 +69,11 @@ class SettingsViewModel(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
-        SettingsUiState(moteurEdition = preferences.moteurEdition.value),
+        SettingsUiState(
+            moteurEdition = preferences.moteurEdition.value,
+            garderEcranAllumeLecture = preferences.garderEcranAllumeLecture.value,
+            garderEcranAllumeEdition = preferences.garderEcranAllumeEdition.value,
+        ),
     )
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
@@ -82,6 +88,16 @@ class SettingsViewModel(
         viewModelScope.launch {
             preferences.moteurEdition.collect { moteur ->
                 _uiState.update { it.copy(moteurEdition = moteur) }
+            }
+        }
+        viewModelScope.launch {
+            preferences.garderEcranAllumeLecture.collect { v ->
+                _uiState.update { it.copy(garderEcranAllumeLecture = v) }
+            }
+        }
+        viewModelScope.launch {
+            preferences.garderEcranAllumeEdition.collect { v ->
+                _uiState.update { it.copy(garderEcranAllumeEdition = v) }
             }
         }
     }
@@ -329,6 +345,14 @@ class SettingsViewModel(
 
     fun definirMoteurEdition(moteur: MoteurEdition) {
         preferences.definirMoteurEdition(moteur)
+    }
+
+    fun definirGarderEcranAllumeLecture(valeur: Boolean) {
+        preferences.definirGarderEcranAllumeLecture(valeur)
+    }
+
+    fun definirGarderEcranAllumeEdition(valeur: Boolean) {
+        preferences.definirGarderEcranAllumeEdition(valeur)
     }
 
     fun libererEspace() {

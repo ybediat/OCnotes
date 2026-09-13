@@ -127,6 +127,8 @@ data class EditorUiState(
      * pas de serveur — il n'y a pas de connexion à attendre.
      */
     val modeLocal: Boolean = false,
+    val garderEcranAllumeLecture: Boolean = false,
+    val garderEcranAllumeEdition: Boolean = false,
 ) {
     /**
      * Vrai quand [valeur] peut être écrit dans la note sans risquer de la
@@ -282,6 +284,8 @@ class EditorViewModel(
     private val syncScheduler: SyncScheduler,
     private val applicationScope: CoroutineScope,
     private val moteurEdition: MoteurEdition,
+    garderEcranAllumeLecture: Boolean = false,
+    garderEcranAllumeEdition: Boolean = false,
 ) : ViewModel() {
 
     private val nom = chemin.substringAfterLast('/')
@@ -301,6 +305,8 @@ class EditorViewModel(
             texteBrut = !documentBureautique && repository.isPlainText(nom),
             documentBureautique = documentBureautique,
             moteurEdition = moteurEdition,
+            garderEcranAllumeLecture = garderEcranAllumeLecture,
+            garderEcranAllumeEdition = garderEcranAllumeEdition,
             // Lu une fois à l'ouverture, comme documentBureautique : le mode
             // ne change pas pendant qu'une note est en train de s'éditer.
             modeLocal = repository.mode.value == AppMode.LOCAL,
@@ -727,6 +733,8 @@ class EditorViewModel(
                         syncScheduler = container.syncScheduler,
                         applicationScope = container.applicationScope,
                         moteurEdition = container.preferencesAffichage.moteurEdition.value,
+                        garderEcranAllumeLecture = container.preferencesAffichage.garderEcranAllumeLecture.value,
+                        garderEcranAllumeEdition = container.preferencesAffichage.garderEcranAllumeEdition.value,
                     )
                 }
             }

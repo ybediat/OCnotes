@@ -193,7 +193,8 @@ fun EditeurNatif(
         .toArgb()
     val densite = LocalDensity.current
     val paddingHorizontal = with(densite) { 20.dp.roundToPx() }
-    val paddingVertical = with(densite) { 2.dp.roundToPx() }
+    val paddingTop = with(densite) { 8.dp.roundToPx() }
+    val paddingBottom = with(densite) { 48.dp.roundToPx() }
     val mutationCourante = rememberUpdatedState(onMutation)
     val detachementCourant = rememberUpdatedState(onAvantDetachement)
     val pretCourant = rememberUpdatedState(onPret)
@@ -226,9 +227,9 @@ fun EditeurNatif(
                         highlightColor = couleurSelection
                         setPadding(
                             paddingHorizontal,
-                            paddingVertical,
+                            paddingTop,
                             paddingHorizontal,
-                            paddingVertical,
+                            paddingBottom,
                         )
                         setSelectAllOnFocus(false)
                         isSaveEnabled = false

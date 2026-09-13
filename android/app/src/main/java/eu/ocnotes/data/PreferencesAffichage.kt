@@ -52,6 +52,12 @@ class PreferencesAffichage internal constructor(
     private val _moteurEdition = MutableStateFlow(
         MoteurEdition.depuis(stockage.lireChaine(CLE_MOTEUR_EDITION)),
     )
+    private val _garderEcranAllumeLecture = MutableStateFlow(
+        stockage.lireBooleen(CLE_GARDER_ECRAN_ALLUME_LECTURE, false),
+    )
+    private val _garderEcranAllumeEdition = MutableStateFlow(
+        stockage.lireBooleen(CLE_GARDER_ECRAN_ALLUME_EDITION, false),
+    )
 
     /**
      * Ordre de tri retenu, sous sa forme brute.
@@ -79,6 +85,12 @@ class PreferencesAffichage internal constructor(
     /** Moteur choisi pour les prochaines sessions d'édition. */
     val moteurEdition: StateFlow<MoteurEdition> = _moteurEdition.asStateFlow()
 
+    /** Vrai s'il faut empêcher la mise en veille de l'écran en lecture (aperçu). */
+    val garderEcranAllumeLecture: StateFlow<Boolean> = _garderEcranAllumeLecture.asStateFlow()
+
+    /** Vrai s'il faut empêcher la mise en veille de l'écran en édition. */
+    val garderEcranAllumeEdition: StateFlow<Boolean> = _garderEcranAllumeEdition.asStateFlow()
+
     fun definirTri(valeur: String) = ecrire(CLE_TRI, valeur, _tri)
 
     fun definirMode(valeur: String) = ecrire(CLE_MODE, valeur, _mode)
@@ -93,6 +105,16 @@ class PreferencesAffichage internal constructor(
     fun definirMoteurEdition(valeur: MoteurEdition) {
         _moteurEdition.value = valeur
         stockage.ecrireChaine(CLE_MOTEUR_EDITION, valeur.valeurPersistante)
+    }
+
+    fun definirGarderEcranAllumeLecture(valeur: Boolean) {
+        _garderEcranAllumeLecture.value = valeur
+        stockage.ecrireBooleen(CLE_GARDER_ECRAN_ALLUME_LECTURE, valeur)
+    }
+
+    fun definirGarderEcranAllumeEdition(valeur: Boolean) {
+        _garderEcranAllumeEdition.value = valeur
+        stockage.ecrireBooleen(CLE_GARDER_ECRAN_ALLUME_EDITION, valeur)
     }
 
     /**
@@ -112,6 +134,8 @@ class PreferencesAffichage internal constructor(
         const val CLE_DOSSIER = "dernier_dossier"
         const val CLE_QUOTA_CACHE = "quota_cache_octets"
         const val CLE_MOTEUR_EDITION = "moteur_edition"
+        const val CLE_GARDER_ECRAN_ALLUME_LECTURE = "garder_ecran_allume_lecture"
+        const val CLE_GARDER_ECRAN_ALLUME_EDITION = "garder_ecran_allume_edition"
         const val QUOTA_CACHE_DEFAUT = 250L * 1024 * 1024
     }
 }
@@ -119,8 +143,10 @@ class PreferencesAffichage internal constructor(
 internal interface StockagePreferencesAffichage {
     fun lireChaine(cle: String): String?
     fun lireLong(cle: String, defaut: Long): Long
+    fun lireBooleen(cle: String, defaut: Boolean): Boolean
     fun ecrireChaine(cle: String, valeur: String)
     fun ecrireLong(cle: String, valeur: Long)
+    fun ecrireBooleen(cle: String, valeur: Boolean)
 }
 
 private class StockagePreferencesAndroid(
@@ -130,11 +156,17 @@ private class StockagePreferencesAndroid(
 
     override fun lireLong(cle: String, defaut: Long): Long = prefs.getLong(cle, defaut)
 
+    override fun lireBooleen(cle: String, defaut: Boolean): Boolean = prefs.getBoolean(cle, defaut)
+
     override fun ecrireChaine(cle: String, valeur: String) {
         prefs.edit().putString(cle, valeur).apply()
     }
 
     override fun ecrireLong(cle: String, valeur: Long) {
         prefs.edit().putLong(cle, valeur).apply()
+    }
+
+    override fun ecrireBooleen(cle: String, valeur: Boolean) {
+        prefs.edit().putBoolean(cle, valeur).apply()
     }
 }

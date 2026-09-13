@@ -43,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +59,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.input.TextFieldValue
@@ -99,6 +101,23 @@ fun EditorScreen(
         mutableStateOf(viewModel.instantaneNatifConserve())
     }
     val moteurNatif = etat.moteurEdition == MoteurEdition.NATIF
+    val vueLocale = LocalView.current
+    val garderEcranAllume = if (etat.apercu) {
+        etat.garderEcranAllumeLecture
+    } else {
+        etat.garderEcranAllumeEdition
+    }
+
+    DisposableEffect(garderEcranAllume) {
+        if (garderEcranAllume) {
+            vueLocale.keepScreenOn = true
+        }
+        onDispose {
+            if (garderEcranAllume) {
+                vueLocale.keepScreenOn = false
+            }
+        }
+    }
 
     // Fil d'Ariane du diagnostic : une mort de processus sur une note trop
     // lourde ne laisse aucune trace Kotlin, et ces deux mesures sont les

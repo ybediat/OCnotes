@@ -347,6 +347,10 @@
     <string name="reglages_moteur_virtualise_detail">Moteur stable, conservé en repli.</string>
     <string name="reglages_moteur_natif">Éditeur natif</string>
     <string name="reglages_moteur_natif_detail">Utilisé par défaut. Facilite la sélection de texte long.</string>
+    <string name="reglages_garder_ecran_lecture_titre">Garder l\'écran allumé en lecture</string>
+    <string name="reglages_garder_ecran_lecture_explication">Empêche l\'écran de s\'éteindre lors de la consultation d\'une note en aperçu.</string>
+    <string name="reglages_garder_ecran_edition_titre">Garder l\'écran allumé en édition</string>
+    <string name="reglages_garder_ecran_edition_explication">Empêche l\'écran de s\'éteindre pendant la modification d\'une note.</string>
 
     <string name="reglages_sync_titre">Synchronisation</string>
     <string name="reglages_en_attente">Opérations en attente</string>
