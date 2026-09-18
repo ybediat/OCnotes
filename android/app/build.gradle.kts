@@ -28,8 +28,8 @@ android {
         applicationId = "eu.ocnotes"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.1.3"
+        versionCode = 5
+        versionName = "0.1.4"
         manifestPlaceholders["appAuthRedirectScheme"] = "eu.ocnotes"
 
         // Le .aar de gomobile n'embarque que les ABI passées au bind : cette
