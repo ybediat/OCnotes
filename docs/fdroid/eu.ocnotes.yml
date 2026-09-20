@@ -76,7 +76,6 @@ Builds:
     scanignore:
       - android/app/libs/ocnotes.aar
 
-Builds:
   - versionName: 0.1.3
     versionCode: 4
     commit: v0.1.3
