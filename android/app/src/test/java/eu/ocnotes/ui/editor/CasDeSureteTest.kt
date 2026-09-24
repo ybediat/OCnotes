@@ -12,8 +12,8 @@ import org.junit.Test
  * de l'action, y compris contre un emoji.
  *
  * **Ce qu'ils ne prouvent pas :** l'aller-retour complet jusqu'au fichier. Le
- * chemin réel traverse encore `prepareEdit`, `restoreImages` et `writeNote`,
- * dont les deux premiers vivent en Go et ont leurs propres tests. La frappe
+ * chemin réel traverse encore `openEdit` et `writeEditedNote`, qui vivent en
+ * Go et ont leurs propres tests (`TestOpenEditJSONAllerRetour`). La frappe
  * elle-même appartient à l'`EditText` et ne se vérifie que sur appareil.
  *
  * Ces quatre formes sont celles qui éprouvaient l'ancien éditeur virtualisé :

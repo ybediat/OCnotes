@@ -761,6 +761,32 @@ class OCnotesRepository(
         callJson { it.prepareEditJSON(name, content) }
 
     /**
+     * Ouvre une note en saisie en gardant ses images **côté Go**.
+     *
+     * Remplace le couple [prepareEdit] / [restoreImages] pour l'éditeur : une
+     * photo de quelques Mo n'a plus à traverser la frontière à chaque
+     * enregistrement. Le titre vient avec, sans second passage du texte.
+     */
+    suspend fun openEdit(name: String, content: String): OpenedEditDto =
+        callJson { it.openEditJSON(name, content) }
+
+    /**
+     * Écrit une note ouverte par [openEdit], images restituées par Go.
+     *
+     * Une session inconnue est refusée sans rien écrire : c'est ce qui empêche
+     * le texte à jetons d'atteindre la vraie note.
+     */
+    suspend fun writeEditedNote(session: String, notePath: String, text: String) {
+        call { it.writeEditedNote(session, notePath, text) }
+        refreshPending()
+    }
+
+    /** Libère les images d'une session, **après** sa dernière écriture. */
+    suspend fun closeEdit(session: String) {
+        if (session.isNotEmpty()) call { it.closeEdit(session) }
+    }
+
+    /**
      * Remet les données en ligne à la place de leurs jetons.
      *
      * **À appeler avant chaque écriture.** Un jeton effacé par l'utilisateur ne

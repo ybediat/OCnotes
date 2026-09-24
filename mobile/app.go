@@ -73,6 +73,13 @@ type App struct {
 	// offlineUntil retient qu'un appel réseau vient d'échouer, pour éviter de
 	// réessayer à chaque geste.
 	offlineUntil time.Time
+
+	// edits garde les images retirées des notes ouvertes en saisie, par
+	// session d'édition (voir OpenEditJSON). Verrou à part : une écriture ne
+	// doit pas attendre une synchronisation qui tient a.mu.
+	editsMu  sync.Mutex
+	edits    map[string][]string
+	nextEdit uint64
 }
 
 // NewApp ouvre l'application dans un dossier de données.
@@ -1880,6 +1887,85 @@ func (a *App) RestoreImages(text, imagesJSON string) (string, error) {
 		return "", fmt.Errorf("mobile: liste d'images illisible: %w", err)
 	}
 	return markdown.RestoreInlineData(text, images), nil
+}
+
+// openedEdit est une note ouverte en saisie, ses images gardées côté Go.
+type openedEdit struct {
+	Session     string `json:"session"`
+	Text        string `json:"text"`
+	Editable    bool   `json:"editable"`
+	LongestWord int    `json:"longestWord"`
+	Title       string `json:"title"`
+}
+
+// OpenEditJSON prépare une note pour la saisie, comme PrepareEditJSON, mais
+// **garde les images de ce côté-ci** de la frontière.
+//
+// Avec PrepareEditJSON, les images faisaient l'aller-retour à chaque
+// enregistrement : encodées en JSON par Kotlin, décodées ici, restituées, puis
+// le texte complet repartait vers Kotlin pour revenir aussitôt par WriteNote.
+// Une photo de 3 Mo coûtait ainsi 100 à 180 ms de thread principal à chaque
+// pause de frappe, mesuré sur téléphone (section 7 bis d'ARCHITECTURE.md).
+//
+// `session` est vide quand la note n'a aucune image : il n'y a alors rien à
+// garder, et WriteEditedNote écrit le texte tel quel. Sinon, l'interface la
+// repasse à WriteEditedNote pour chaque écriture, puis à CloseEdit en quittant.
+//
+// `title` évite un second passage du texte complet par TitleOf.
+func (a *App) OpenEditJSON(name, content string) (string, error) {
+	if err := notes.EnsureWritable(name); err != nil {
+		return "", err
+	}
+
+	text, images := notes.PrepareEdit(name, content)
+	var session string
+	if len(images) > 0 {
+		a.editsMu.Lock()
+		a.nextEdit++
+		session = fmt.Sprintf("edit-%d", a.nextEdit)
+		if a.edits == nil {
+			a.edits = make(map[string][]string)
+		}
+		a.edits[session] = images
+		a.editsMu.Unlock()
+	}
+	return toJSON(openedEdit{
+		Session:     session,
+		Text:        text,
+		Editable:    markdown.Editable(text),
+		LongestWord: markdown.LongestWord(text),
+		Title:       a.TitleOf(name, text),
+	})
+}
+
+// WriteEditedNote restitue les images de la session puis écrit la note, en un
+// seul appel : ni les images ni le texte restitué ne traversent la frontière.
+//
+// Une session inconnue est **refusée**, et rien n'est écrit. Écrire quand même
+// enregistrerait le texte à jetons à la place de la note, et l'image serait
+// perdue sur le serveur, sans message.
+func (a *App) WriteEditedNote(session, notePath, text string) error {
+	if session == "" {
+		return a.WriteNote(notePath, text)
+	}
+	a.editsMu.Lock()
+	images, ok := a.edits[session]
+	a.editsMu.Unlock()
+	if !ok {
+		return fmt.Errorf("mobile: session d'édition inconnue %q, écriture refusée pour ne pas perdre ses images", session)
+	}
+	return a.WriteNote(notePath, markdown.RestoreInlineData(text, images))
+}
+
+// CloseEdit libère les images d'une session d'édition. Sans effet sur une
+// session vide ou déjà fermée.
+//
+// À appeler **après** la dernière écriture : toute WriteEditedNote qui suit
+// est refusée.
+func (a *App) CloseEdit(session string) {
+	a.editsMu.Lock()
+	delete(a.edits, session)
+	a.editsMu.Unlock()
 }
 
 // MaxEditableWord est la borne exposée à l'interface : au-delà, un mot sans

@@ -615,6 +615,112 @@ func TestPrepareEditJSONAllerRetour(t *testing.T) {
 	}
 }
 
+// L'aller-retour tel que l'interface l'exécute avec une session d'édition :
+// les images ne quittent jamais Go, et la note écrite est l'original.
+func TestOpenEditJSONAllerRetour(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if err := app.StartLocal(); err != nil {
+		t.Fatalf("StartLocal: %v", err)
+	}
+
+	source := "# Photo\n\n![vacances](data:image/jpeg;base64," +
+		strings.Repeat("A", 60000) + ")\n\nUne légende.\n"
+
+	raw, err := app.OpenEditJSON("note.md", source)
+	if err != nil {
+		t.Fatalf("OpenEditJSON: %v", err)
+	}
+	if strings.Contains(raw, "base64") {
+		t.Fatal("la donnée a traversé la frontière")
+	}
+	var ouverte openedEdit
+	decodeJSON(t, raw, &ouverte)
+	if ouverte.Session == "" || !ouverte.Editable || ouverte.Title != "Photo" {
+		t.Fatalf("ouverture = %+v, attendu une session, modifiable, titre « Photo »", ouverte)
+	}
+
+	modifie := strings.Replace(ouverte.Text, "Une légende.", "Une autre légende.", 1)
+	if err := app.WriteEditedNote(ouverte.Session, "note.md", modifie); err != nil {
+		t.Fatalf("WriteEditedNote: %v", err)
+	}
+	lu, err := app.ReadNote("note.md")
+	if err != nil {
+		t.Fatalf("ReadNote: %v", err)
+	}
+	attendu := strings.Replace(source, "Une légende.", "Une autre légende.", 1)
+	if lu != attendu {
+		t.Errorf("note écrite sans son image restituée (%d octets, %d attendus)", len(lu), len(attendu))
+	}
+}
+
+// Une session fermée ou inconnue ne doit jamais écrire le texte à jetons.
+func TestWriteEditedNoteRefuseUneSessionInconnue(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if err := app.StartLocal(); err != nil {
+		t.Fatalf("StartLocal: %v", err)
+	}
+	source := "![x](data:image/png;base64," + strings.Repeat("B", 60000) + ")\n"
+	if err := app.WriteNote("note.md", source); err != nil {
+		t.Fatalf("WriteNote: %v", err)
+	}
+
+	raw, err := app.OpenEditJSON("note.md", source)
+	if err != nil {
+		t.Fatalf("OpenEditJSON: %v", err)
+	}
+	var ouverte openedEdit
+	decodeJSON(t, raw, &ouverte)
+	app.CloseEdit(ouverte.Session)
+
+	for _, session := range []string{ouverte.Session, "edit-inconnue"} {
+		if err := app.WriteEditedNote(session, "note.md", ouverte.Text); err == nil {
+			t.Errorf("session %q : écriture acceptée", session)
+		}
+	}
+	lu, err := app.ReadNote("note.md")
+	if err != nil {
+		t.Fatalf("ReadNote: %v", err)
+	}
+	if lu != source {
+		t.Error("la note a été remplacée par son texte à jetons")
+	}
+}
+
+// Sans image, pas de session : le texte s'écrit tel quel.
+func TestOpenEditJSONSansImageSansSession(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if err := app.StartLocal(); err != nil {
+		t.Fatalf("StartLocal: %v", err)
+	}
+	raw, err := app.OpenEditJSON("note.md", "# Note\n\nRien.\n")
+	if err != nil {
+		t.Fatalf("OpenEditJSON: %v", err)
+	}
+	var ouverte openedEdit
+	decodeJSON(t, raw, &ouverte)
+	if ouverte.Session != "" {
+		t.Errorf("session %q ouverte pour une note sans image", ouverte.Session)
+	}
+	if err := app.WriteEditedNote("", "note.md", "# Note\n\nModifiée.\n"); err != nil {
+		t.Fatalf("WriteEditedNote: %v", err)
+	}
+	if lu, _ := app.ReadNote("note.md"); lu != "# Note\n\nModifiée.\n" {
+		t.Errorf("lu %q", lu)
+	}
+	if len(app.edits) != 0 {
+		t.Errorf("%d sessions retenues", len(app.edits))
+	}
+}
+
 // Un fichier sans image traverse sans être touché, et « images » reste un
 // tableau — jamais null, comme le reste du contrat.
 func TestPrepareEditJSONSansImage(t *testing.T) {

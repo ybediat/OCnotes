@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 data class EditorUiState(
@@ -174,14 +176,27 @@ class EditorViewModel(
     private var revisionNativeDeSortie: Long? = null
     private var instantaneNatifConserve: InstantaneEditeurNatif? = null
 
+    /** Dernière écriture lancée en portée applicative, que la fermeture attend. */
+    private var ecritureDeSortie: Job? = null
+
     /**
-     * Données en ligne retirées du texte au chargement.
+     * Session d'édition côté Go, qui garde les images retirées du texte.
      *
-     * Elles vivent ici plutôt que dans l'état : ce sont plusieurs dizaines de
-     * milliers de caractères, que rien n'a à recomposer. [ecrire] les remet en
-     * place avant chaque écriture.
+     * Vide quand la note n'en a pas. Les images ne traversent plus la
+     * frontière : [ecrire] passe cet identifiant, Go restitue et écrit.
      */
-    private var images: List<String> = emptyList()
+    private var sessionEdition: String = ""
+
+    /**
+     * Sérialise les écritures et la fermeture de session.
+     *
+     * Une écriture automatique annulée continue de s'exécuter côté Go : sans ce
+     * verrou, elle pouvait atterrir **après** l'écriture de sortie, plus
+     * récente, et la recouvrir. Le verrou et [revisionEcrite] rangent les
+     * écritures dans l'ordre des révisions.
+     */
+    private val verrouEcriture = Mutex()
+    private var revisionEcrite = Long.MIN_VALUE
 
     init {
         viewModelScope.launch {
@@ -208,12 +223,13 @@ class EditorViewModel(
                     // le champ de saisie, et n'y reviennent qu'à l'écriture. Sans
                     // cette étape, une note contenant une photo insérée depuis
                     // l'interface web fait tuer l'application par le système.
-                    val prepare = repository.prepareEdit(nom, contenu)
-                    images = prepare.images
+                    // Les images restent côté Go, sous `sessionEdition`.
+                    val prepare = repository.openEdit(nom, contenu)
+                    sessionEdition = prepare.session
 
                     // `update` prend une lambda non suspendue : tout appel à la
                     // façade se fait avant, jamais dedans.
-                    val titre = repository.titleOf(nom, prepare.text)
+                    val titre = prepare.title
                     val blocs = if (prepare.editable) {
                         emptyList()
                     } else {
@@ -294,7 +310,7 @@ class EditorViewModel(
             ecrire(instantane.texte, instantane.revision)
             syncScheduler.syncAfterLocalChange()
         }
-        if (!survivreEcran) enregistrement = travail
+        if (survivreEcran) ecritureDeSortie = travail else enregistrement = travail
     }
 
     data class FormatNatifApplique(
@@ -403,18 +419,25 @@ class EditorViewModel(
         // serait par une chaîne vide.
         if (!_uiState.value.enregistrable) return
 
-        try {
-            // La restitution n'est pas une commodité : sans elle, c'est le
-            // texte à jetons qui partirait sur le serveur, et l'image serait
-            // perdue dans la vraie note, en silence.
-            repository.writeNote(chemin, repository.restoreImages(contenu, images))
-            _uiState.update {
-                if (it.revision == revision) it.copy(modifie = false) else it
+        verrouEcriture.withLock {
+            // Une écriture plus ancienne arrivée en retard ne recouvre jamais
+            // une plus récente.
+            if (revision <= revisionEcrite) return
+            try {
+                // La restitution n'est pas une commodité : sans elle, c'est le
+                // texte à jetons qui partirait sur le serveur, et l'image serait
+                // perdue dans la vraie note, en silence. Go la fait à partir de
+                // la session, et refuse d'écrire s'il ne la connaît pas.
+                repository.writeEditedNote(sessionEdition, chemin, contenu)
+                revisionEcrite = revision
+                _uiState.update {
+                    if (it.revision == revision) it.copy(modifie = false) else it
+                }
+            } catch (e: OCnotesException) {
+                // Le réseau n'entre pas en jeu ici. Ce qui reste — un cache
+                // illisible, un disque plein — mérite d'être dit.
+                _uiState.update { it.copy(erreur = e.texte()) }
             }
-        } catch (e: OCnotesException) {
-            // Le réseau n'entre pas en jeu ici. Ce qui reste — un cache
-            // illisible, un disque plein — mérite d'être dit.
-            _uiState.update { it.copy(erreur = e.texte()) }
         }
     }
 
@@ -430,6 +453,19 @@ class EditorViewModel(
         // dans `applicationScope`, hors du scope du ViewModel déjà annulé.
         instantaneNatifConserve?.let {
             enregistrerInstantaneNatif(it, survivreEcran = true)
+        }
+
+        // Les images ne sont libérées qu'après la dernière écriture : Go
+        // refuserait toute écriture qui suit, pour ne pas écrire le texte à
+        // jetons. `applicationScope` est multithread, l'ordre de lancement ne
+        // suffit pas : on attend explicitement l'écriture de sortie.
+        val session = sessionEdition
+        if (session.isNotEmpty()) {
+            val derniere = ecritureDeSortie
+            applicationScope.launch {
+                derniere?.join()
+                verrouEcriture.withLock { runCatching { repository.closeEdit(session) } }
+            }
         }
     }
 

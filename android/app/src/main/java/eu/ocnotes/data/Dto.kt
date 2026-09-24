@@ -374,3 +374,20 @@ data class PreparedEditDto(
     /** Plus longue suite de caractères sans espace, en unités UTF-16. */
     val longestWord: Int = 0,
 )
+
+/**
+ * Réponse de `App.openEditJSON(...)` : comme [PreparedEditDto], mais les images
+ * restent côté Go, sous l'identifiant [session].
+ *
+ * [session] est vide quand la note n'a aucune image. Elle se repasse telle
+ * quelle à `writeEditedNote` pour chaque écriture, puis à `closeEdit`.
+ */
+@Serializable
+data class OpenedEditDto(
+    val session: String = "",
+    val text: String = "",
+    val editable: Boolean = true,
+    /** Plus longue suite de caractères sans espace, en unités UTF-16. */
+    val longestWord: Int = 0,
+    val title: String = "",
+)
