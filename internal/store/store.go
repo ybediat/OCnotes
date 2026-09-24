@@ -633,19 +633,23 @@ func (s *Store) rename(from, to string, enqueue, refuseTaken bool) error {
 	}
 	sort.Strings(deplacees)
 
+	// Le blob est déplacé, pas recopié. Un déplacement ne change pas
+	// l'occupation, et la copie passait par writeBlob, donc par le quota, qui
+	// comptait la source en plus de la copie : dans un cache plein, elle
+	// évinçait une note sans rapport, voire une sœur que cette boucle n'avait
+	// pas encore traitée — dont l'entrée disparue était ensuite déréférencée.
 	for _, chemin := range deplacees {
 		suffixe, _ := sousChemin(chemin, from)
 		cible := to + suffixe
 		entry := s.entries[chemin]
-		content, err := os.ReadFile(s.blobPath(entry.Cache))
-		if err == nil {
-			if err := s.writeBlob(cible, content); err != nil {
-				return err
-			}
-			_ = os.Remove(s.blobPath(entry.Cache))
+		nom := cacheName(cible)
+		// Un blob déjà absent n'empêche pas l'entrée de suivre : Get le
+		// traitera comme un contenu manquant, comme avant.
+		if err := os.Rename(s.blobPath(entry.Cache), s.blobPath(nom)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("store: [%s] déplacement du cache de %s: %w", CodeStorageIO, chemin, err)
 		}
 		entry.Path = cible
-		entry.Cache = cacheName(cible)
+		entry.Cache = nom
 		delete(s.entries, chemin)
 		s.entries[cible] = entry
 	}

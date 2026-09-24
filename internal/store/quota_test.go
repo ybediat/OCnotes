@@ -197,6 +197,89 @@ func TestOuvertureRepareUnBlobPropreManquantEtUnOrphelin(t *testing.T) {
 	}
 }
 
+// cacheDetient dit si le cache porte le contenu d'une note, sans passer par
+// Get : une lecture compte comme un accès et fausserait l'ordre LRU.
+func cacheDetient(s *Store, notePath string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, ok := s.entries[notePath]
+	if !ok {
+		return false
+	}
+	_, err := os.Stat(s.blobPath(entry.Cache))
+	return err == nil
+}
+
+// Un dossier renommé sur le serveur, dans un cache plein : c'est l'état
+// ordinaire d'un cache LRU après quelques semaines.
+//
+// Le renommage recopiait chaque blob par writeBlob, donc sous quota, et la
+// copie comptait en plus de la source. L'éviction ainsi provoquée emportait une
+// note sœur que la boucle n'avait pas encore traitée, et la boucle déréférençait
+// ensuite son entrée disparue : panique, donc mort du processus sous gomobile.
+func TestRenommageDeDossierSousQuotaNEvinceRien(t *testing.T) {
+	s := newStore(t)
+	if err := s.SetQuota(UnlimitedQuota); err != nil {
+		t.Fatalf("SetQuota illimité: %v", err)
+	}
+	accepteSansQuota(t, s, "d/a.md", "aaaa")
+	accepteSansQuota(t, s, "d/b.md", "bbbb")
+	// b est la plus ancienne : c'est elle que l'éviction choisirait, alors
+	// que la boucle ne l'a pas encore déplacée.
+	fixeAcces(t, s, "d/a.md", time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC))
+	fixeAcces(t, s, "d/b.md", time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC))
+	if err := s.SetQuota(8); err != nil {
+		t.Fatalf("SetQuota au ras du cache: %v", err)
+	}
+
+	if err := s.RenameLocal("d", "e"); err != nil {
+		t.Fatalf("RenameLocal: %v", err)
+	}
+	for chemin, attendu := range map[string]string{"e/a.md": "aaaa", "e/b.md": "bbbb"} {
+		if !cacheDetient(s, chemin) {
+			t.Errorf("%s a perdu son contenu au renommage", chemin)
+			continue
+		}
+		if contenu, _, _ := s.Get(chemin); string(contenu) != attendu {
+			t.Errorf("%s = %q, attendu %q", chemin, contenu, attendu)
+		}
+	}
+	for _, ancien := range []string{"d/a.md", "d/b.md"} {
+		if cacheDetient(s, ancien) {
+			t.Errorf("%s est resté sous l'ancien chemin", ancien)
+		}
+	}
+	if usage := s.Usage(); usage != 8 {
+		t.Errorf("usage = %d après renommage, attendu 8 : un déplacement ne change pas l'occupation", usage)
+	}
+}
+
+// Renommer une note ne doit pas en évincer une autre : l'occupation ne change
+// pas, il n'y a rien à libérer.
+func TestRenommageSousQuotaNEvincePasUneAutreNote(t *testing.T) {
+	s := newStore(t)
+	if err := s.SetQuota(UnlimitedQuota); err != nil {
+		t.Fatalf("SetQuota illimité: %v", err)
+	}
+	accepteSansQuota(t, s, "ancienne.md", "xxxx")
+	accepteSansQuota(t, s, "a.md", "aaaa")
+	fixeAcces(t, s, "ancienne.md", time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC))
+	fixeAcces(t, s, "a.md", time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC))
+	if err := s.SetQuota(8); err != nil {
+		t.Fatalf("SetQuota au ras du cache: %v", err)
+	}
+
+	if err := s.RenameLocal("a.md", "b.md"); err != nil {
+		t.Fatalf("RenameLocal: %v", err)
+	}
+	if !cacheDetient(s, "ancienne.md") {
+		t.Error("le renommage a évincé une note sans rapport")
+	}
+	if !cacheDetient(s, "b.md") {
+		t.Error("la note renommée a perdu son contenu")
+	}
+}
+
 func indexContains(entries []Known, path string) bool {
 	for _, entry := range entries {
 		if entry.Path == path {
