@@ -49,30 +49,68 @@ func (s *Store) Prune() error {
 	return s.pruneLocked("")
 }
 
-// ensureSpaceLocked prépare une écriture de blob. keep est le chemin en cours
-// d'écriture : même propre, son ancien blob ne doit pas être évincé entre le
-// calcul et son remplacement atomique.
+// ensureSpaceLocked prépare une écriture de blob en évinçant ce qui peut
+// l'être. keep est le chemin en cours d'écriture : même propre, son ancien
+// blob ne doit pas être évincé entre le calcul et son remplacement atomique.
+//
+// **Elle ne refuse jamais l'écriture au nom du quota.** Quand les seuls
+// contenus restants sont protégés, l'écriture passe au-delà du seuil. La
+// refuser bloquait l'éditeur dès que brouillons et copies de conflit
+// dépassaient le quota — un branchement depuis le mode local, où le quota ne
+// fait qu'alerter, y suffit — et, hors connexion, pour de bon. Seul un disque
+// réellement plein peut refuser une écriture ; SetQuota et Prune, eux,
+// continuent de dire qu'un seuil n'est pas tenu.
 func (s *Store) ensureSpaceLocked(keep string, newSize int64) error {
 	if s.quota == UnlimitedQuota || s.localOnly {
 		return nil
 	}
-	return s.pruneForSizeLocked(keep, newSize)
+	if s.declaredUsageLocked(keep)+newSize <= s.quota {
+		return nil
+	}
+	// Rien d'évinçable : inutile d'interroger chaque blob. C'est l'état
+	// durable d'un cache saturé de brouillons, et chaque enregistrement
+	// automatique repasserait sinon par le calcul exact.
+	candidates := s.candidatesLocked(keep)
+	if len(candidates) == 0 {
+		return nil
+	}
+	_, err := s.evictLRULocked(candidates, keep, newSize)
+	return err
 }
 
+// pruneLocked ramène le cache sous le quota, et signale en STORAGE_IO un seuil
+// que les seuls contenus protégés empêchent de tenir.
 func (s *Store) pruneLocked(keep string) error {
 	if s.quota == UnlimitedQuota || s.localOnly {
 		return nil
 	}
-	return s.pruneForSizeLocked(keep, -1)
+	projected, err := s.evictLRULocked(s.candidatesLocked(keep), keep, -1)
+	if err != nil {
+		return err
+	}
+	if projected > s.quota {
+		return fmt.Errorf("store: [%s] quota de cache atteint (%d octets, %d occupés par des données protégées)", CodeStorageIO, s.quota, projected)
+	}
+	return nil
 }
 
-// pruneForSizeLocked évince selon LRU. newSize >= 0 décrit la taille finale du
-// blob keep ; -1 demande seulement de rentrer sous le quota actuel.
-func (s *Store) pruneForSizeLocked(keep string, newSize int64) error {
-	if newSize >= 0 && s.declaredUsageLocked(keep)+newSize <= s.quota {
-		return nil
+// candidatesLocked renvoie les entrées que le quota a le droit d'évincer :
+// tout sauf keep et les contenus protégés.
+func (s *Store) candidatesLocked(keep string) []*Entry {
+	candidates := make([]*Entry, 0)
+	for path, entry := range s.entries {
+		if path == keep || s.protectedLocked(path, entry) {
+			continue
+		}
+		candidates = append(candidates, entry)
 	}
+	return candidates
+}
 
+// evictLRULocked évince les candidats selon LRU jusqu'à rentrer sous le quota,
+// et renvoie l'occupation qui reste. newSize >= 0 décrit la taille finale du
+// blob keep ; -1 demande seulement de rentrer sous le quota actuel.
+func (s *Store) evictLRULocked(all []*Entry, keep string, newSize int64) (int64, error) {
 	usage, sizes := s.usageLocked()
 	projected := usage
 	if newSize >= 0 {
@@ -80,12 +118,11 @@ func (s *Store) pruneForSizeLocked(keep string, newSize int64) error {
 		projected += newSize
 	}
 
-	candidates := make([]*Entry, 0)
-	for path, entry := range s.entries {
-		if path == keep || sizes[path] == 0 || s.protectedLocked(path, entry) {
-			continue
+	candidates := make([]*Entry, 0, len(all))
+	for _, entry := range all {
+		if sizes[entry.Path] > 0 {
+			candidates = append(candidates, entry)
 		}
-		candidates = append(candidates, entry)
 	}
 	sort.Slice(candidates, func(i, j int) bool {
 		left, right := candidates[i], candidates[j]
@@ -102,20 +139,17 @@ func (s *Store) pruneForSizeLocked(keep string, newSize int64) error {
 		}
 		size := sizes[entry.Path]
 		if err := s.evictLocked(entry); err != nil {
-			return err
+			return projected, err
 		}
 		projected -= size
 		changed = true
 	}
 	if changed {
 		if err := s.save(); err != nil {
-			return err
+			return projected, err
 		}
 	}
-	if projected > s.quota {
-		return fmt.Errorf("store: [%s] quota de cache atteint (%d octets, %d occupés par des données protégées)", CodeStorageIO, s.quota, projected)
-	}
-	return nil
+	return projected, nil
 }
 
 // declaredUsageLocked additionne Entry.Size, hors keep : aucun appel système.

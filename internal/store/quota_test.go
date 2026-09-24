@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"os"
 	"strings"
 	"testing"
@@ -277,6 +278,96 @@ func TestRenommageSousQuotaNEvincePasUneAutreNote(t *testing.T) {
 	}
 	if !cacheDetient(s, "b.md") {
 		t.Error("la note renommée a perdu son contenu")
+	}
+}
+
+// Le quota est une cible, pas une borne : une écriture n'est jamais refusée
+// parce que les données protégées le dépassent.
+//
+// Il le faisait. Brouillons et copies de conflit au-delà du seuil — un
+// branchement depuis le mode local, où le quota ne fait qu'alerter, y suffit —
+// et l'éditeur ne pouvait plus rien enregistrer tant que tout n'était pas
+// monté sur le serveur. Hors connexion : indéfiniment.
+func TestEcritureAuDelaDUnQuotaProtegeAboutit(t *testing.T) {
+	s := newStore(t)
+	if err := s.SetQuota(UnlimitedQuota); err != nil {
+		t.Fatalf("SetQuota illimité: %v", err)
+	}
+	for _, nom := range []string{"a.md", "b.md"} {
+		if err := s.Put(nom, []byte("brouillon")); err != nil {
+			t.Fatalf("Put(%s): %v", nom, err)
+		}
+	}
+	accepteSansQuota(t, s, "propre.md", "cccc")
+
+	// Le réglage, lui, continue de dire qu'il n'est pas tenu.
+	if err := s.SetQuota(10); err == nil {
+		t.Fatal("un quota sous les contenus protégés doit être signalé")
+	}
+	if cacheDetient(s, "propre.md") {
+		t.Error("le contenu récupérable aurait dû être évincé")
+	}
+
+	if err := s.Put("a.md", []byte("brouillon allongé")); err != nil {
+		t.Fatalf("enregistrement d'un brouillon refusé par le quota : %v", err)
+	}
+	if err := s.Put("nouvelle.md", []byte("texte neuf")); err != nil {
+		t.Fatalf("création refusée par le quota : %v", err)
+	}
+	if err := s.Accept("serveur.md", []byte("reçu"), `"e"`); err != nil {
+		t.Fatalf("réception refusée par le quota : %v", err)
+	}
+	if contenu, _, _ := s.Get("a.md"); string(contenu) != "brouillon allongé" {
+		t.Errorf("a.md = %q après enregistrement", contenu)
+	}
+}
+
+// Un conflit survenu quand le cache est saturé de données protégées doit être
+// signalé comme n'importe quel autre.
+//
+// La copie de conflit est écrite sur le serveur, puis reçue en cache. Refusée
+// par le quota, cette réception interrompait la résolution après l'écriture
+// distante : la copie existait sur le serveur, mais aucun conflit n'était
+// enregistré, et l'utilisateur n'en était jamais averti.
+func TestConflitSousQuotaProtegeEstSignale(t *testing.T) {
+	s, remote := newStore(t), newFakeRemote()
+	ctx := context.Background()
+	if err := s.SetQuota(UnlimitedQuota); err != nil {
+		t.Fatalf("SetQuota illimité: %v", err)
+	}
+
+	if err := s.Put("a.md", []byte("v1")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if _, err := s.Push(ctx, remote); err != nil {
+		t.Fatalf("Push initial: %v", err)
+	}
+	// Une copie de conflit ancienne, protégée, occupe à elle seule le quota.
+	accepteSansQuota(t, s, "ancienne (conflit).md", strings.Repeat("x", 20))
+	if err := s.MarkConflict("ancienne (conflit).md"); err != nil {
+		t.Fatalf("MarkConflict: %v", err)
+	}
+
+	if _, err := remote.Save(ctx, "a.md", []byte("version d'un autre appareil"), ""); err != nil {
+		t.Fatalf("Save distant: %v", err)
+	}
+	if err := s.Put("a.md", []byte("ma version locale")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if err := s.SetQuota(10); err == nil {
+		t.Fatal("un quota sous les contenus protégés doit être signalé")
+	}
+
+	report, err := s.Push(ctx, remote)
+	if err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	if len(report.Conflicts) != 1 || len(s.Conflicts()) != 1 {
+		t.Fatalf("conflits signalés = %d, enregistrés = %d, 1 attendu", len(report.Conflicts), len(s.Conflicts()))
+	}
+	copie := report.Conflicts[0].CopyPath
+	if contenu, entry, ok := s.Get(copie); !ok || string(contenu) != "ma version locale" || !entry.Conflict {
+		t.Errorf("copie en cache = %q, présente = %v, protégée = %v", contenu, ok, entry.Conflict)
 	}
 }
 

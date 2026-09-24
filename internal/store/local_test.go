@@ -74,8 +74,8 @@ func TestModeLocalNEvinceRienEtNEchouePas(t *testing.T) {
 		}
 	}
 
-	// Et l'écriture suivante passe : sans la garde, pruneForSizeLocked
-	// refuserait faute de pouvoir descendre sous le quota.
+	// Et l'écriture suivante passe, sans rien évincer : le quota ne refuse
+	// jamais une écriture, et en mode local il n'a rien à évincer.
 	if err := s.Put("d.md", []byte(strings.Repeat("y", 4096))); err != nil {
 		t.Fatalf("écriture refusée par un quota qui n'évince rien : %v", err)
 	}
