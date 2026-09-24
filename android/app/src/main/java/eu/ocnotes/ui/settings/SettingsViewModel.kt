@@ -48,6 +48,7 @@ data class SettingsUiState(
     val deconnecte: Boolean = false,
     val garderEcranAllumeLecture: Boolean = false,
     val garderEcranAllumeEdition: Boolean = false,
+    val saisieAutomatiqueEdition: Boolean = true,
     val preparationModeLocal: Boolean = false,
     val planModeLocal: DetachPlanDto? = null,
     val rapatriementEnCours: Boolean = false,
@@ -70,6 +71,7 @@ class SettingsViewModel(
         SettingsUiState(
             garderEcranAllumeLecture = preferences.garderEcranAllumeLecture.value,
             garderEcranAllumeEdition = preferences.garderEcranAllumeEdition.value,
+            saisieAutomatiqueEdition = preferences.saisieAutomatiqueEdition.value,
         ),
     )
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -90,6 +92,11 @@ class SettingsViewModel(
         viewModelScope.launch {
             preferences.garderEcranAllumeEdition.collect { v ->
                 _uiState.update { it.copy(garderEcranAllumeEdition = v) }
+            }
+        }
+        viewModelScope.launch {
+            preferences.saisieAutomatiqueEdition.collect { v ->
+                _uiState.update { it.copy(saisieAutomatiqueEdition = v) }
             }
         }
     }
@@ -341,6 +348,10 @@ class SettingsViewModel(
 
     fun definirGarderEcranAllumeEdition(valeur: Boolean) {
         preferences.definirGarderEcranAllumeEdition(valeur)
+    }
+
+    fun definirSaisieAutomatiqueEdition(valeur: Boolean) {
+        preferences.definirSaisieAutomatiqueEdition(valeur)
     }
 
     fun libererEspace() {

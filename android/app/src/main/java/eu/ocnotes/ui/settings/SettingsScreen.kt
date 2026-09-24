@@ -175,6 +175,12 @@ fun SettingsScreen(
                 actif = etat.garderEcranAllumeEdition,
                 onChangement = viewModel::definirGarderEcranAllumeEdition,
             )
+            OptionBascule(
+                titre = stringResource(R.string.reglages_saisie_automatique_titre),
+                detail = stringResource(R.string.reglages_saisie_automatique_explication),
+                actif = etat.saisieAutomatiqueEdition,
+                onChangement = viewModel::definirSaisieAutomatiqueEdition,
+            )
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 

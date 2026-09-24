@@ -101,6 +101,8 @@ data class EditorUiState(
     val modeLocal: Boolean = false,
     val garderEcranAllumeLecture: Boolean = false,
     val garderEcranAllumeEdition: Boolean = false,
+    /** Lu une fois à l'ouverture, comme les réglages d'écran allumé. */
+    val saisieAutomatique: Boolean = true,
 ) {
     /**
      * Vrai quand le texte saisi peut être écrit dans la note sans risquer de la
@@ -145,6 +147,7 @@ class EditorViewModel(
     private val applicationScope: CoroutineScope,
     garderEcranAllumeLecture: Boolean = false,
     garderEcranAllumeEdition: Boolean = false,
+    saisieAutomatique: Boolean = true,
 ) : ViewModel() {
 
     private val nom = chemin.substringAfterLast('/')
@@ -165,6 +168,7 @@ class EditorViewModel(
             documentBureautique = documentBureautique,
             garderEcranAllumeLecture = garderEcranAllumeLecture,
             garderEcranAllumeEdition = garderEcranAllumeEdition,
+            saisieAutomatique = saisieAutomatique,
             // Lu une fois à l'ouverture, comme documentBureautique : le mode
             // ne change pas pendant qu'une note est en train de s'éditer.
             modeLocal = repository.mode.value == AppMode.LOCAL,
@@ -494,6 +498,7 @@ class EditorViewModel(
                         applicationScope = container.applicationScope,
                         garderEcranAllumeLecture = container.preferencesAffichage.garderEcranAllumeLecture.value,
                         garderEcranAllumeEdition = container.preferencesAffichage.garderEcranAllumeEdition.value,
+                        saisieAutomatique = container.preferencesAffichage.saisieAutomatiqueEdition.value,
                     )
                 }
             }

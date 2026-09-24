@@ -55,6 +55,9 @@ class PreferencesAffichage internal constructor(
     private val _garderEcranAllumeEdition = MutableStateFlow(
         stockage.lireBooleen(CLE_GARDER_ECRAN_ALLUME_EDITION, false),
     )
+    private val _saisieAutomatiqueEdition = MutableStateFlow(
+        stockage.lireBooleen(CLE_SAISIE_AUTOMATIQUE_EDITION, true),
+    )
 
     /**
      * Ordre de tri retenu, sous sa forme brute.
@@ -85,6 +88,18 @@ class PreferencesAffichage internal constructor(
     /** Vrai s'il faut empêcher la mise en veille de l'écran en édition. */
     val garderEcranAllumeEdition: StateFlow<Boolean> = _garderEcranAllumeEdition.asStateFlow()
 
+    /**
+     * Vrai si le service de saisie automatique du téléphone peut lire le champ
+     * d'édition.
+     *
+     * Aucun coût mesurable à la frappe, dans un sens ou dans l'autre (section
+     * 7 bis d'`ARCHITECTURE.md`) : c'est une question de confidentialité. À
+     * chaque mise au point de l'éditeur, une session s'ouvre auprès du service
+     * — Google, ou un gestionnaire de mots de passe — qui peut recevoir le
+     * texte de la note. Autorisé par défaut, comme tout champ Android.
+     */
+    val saisieAutomatiqueEdition: StateFlow<Boolean> = _saisieAutomatiqueEdition.asStateFlow()
+
     fun definirTri(valeur: String) = ecrire(CLE_TRI, valeur, _tri)
 
     fun definirMode(valeur: String) = ecrire(CLE_MODE, valeur, _mode)
@@ -106,6 +121,11 @@ class PreferencesAffichage internal constructor(
         stockage.ecrireBooleen(CLE_GARDER_ECRAN_ALLUME_EDITION, valeur)
     }
 
+    fun definirSaisieAutomatiqueEdition(valeur: Boolean) {
+        _saisieAutomatiqueEdition.value = valeur
+        stockage.ecrireBooleen(CLE_SAISIE_AUTOMATIQUE_EDITION, valeur)
+    }
+
     /**
      * Le flux est mis à jour avant l'écriture disque, et `apply()` diffère
      * celle-ci : l'écran se redessine sans attendre le stockage, et un disque
@@ -124,6 +144,7 @@ class PreferencesAffichage internal constructor(
         const val CLE_QUOTA_CACHE = "quota_cache_octets"
         const val CLE_GARDER_ECRAN_ALLUME_LECTURE = "garder_ecran_allume_lecture"
         const val CLE_GARDER_ECRAN_ALLUME_EDITION = "garder_ecran_allume_edition"
+        const val CLE_SAISIE_AUTOMATIQUE_EDITION = "saisie_automatique_edition"
         const val QUOTA_CACHE_DEFAUT = 250L * 1024 * 1024
     }
 }

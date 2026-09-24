@@ -11,6 +11,7 @@ import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewTreeObserver
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.TextView
@@ -201,10 +202,11 @@ fun EditeurNatif(
     defilementInitialY: Int = 0,
     demanderFocus: Boolean = false,
     masque: Boolean = false,
+    saisieAutomatique: Boolean = true,
     description: String? = null,
     indication: String? = null,
     descriptionDefilementRapide: String? = null,
-    creerChamp: (Context) -> EditText = ::EditText,
+    creerChamp: (Context) -> EditText = ::ChampEditeur,
     onInitialise: (EditText, Long) -> Unit = { _, _ -> },
     onMutation: (Long) -> Unit = {},
     onAvantDetachement: (InstantaneEditeurNatif) -> Unit = {},
@@ -245,6 +247,11 @@ fun EditeurNatif(
                         inputType = InputType.TYPE_CLASS_TEXT or
                             InputType.TYPE_TEXT_FLAG_MULTI_LINE or
                             InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                        // Jamais d'éditeur plein écran, en paysage : il
+                        // recopierait toute la note dans sa propre vue
+                        // (`ExtractedText`), à chaque modification.
+                        imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or
+                            EditorInfo.IME_FLAG_NO_FULLSCREEN
                         breakStrategy = Layout.BREAK_STRATEGY_SIMPLE
                         hyphenationFrequency = Layout.HYPHENATION_FREQUENCY_NONE
                         typeface = Typeface.MONOSPACE
@@ -330,6 +337,9 @@ fun EditeurNatif(
                 update = { champ ->
                     // Styles et visibilité seulement : jamais de setText dans ce bloc.
                     champ.masquer(masque)
+                    // Réglage de confidentialité, pas de performance : voir
+                    // `PreferencesAffichage.saisieAutomatiqueEdition`.
+                    (champ as? ChampEditeur)?.saisieAutomatique = saisieAutomatique
                     champ.setTextColor(couleurTexte)
                     champ.setHintTextColor(couleurIndication)
                     champ.setBackgroundColor(couleurFond)
@@ -394,4 +404,22 @@ private fun EditText.masquer(masque: Boolean) {
         clearFocus()
     }
     visibility = visibilite
+}
+
+/**
+ * `EditText` dont la saisie automatique se coupe pour de bon.
+ *
+ * `importantForAutofill` ne suffit pas, ni sur le champ ni sur la vue hôte de
+ * Compose : le système envoie quand même une requête au service de saisie
+ * automatique dès que le champ prend le focus, un `EditText` étant réputé
+ * remplissable d'office. Seul un type d'autofill nul l'en empêche. Constaté sur
+ * le banc (Android 15, `dumpsys autofill`) : une session vers le service Google
+ * et une vers l'autofill « augmenté » avec les deux exclusions, aucune avec
+ * celle-ci.
+ */
+internal class ChampEditeur(context: Context) : EditText(context) {
+    var saisieAutomatique: Boolean = true
+
+    override fun getAutofillType(): Int =
+        if (saisieAutomatique) super.getAutofillType() else AUTOFILL_TYPE_NONE
 }

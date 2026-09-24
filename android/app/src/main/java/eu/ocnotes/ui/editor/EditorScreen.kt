@@ -317,6 +317,7 @@ private fun ZoneSaisie(
                 defilementInitialX = restauration?.defilementX ?: 0,
                 defilementInitialY = restauration?.defilementY ?: 0,
                 masque = etat.apercu,
+                saisieAutomatique = etat.saisieAutomatique,
                 indication = stringResource(R.string.editeur_saisie_vide),
                 descriptionDefilementRapide = stringResource(
                     R.string.editeur_defilement_rapide,
