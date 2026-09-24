@@ -95,7 +95,42 @@ func NewApp(dataDir string) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := alignCacheOnMode(cache, cfg); err != nil {
+		return nil, err
+	}
 	return &App{dataDir: dataDir, cfg: cfg, cache: cache, syncPass: make(chan struct{}, 1)}, nil
+}
+
+// alignCacheOnMode remet le cache d'accord avec le mode enregistré.
+//
+// Chaque bascule — StartLocal, AttachJSON, DetachJSON, Disconnect — écrit le
+// cache d'abord et la configuration en dernier : c'est la configuration qui
+// valide le geste. Tuée entre les deux, l'application redémarrait avec un
+// cache et une configuration en désaccord, et le pire des deux sens détruisait
+// des notes en silence : en mode serveur sur un cache « stockage unique », une
+// écriture n'est ni marquée en attente ni mise en file, et la prochaine
+// ouverture la remplace par la version du serveur.
+//
+// La configuration fait donc foi, et le geste interrompu est défait :
+//
+//   - mode local, cache doublé d'un serveur (branchement interrompu) : GoLocal
+//     vide la file et lève les « en attente » qu'Adopt venait de poser, sans
+//     rien retirer — Adopt a fait de l'inventaire exactement ce que
+//     l'appareil détient ;
+//   - autre mode, cache « stockage unique » (débranchement ou démarrage local
+//     interrompu) : le serveur redevient la référence. Rien n'est perdu, le
+//     débranchement exigeant une file vide, et l'inventaire se reconstitue au
+//     premier listing. Android, lui, n'efface le token qu'une fois DetachJSON
+//     revenu : il a encore de quoi rouvrir la session.
+func alignCacheOnMode(cache *store.Store, cfg config.Config) error {
+	switch {
+	case cfg.IsLocal() && !cache.LocalOnly():
+		_, err := cache.GoLocal()
+		return err
+	case !cfg.IsLocal() && cache.LocalOnly():
+		return cache.SetLocalOnly(false)
+	}
+	return nil
 }
 
 func (a *App) ctx() (context.Context, context.CancelFunc) {
@@ -484,8 +519,9 @@ type attachResult struct {
 // L'ordre des trois étapes est choisi pour qu'une interruption laisse un état
 // récupérable : l'espace d'abord (il peut échouer faute de réseau), le cache
 // ensuite, la configuration en dernier. Tué entre les deux dernières, l'appareil
-// redémarre en mode local avec des notes toutes marquées « en attente » — donc
-// protégées de l'éviction et visibles — et le branchement se refait.
+// redémarre en mode local, alignCacheOnMode défait ce que le cache avait déjà
+// fait, et le branchement se refait. Avec `adopt: false`, les notes sont
+// toutefois déjà supprimées : c'est ce qui avait été demandé.
 func (a *App) AttachJSON(requestJSON string) (string, error) {
 	var req attachRequest
 	if err := json.Unmarshal([]byte(requestJSON), &req); err != nil {
@@ -1654,9 +1690,10 @@ func (a *App) ResolveConflictJSON(requestJSON string) (string, error) {
 		return "", errors.New("résolution de conflit invalide : décision inconnue")
 	}
 
-	a.mu.Lock()
-	lib := a.lib
-	a.mu.Unlock()
+	lib, local := a.session()
+	if local {
+		return "", errLocalMode("arbitrer un conflit")
+	}
 	if lib == nil {
 		return "", errNoWorkspace()
 	}

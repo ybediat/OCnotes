@@ -338,3 +338,13 @@ func TestModeLocalRefuseDEcraserUneCible(t *testing.T) {
 		}
 	}
 }
+
+// Arbitrer un conflit parle au serveur : en mode local, le refus porte le même
+// code que les autres gestes qui en exigent un.
+func TestModeLocalResoudreUnConflitEstRefuse(t *testing.T) {
+	app, _ := prepareLocal(t)
+	_, err := app.ResolveConflictJSON(`{"id":"c1","resolution":"server"}`)
+	if err == nil || ErrorCode(err.Error()) != CodeLocalMode {
+		t.Fatalf("ResolveConflictJSON en mode local = %v, attendu %s", err, CodeLocalMode)
+	}
+}

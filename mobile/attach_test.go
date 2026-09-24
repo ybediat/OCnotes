@@ -206,3 +206,62 @@ func TestAttachBasculeLeModeDurablement(t *testing.T) {
 		t.Error("l'espace de travail devrait être monté")
 	}
 }
+
+// AttachJSON tué entre Adopt et l'écriture de la configuration : l'appareil
+// redémarre en mode local, et le cache doit y redevenir le stockage — sans
+// file ni note « en attente » d'un envoi que plus rien ne fera.
+func TestBranchementInterrompuResteEnModeLocal(t *testing.T) {
+	app, dataDir := prepareLocal(t)
+	if _, err := app.CreateNoteJSON("", "idée", "# Idée"); err != nil {
+		t.Fatalf("CreateNoteJSON: %v", err)
+	}
+	if err := app.cache.Adopt(); err != nil {
+		t.Fatalf("Adopt: %v", err)
+	}
+
+	relance, err := NewApp(dataDir)
+	if err != nil {
+		t.Fatalf("NewApp au redémarrage: %v", err)
+	}
+	if n := relance.PendingCount(); n != 0 {
+		t.Errorf("PendingCount = %d en mode local, attendu 0", n)
+	}
+	if err := relance.WriteNote("idée.md", "# Idée relue"); err != nil {
+		t.Fatalf("WriteNote: %v", err)
+	}
+	if n := relance.PendingCount(); n != 0 {
+		t.Errorf("PendingCount = %d après une écriture locale, attendu 0", n)
+	}
+
+	raw, err := relance.ListFolderJSON("")
+	if err != nil {
+		t.Fatalf("ListFolderJSON: %v", err)
+	}
+	var listing folderListing
+	decodeJSON(t, raw, &listing)
+	if len(listing.Entries) != 1 || listing.Entries[0].Pending {
+		t.Errorf("listing = %+v, attendu une note qui n'attend rien", listing.Entries)
+	}
+}
+
+// StartLocal tué entre le cache et la configuration : l'installation reste
+// neuve, et un cache figé en « stockage unique » ferait ignorer toutes les
+// écritures du serveur branché ensuite.
+func TestDemarrageLocalInterrompuNeFigePasLeCache(t *testing.T) {
+	dataDir := t.TempDir()
+	app, err := NewApp(dataDir)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if err := app.cache.SetLocalOnly(true); err != nil {
+		t.Fatalf("SetLocalOnly: %v", err)
+	}
+
+	relance, err := NewApp(dataDir)
+	if err != nil {
+		t.Fatalf("NewApp au redémarrage: %v", err)
+	}
+	if relance.cache.LocalOnly() {
+		t.Error("cache resté en « stockage unique » sous une installation neuve")
+	}
+}

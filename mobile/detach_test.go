@@ -276,3 +276,42 @@ func TestDetachPuisRebranchementSurUnAutreServeur(t *testing.T) {
 		}
 	}
 }
+
+// DetachJSON tué entre GoLocal et l'écriture de la configuration laissait un
+// cache « stockage unique » sous une configuration en mode serveur : une
+// écriture n'y était ni en attente ni en file, et la prochaine ouverture la
+// remplaçait par la version du serveur. Au redémarrage, la configuration fait
+// foi et le débranchement est défait.
+func TestDebranchementInterrompuRevientAuServeur(t *testing.T) {
+	app, server, dataDir := prepare(t)
+	if _, err := app.CreateNoteJSON("", "carnet", "v1"); err != nil {
+		t.Fatalf("CreateNoteJSON: %v", err)
+	}
+	if _, err := app.cache.GoLocal(); err != nil {
+		t.Fatalf("GoLocal: %v", err)
+	}
+
+	relance, err := NewApp(dataDir)
+	if err != nil {
+		t.Fatalf("NewApp au redémarrage: %v", err)
+	}
+	if err := relance.Restore(fakeToken); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	if err := relance.WriteNote("carnet.md", "v2 après la coupure"); err != nil {
+		t.Fatalf("WriteNote: %v", err)
+	}
+	if n := relance.PendingCount(); n != 1 {
+		t.Fatalf("PendingCount = %d, attendu 1 : l'écriture ne partirait jamais", n)
+	}
+	if _, err := relance.SyncJSON(); err != nil {
+		t.Fatalf("SyncJSON: %v", err)
+	}
+
+	server.mu.Lock()
+	got := string(server.files["Notes/carnet.md"])
+	server.mu.Unlock()
+	if got != "v2 après la coupure" {
+		t.Errorf("serveur = %q, l'écriture faite après la coupure n'est pas montée", got)
+	}
+}
