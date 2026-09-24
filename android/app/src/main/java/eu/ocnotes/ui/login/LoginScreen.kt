@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -22,6 +23,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -81,6 +84,14 @@ fun LoginScreen(
             viewModel.suiteConsommee()
             onConnecte(it)
         }
+    }
+
+    etat.confirmationIdp?.let { confirmation ->
+        ConfirmationIdpDialog(
+            confirmation = confirmation,
+            onContinuer = viewModel::confirmerIdp,
+            onAnnuler = viewModel::annulerIdp,
+        )
     }
 
     var tokenVisible by remember { mutableStateOf(false) }
@@ -276,6 +287,49 @@ fun LoginScreen(
 
         Spacer(Modifier.height(24.dp))
     }
+}
+
+/**
+ * Le serveur envoie s'identifier sur un autre hôte.
+ *
+ * Cas légitime avec un Keycloak ou un Authentik séparé, mais c'est aussi la
+ * forme d'un détournement : un serveur malveillant qui renvoie vers le vrai
+ * IdP de l'organisation reçoit ensuite l'access token. Les hôtes sont affichés
+ * tels quels, un par ligne, pour qu'on puisse les reconnaître.
+ */
+@Composable
+private fun ConfirmationIdpDialog(
+    confirmation: ConfirmationIdp,
+    onContinuer: () -> Unit,
+    onAnnuler: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onAnnuler,
+        title = { Text(stringResource(R.string.login_idp_titre)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.login_idp_intro, confirmation.hoteServeur))
+                confirmation.hotesIdp.forEach { hote ->
+                    Text(
+                        text = hote,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.login_idp_avertissement, confirmation.hoteServeur),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onContinuer) { Text(stringResource(R.string.login_idp_continuer)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onAnnuler) { Text(stringResource(R.string.action_annuler)) }
+        },
+    )
 }
 
 /**

@@ -210,6 +210,10 @@ func (c *constructeur) span(debut int, style markdown.Style, href string) {
 	if debut >= c.n {
 		return
 	}
+	// Même règle que pour une note : le libellé reste, le lien disparaît.
+	if style == markdown.StyleLink && !markdown.OpenableLink(href) {
+		return
+	}
 	c.spans = append(c.spans, markdown.Span{Start: debut, End: c.n, Style: style, Href: href})
 }
 

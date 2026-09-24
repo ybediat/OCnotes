@@ -35,6 +35,9 @@ import kotlinx.coroutines.launch
  */
 enum class SuiteConnexion { CHOIX_ESPACE, NAVIGATEUR }
 
+/** L'IdP désigné par le serveur est ailleurs : l'utilisateur doit le reconnaître. */
+data class ConfirmationIdp(val hoteServeur: String, val hotesIdp: List<String>)
+
 data class LoginUiState(
     val serverUrl: String = "",
     val username: String = "",
@@ -58,6 +61,8 @@ data class LoginUiState(
     val serveurEnregistre: Boolean = false,
     val configurationChargee: Boolean = false,
     val suite: SuiteConnexion? = null,
+    /** Non nul tant que l'utilisateur n'a pas accepté un IdP d'un autre hôte. */
+    val confirmationIdp: ConfirmationIdp? = null,
 ) {
     val peutValider: Boolean
         get() = !enCours &&
@@ -81,6 +86,13 @@ class LoginViewModel(
     private var serveurOidcEnCours: String?
         get() = savedStateHandle[KEY_OIDC_SERVER]
         set(value) { savedStateHandle[KEY_OIDC_SERVER] = value }
+
+    /**
+     * Demande prête, retenue le temps de la confirmation. Elle n'est pas mise
+     * dans l'état sauvegardé : après une mort du processus, l'utilisateur
+     * relance simplement la connexion.
+     */
+    private var intentEnAttente: Intent? = null
 
     init {
         // Repré-remplissage : après un token expiré ou un démarrage hors
@@ -170,7 +182,15 @@ class LoginViewModel(
         viewModelScope.launch {
             try {
                 serveurOidcEnCours = etat.serverUrl
-                _ouvrirNavigateurOidc.emit(oidcManager.authorizationIntent(etat.serverUrl))
+                val demande = oidcManager.authorizationRequest(etat.serverUrl)
+                if (demande.hotesEtrangers.isEmpty()) {
+                    _ouvrirNavigateurOidc.emit(demande.intent)
+                } else {
+                    intentEnAttente = demande.intent
+                    _uiState.update {
+                        it.copy(confirmationIdp = ConfirmationIdp(demande.hoteServeur, demande.hotesEtrangers))
+                    }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Throwable) {
@@ -180,6 +200,21 @@ class LoginViewModel(
                 }
             }
         }
+    }
+
+    /** L'utilisateur reconnaît l'IdP d'un autre hôte : on ouvre le navigateur. */
+    fun confirmerIdp() {
+        val intent = intentEnAttente ?: return annulerIdp()
+        intentEnAttente = null
+        _uiState.update { it.copy(confirmationIdp = null) }
+        _ouvrirNavigateurOidc.tryEmit(intent)
+    }
+
+    /** Refus de l'IdP proposé : rien n'est parti vers le navigateur. */
+    fun annulerIdp() {
+        intentEnAttente = null
+        serveurOidcEnCours = null
+        _uiState.update { it.copy(confirmationIdp = null, enCours = false) }
     }
 
     /** Reçoit le deep link AppAuth, échange le code et valide LibreGraph. */

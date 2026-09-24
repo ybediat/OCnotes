@@ -14,7 +14,6 @@ import eu.ocnotes.data.ConflictDto
 import eu.ocnotes.data.DetachPlanDto
 import eu.ocnotes.data.OCnotesException
 import eu.ocnotes.data.OCnotesRepository
-import eu.ocnotes.data.MoteurEdition
 import eu.ocnotes.data.PreferencesAffichage
 import eu.ocnotes.data.SyncResultDto
 import eu.ocnotes.ui.common.Texte
@@ -47,7 +46,6 @@ data class SettingsUiState(
     val conflitEnResolution: String? = null,
     val erreur: Texte? = null,
     val deconnecte: Boolean = false,
-    val moteurEdition: MoteurEdition = MoteurEdition.DEFAUT,
     val garderEcranAllumeLecture: Boolean = false,
     val garderEcranAllumeEdition: Boolean = false,
     val preparationModeLocal: Boolean = false,
@@ -70,7 +68,6 @@ class SettingsViewModel(
 
     private val _uiState = MutableStateFlow(
         SettingsUiState(
-            moteurEdition = preferences.moteurEdition.value,
             garderEcranAllumeLecture = preferences.garderEcranAllumeLecture.value,
             garderEcranAllumeEdition = preferences.garderEcranAllumeEdition.value,
         ),
@@ -84,11 +81,6 @@ class SettingsViewModel(
         }
         viewModelScope.launch {
             repository.sessionValidee.collect { v -> _uiState.update { it.copy(tokenValide = v) } }
-        }
-        viewModelScope.launch {
-            preferences.moteurEdition.collect { moteur ->
-                _uiState.update { it.copy(moteurEdition = moteur) }
-            }
         }
         viewModelScope.launch {
             preferences.garderEcranAllumeLecture.collect { v ->
@@ -341,10 +333,6 @@ class SettingsViewModel(
                 _uiState.update { it.copy(cache = cache ?: it.cache, erreur = e.texte()) }
             }
         }
-    }
-
-    fun definirMoteurEdition(moteur: MoteurEdition) {
-        preferences.definirMoteurEdition(moteur)
     }
 
     fun definirGarderEcranAllumeLecture(valeur: Boolean) {

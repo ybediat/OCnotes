@@ -1,6 +1,5 @@
 package eu.ocnotes.ui.editor
 
-import eu.ocnotes.data.MoteurEdition
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -34,12 +33,6 @@ class EnregistrementNatifTest {
     @Test
     fun seulInstantaneNatifCourantEtModifieEstEnregistrable() {
         assertTrue(doitEnregistrerInstantaneNatif(etat(), instantane))
-        assertFalse(
-            doitEnregistrerInstantaneNatif(
-                etat(moteur = MoteurEdition.VIRTUALISE),
-                instantane,
-            ),
-        )
     }
 
     private fun etat(
@@ -47,12 +40,10 @@ class EnregistrementNatifTest {
         modifiable: Boolean = true,
         modifie: Boolean = true,
         revision: Long = 4,
-        moteur: MoteurEdition = MoteurEdition.NATIF,
     ) = EditorUiState(
         charge = charge,
         modifiable = modifiable,
         modifie = modifie,
         revision = revision,
-        moteurEdition = moteur,
     )
 }

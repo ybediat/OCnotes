@@ -47,6 +47,51 @@ func TestSpaceRefuseUneURLWebDAVNonHTTPS(t *testing.T) {
 	}
 }
 
+// L'URL WebDAV vient de la réponse de /me/drives. Le client y joint le token :
+// elle ne doit donc désigner que le serveur auquel l'utilisateur s'est
+// connecté, jamais un hôte tiers, même en HTTPS.
+func TestSpaceRefuseUneURLWebDAVDUnAutreHote(t *testing.T) {
+	c, err := New("https://cloud.exemple.fr", testAuth())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	for _, davURL := range []string{
+		"https://ailleurs.exemple.org/dav/spaces/admin",
+		"https://cloud.exemple.fr.ailleurs.org/dav/spaces/admin",
+		"https://sous.cloud.exemple.fr/dav/spaces/admin",
+		"https://cloud.exemple.fr:8443/dav/spaces/admin",
+	} {
+		_, err := c.Space(Drive{Name: "Admin", WebDavURL: davURL})
+		if err == nil {
+			t.Errorf("Space aurait dû refuser %s", davURL)
+			continue
+		}
+		if !strings.Contains(err.Error(), "["+CodeWebDavForeignHost+"]") {
+			t.Errorf("Space(%s) : code %s attendu, obtenu %q", davURL, CodeWebDavForeignHost, err)
+		}
+	}
+}
+
+// La comparaison porte sur l'origine, pas sur l'écriture : casse de l'hôte et
+// port HTTPS explicite ne changent pas le serveur visé.
+func TestSpaceAccepteLeMemeServeurAutrementEcrit(t *testing.T) {
+	c, err := New("https://cloud.exemple.fr", testAuth())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	for _, davURL := range []string{
+		"https://cloud.exemple.fr/dav/spaces/admin",
+		"https://Cloud.Exemple.FR/dav/spaces/admin",
+		"https://cloud.exemple.fr:443/dav/spaces/admin",
+	} {
+		if _, err := c.Space(Drive{Name: "Admin", WebDavURL: davURL}); err != nil {
+			t.Errorf("Space(%s) : %v", davURL, err)
+		}
+	}
+}
+
 // Le '$' de l'identifiant d'espace doit arriver littéral sur le réseau, tandis
 // que les accents et les espaces d'un nom de note doivent être percent-encodés.
 func TestResourceURLEncodage(t *testing.T) {

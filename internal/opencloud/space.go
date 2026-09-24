@@ -10,6 +10,10 @@ import (
 	"strings"
 )
 
+// CodeWebDavForeignHost signale une URL WebDAV qui ne désigne pas le serveur
+// auquel l'utilisateur s'est connecté.
+const CodeWebDavForeignHost = "WEBDAV_FOREIGN_HOST"
+
 // Space donne accès aux fichiers d'un espace OpenCloud.
 type Space struct {
 	c       *Client
@@ -28,7 +32,27 @@ func (c *Client) Space(d Drive) (*Space, error) {
 	if u.Scheme != "https" || u.Host == "" {
 		return nil, fmt.Errorf("opencloud: URL WebDAV invalide %q: HTTPS obligatoire", d.WebDavURL)
 	}
+	// L'URL vient du serveur et chaque requête WebDAV y joindra le token : un
+	// hôte tiers le recevrait. Exiger la même origine que celle saisie par
+	// l'utilisateur garde le secret sur le seul serveur qu'il a choisi.
+	if !sameOrigin(u, c.base) {
+		return nil, fmt.Errorf("opencloud: [%s] URL WebDAV %q hors du serveur %s",
+			CodeWebDavForeignHost, d.WebDavURL, c.base.Host)
+	}
 	return &Space{c: c, davBase: u}, nil
+}
+
+// sameOrigin compare deux URL HTTPS sur l'hôte, sans casse, et le port, 443
+// par défaut.
+func sameOrigin(a, b *url.URL) bool {
+	return strings.EqualFold(a.Hostname(), b.Hostname()) && httpsPort(a) == httpsPort(b)
+}
+
+func httpsPort(u *url.URL) string {
+	if p := u.Port(); p != "" {
+		return p
+	}
+	return "443"
 }
 
 // resourceURL construit l'URL d'une ressource de l'espace.

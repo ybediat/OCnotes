@@ -81,7 +81,8 @@
     <string name="err_contenu_a_telecharger">Le contenu de cette note n\'est pas disponible hors connexion. Téléchargez-la une fois le réseau revenu.</string>
     <string name="err_contenu_perdu">Le contenu de cette note est introuvable sur cet appareil, et aucune copie n\'existe ailleurs pour le récupérer.</string>
     <string name="err_url_serveur_manquante">Indiquez l\'adresse du serveur.</string>
-    <string name="err_url_serveur_invalide">Adresse de serveur invalide. Elle doit commencer par http:// ou https://</string>
+    <string name="err_url_serveur_invalide">Adresse de serveur invalide. Seules les adresses en https:// sont acceptées.</string>
+    <string name="err_webdav_hote_etranger">Le serveur désigne un autre site pour stocker vos notes. Par sécurité, OCnotes ne lui envoie pas vos identifiants. Vérifiez l\'adresse saisie : ce doit être l\'adresse publique du serveur.</string>
     <string name="err_utilisateur_manquant">Indiquez votre nom d\'utilisateur.</string>
     <string name="err_mode_local">Cette action nécessite un serveur connecté.</string>
     <string name="err_quota_local">La limite de stockage est trop basse pour conserver toutes les notes sur cet appareil.</string>
@@ -119,6 +120,10 @@
     <string name="login_oidc_aide">Expérimental — nécessite un serveur configuré pour OCnotes.</string>
     <string name="login_oidc_annulee">Connexion par navigateur annulée.</string>
     <string name="login_oidc_erreur">La connexion par navigateur n’a pas abouti. Vérifiez que ce serveur autorise OCnotes.</string>
+    <string name="login_idp_titre">Identification sur un autre site</string>
+    <string name="login_idp_intro">Le serveur %1$s vous envoie vous identifier sur :</string>
+    <string name="login_idp_avertissement">Le jeton obtenu sera ensuite remis à %1$s. Ne continuez que si vous reconnaissez ce site comme le fournisseur d\'identité de votre organisation et que vous faites confiance à ce serveur.</string>
+    <string name="login_idp_continuer">Continuer</string>
     <string name="login_rester_local">Rester en mode local</string>
     <string name="login_rester_local_aide">Le branchement est annulé et vos notes locales restent intactes.</string>
     <string name="login_aide_titre">Pas encore d\'App Token ?</string>
@@ -342,11 +347,6 @@
     <string name="reglages_racine_espace">racine de l\'espace</string>
 
     <string name="reglages_edition_titre">Édition</string>
-    <string name="reglages_edition_explication">Le choix s\'applique à la prochaine ouverture d\'une note.</string>
-    <string name="reglages_moteur_virtualise">Éditeur virtualisé</string>
-    <string name="reglages_moteur_virtualise_detail">Moteur stable, conservé en repli.</string>
-    <string name="reglages_moteur_natif">Éditeur natif</string>
-    <string name="reglages_moteur_natif_detail">Utilisé par défaut. Facilite la sélection de texte long.</string>
     <string name="reglages_garder_ecran_lecture_titre">Garder l\'écran allumé en lecture</string>
     <string name="reglages_garder_ecran_lecture_explication">Empêche l\'écran de s\'éteindre lors de la consultation d\'une note en aperçu.</string>
     <string name="reglages_garder_ecran_edition_titre">Garder l\'écran allumé en édition</string>
@@ -499,6 +499,10 @@
     <!-- Repère posé à la place d'un saut de page d'un document .docx ou .odt. -->
     <string name="apercu_saut_de_page">Saut de page</string>
     <string name="apercu_vide">Cette note est vide.</string>
+    <string name="apercu_lien_titre">Ouvrir ce lien ?</string>
+    <string name="apercu_lien_intro">Ce lien mène vers :</string>
+    <string name="apercu_lien_ouvrir">Ouvrir</string>
+    <string name="apercu_lien_echec">Aucune application ne peut ouvrir ce lien.</string>
     <!--
         Affiché quand la note contient une suite de caractères sans espace trop
         longue pour un champ de saisie — typiquement une image collée par

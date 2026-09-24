@@ -178,6 +178,7 @@ fun EditeurNatif(
     defilementInitialY: Int = 0,
     demanderFocus: Boolean = false,
     description: String? = null,
+    indication: String? = null,
     descriptionDefilementRapide: String? = null,
     creerChamp: (Context) -> EditText = ::EditText,
     onInitialise: (EditText, Long) -> Unit = { _, _ -> },
@@ -186,6 +187,8 @@ fun EditeurNatif(
     onPret: () -> Unit = {},
 ) {
     val couleurTexte = androidx.compose.material3.MaterialTheme.colorScheme.onSurface.toArgb()
+    val couleurIndication =
+        androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
     val couleurFond = androidx.compose.material3.MaterialTheme.colorScheme.surface.toArgb()
     val couleurCurseur = androidx.compose.material3.MaterialTheme.colorScheme.primary.toArgb()
     val couleurSelection = androidx.compose.material3.MaterialTheme.colorScheme.primary
@@ -208,6 +211,9 @@ fun EditeurNatif(
                     val debutInitialisation = System.nanoTime()
                     creerChamp(context).apply {
                         contentDescription = description
+                        // Visible sur une note vide seulement : sans elle, un
+                        // champ vide ne se distingue pas d'un écran inerte.
+                        hint = indication
                         gravity = Gravity.TOP or Gravity.START
                         setHorizontallyScrolling(false)
                         isVerticalScrollBarEnabled = false
@@ -223,6 +229,7 @@ fun EditeurNatif(
                         // du StaticLayout initial sur les 8 853 lignes.
                         setLineSpacing(0f, 1.35f)
                         setTextColor(couleurTexte)
+                        setHintTextColor(couleurIndication)
                         setBackgroundColor(couleurFond)
                         highlightColor = couleurSelection
                         setPadding(
@@ -299,6 +306,7 @@ fun EditeurNatif(
                 update = { champ ->
                     // Styles seulement : jamais de setText dans ce bloc.
                     champ.setTextColor(couleurTexte)
+                    champ.setHintTextColor(couleurIndication)
                     champ.setBackgroundColor(couleurFond)
                     champ.highlightColor = couleurSelection
                     champ.teinterCurseur(couleurCurseur)

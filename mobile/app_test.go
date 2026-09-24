@@ -331,6 +331,29 @@ func TestRestoreSansEspaceEnregistre(t *testing.T) {
 	}
 }
 
+// Une adresse en http:// est refusée avant tout appel réseau, et le refus doit
+// porter le code qu'Android sait traduire, pour les deux modes de connexion.
+func TestConnectHTTPEstCategorise(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	for nom, connecter := range map[string]func() error{
+		"App Token": func() error { return app.Connect("http://cloud.exemple.fr", "alice", "un-token") },
+		"OIDC":      func() error { return app.ConnectOIDC("http://cloud.exemple.fr", "alice", "un-jeton") },
+	} {
+		err := connecter()
+		if err == nil {
+			t.Errorf("%s : une adresse http:// aurait dû être refusée", nom)
+			continue
+		}
+		if got := ErrorCode(err.Error()); got != "SERVER_URL_INVALID" {
+			t.Errorf("%s : ErrorCode(%q) = %q, attendu SERVER_URL_INVALID", nom, err.Error(), got)
+		}
+	}
+}
+
 // Un token invalide doit être reconnaissable par sa catégorie, jamais par le
 // texte français du message.
 func TestTokenInvalideEstCategorise(t *testing.T) {

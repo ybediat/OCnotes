@@ -1,34 +1,29 @@
 package eu.ocnotes.ui.editor
 
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.input.TextFieldValue
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Cas de sûreté de l'éditeur pour les interactions critiques.
+ * Cas de sûreté de l'éditeur pour la seule transformation Kotlin du texte.
  *
- * **Ce qu'ils prouvent :** le découpage, l'activation d'une fenêtre et la
- * matérialisation rendent le document au caractère près, quelle que soit la
- * forme du texte — et une frappe n'ajoute que ce qu'on a tapé, là où on l'a
- * tapé.
+ * **Ce qu'ils prouvent :** une mise en forme renvoyée par Go, réduite par
+ * [calculerRemplacementNatif] à un unique `Editable.replace`, rend exactement
+ * le texte que Go a calculé — quelle que soit la forme du document et l'endroit
+ * de l'action, y compris contre un emoji.
  *
  * **Ce qu'ils ne prouvent pas :** l'aller-retour complet jusqu'au fichier. Le
  * chemin réel traverse encore `prepareEdit`, `restoreImages` et `writeNote`,
- * dont les deux premiers vivent en Go et ont leurs propres tests. Le maillon
- * que ces tests-ci couvrent est celui qui n'en avait aucun : la machine
- * d'édition Kotlin.
+ * dont les deux premiers vivent en Go et ont leurs propres tests. La frappe
+ * elle-même appartient à l'`EditText` et ne se vérifie que sur appareil.
  *
- * La différence n'est pas rhétorique. C'est le seul chemin du dépôt qui peut
- * détruire des données en silence : une image sortie du texte et non restituée
- * part sur le serveur remplacée par son jeton, sans un message.
+ * Ces quatre formes sont celles qui éprouvaient l'ancien éditeur virtualisé :
+ * elles ont été gardées au retrait de celui-ci, pour que la suppression
+ * n'emporte aucun test de sécurité.
  */
 class CasDeSureteTest {
 
     @Test
     fun paragrapheUniqueDemesure() {
-        // Aucun retour à la ligne : c'est le budget UTF-16 seul qui borne.
         assertAllerRetour("mot ".repeat(20_000).trim())
     }
 
@@ -72,25 +67,12 @@ class CasDeSureteTest {
     }
 
     /**
-     * Le contrat, sur un document donné : le découper puis le rassembler ne
-     * change rien, activer une fenêtre n'importe où ne change rien, et taper un
-     * caractère n'ajoute que ce caractère, à l'endroit du curseur.
+     * Le contrat, sur un document donné : à plusieurs endroits, entourer,
+     * retirer puis remplacer un passage — les trois formes que prennent les
+     * réponses de `ApplyFormat` — et vérifier que le remplacement minimal,
+     * appliqué au texte d'origine, redonne exactement le texte attendu.
      */
     private fun assertAllerRetour(document: String) {
-        val tranches = decouperDocument(document)
-        assertEquals(
-            "le découpage seul ne rend pas le document",
-            document,
-            tranches.joinToString("") { it.texteDe(document) },
-        )
-        tranches.forEach { tranche ->
-            val texte = tranche.texteDe(document)
-            assertTrue(
-                "tranche de ${texte.length} unités",
-                texte.length <= MAX_UTF16_EDITEUR,
-            )
-        }
-
         val offsets = listOf(
             0,
             1,
@@ -101,40 +83,30 @@ class CasDeSureteTest {
             document.length,
         )
 
-        offsets.forEach { offset ->
-            val ouvert = activerFenetre(etatInitial(document, tranches), offset)
-            assertEquals(
-                "activer à $offset a modifié le document",
-                document,
-                materialiser(ouvert),
-            )
+        offsets.forEach { brut ->
+            // Une action part toujours d'une sélection valide : jamais au
+            // milieu d'une paire de substitution.
+            val debut = normaliserOffsetUtf16(document, brut)
+            val fin = normaliserOffsetUtf16(document, debut + 12)
+            val passage = document.substring(debut, fin)
+            val avant = document.substring(0, debut)
+            val apres = document.substring(fin)
 
-            // Le curseur réel, pas celui qu'on a demandé : une borne posée au
-            // milieu d'une paire de substitution recule sur son début.
-            val active = ouvert.tranches[ouvert.focus]
-            val curseur = active.debut + ouvert.valeur.selection.end
-            val texteActif = ouvert.valeur.text
-            val local = ouvert.valeur.selection.end
-            val frappe = modifierFenetre(
-                ouvert,
-                TextFieldValue(
-                    texteActif.substring(0, local) + "Z" + texteActif.substring(local),
-                    TextRange(local + 1),
-                ),
-            )
-
-            assertEquals(
-                "frappe à $offset (curseur réel $curseur)",
-                document.substring(0, curseur) + "Z" + document.substring(curseur),
-                materialiser(frappe),
-            )
+            listOf(
+                "entourer" to "$avant**$passage**$apres",
+                "retirer" to avant + apres,
+                "remplacer" to "$avant> 😀 $apres",
+            ).forEach { (geste, attendu) ->
+                assertEquals(
+                    "$geste à $brut",
+                    attendu,
+                    appliquer(document, calculerRemplacementNatif(document, attendu)),
+                )
+            }
         }
     }
 
-    private fun etatInitial(document: String, tranches: List<TrancheEditeur>) = EditorUiState(
-        document = document,
-        tranches = tranches,
-        focus = -1,
-        valeur = TextFieldValue(),
-    )
+    /** Ce que fait `Editable.replace`, sur une String. */
+    private fun appliquer(texte: String, remplacement: RemplacementNatif): String =
+        texte.substring(0, remplacement.debut) + remplacement.texte + texte.substring(remplacement.fin)
 }

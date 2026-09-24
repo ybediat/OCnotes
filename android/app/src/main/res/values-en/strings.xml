@@ -87,7 +87,8 @@
     <string name="err_contenu_a_telecharger">This note is not available offline. Download it again once the network is back.</string>
     <string name="err_contenu_perdu">This note\'s content can\'t be found on this device, and no other copy exists to recover it.</string>
     <string name="err_url_serveur_manquante">Enter the server address.</string>
-    <string name="err_url_serveur_invalide">Invalid server address. It must start with http:// or https://</string>
+    <string name="err_url_serveur_invalide">Invalid server address. Only https:// addresses are accepted.</string>
+    <string name="err_webdav_hote_etranger">The server points to another site to store your notes. For your security, OCnotes will not send your credentials there. Check the address you entered: it must be the server\'s public address.</string>
     <string name="err_utilisateur_manquant">Enter your username.</string>
     <string name="err_mode_local">This action requires a connected server.</string>
     <string name="err_quota_local">The storage limit is too low to keep all notes on this device.</string>
@@ -125,6 +126,10 @@
     <string name="login_oidc_aide">Experimental — requires a server configured for OCnotes.</string>
     <string name="login_oidc_annulee">Browser sign-in was cancelled.</string>
     <string name="login_oidc_erreur">Browser sign-in did not complete. Check that this server allows OCnotes.</string>
+    <string name="login_idp_titre">Sign in on another site</string>
+    <string name="login_idp_intro">The server %1$s is sending you to sign in on:</string>
+    <string name="login_idp_avertissement">The resulting token will then be handed to %1$s. Only continue if you recognise this site as your organisation\'s identity provider and you trust this server.</string>
+    <string name="login_idp_continuer">Continue</string>
     <string name="login_rester_local">Stay in local mode</string>
     <string name="login_rester_local_aide">The connection is cancelled and your local notes remain untouched.</string>
     <string name="login_aide_titre">Don\'t have an App Token yet?</string>
@@ -362,11 +367,6 @@
     <string name="reglages_racine_espace">space root</string>
 
     <string name="reglages_edition_titre">Editing</string>
-    <string name="reglages_edition_explication">The choice applies the next time a note is opened.</string>
-    <string name="reglages_moteur_virtualise">Virtualized editor</string>
-    <string name="reglages_moteur_virtualise_detail">Stable engine, kept as a fallback.</string>
-    <string name="reglages_moteur_natif">Native editor</string>
-    <string name="reglages_moteur_natif_detail">Used by default. Makes long-text selection easier.</string>
 
     <string name="reglages_sync_titre">Synchronization</string>
     <string name="reglages_en_attente">Pending operations</string>
@@ -493,6 +493,10 @@
     <!-- Repère posé à la place d'un saut de page d'un document .docx ou .odt. -->
     <string name="apercu_saut_de_page">Page break</string>
     <string name="apercu_vide">This note is empty.</string>
+    <string name="apercu_lien_titre">Open this link?</string>
+    <string name="apercu_lien_intro">This link leads to:</string>
+    <string name="apercu_lien_ouvrir">Open</string>
+    <string name="apercu_lien_echec">No app can open this link.</string>
     <!--
         Affiché quand la note contient une suite de caractères sans espace trop
         longue pour un champ de saisie — typiquement une image collée par

@@ -86,6 +86,49 @@ func TestRenderLien(t *testing.T) {
 	}
 }
 
+// Une note peut venir d'un espace partagé : son auteur choisit la destination
+// de chaque lien. Celles qui désignent un fichier de l'appareil ne sont pas
+// des liens, et une destination sans schéma ne s'ouvre nulle part. Le texte
+// reste, sans le span.
+func TestRenderLienNonOuvrableDevientTexte(t *testing.T) {
+	for _, dest := range []string{
+		"file:///sdcard/Download/releve.pdf",
+		"FILE:///sdcard/a",
+		"content://com.autre.appli/secret",
+		"autre-note.md",
+		"//exemple.fr/chemin",
+		"#ancre",
+	} {
+		b := bloc(t, Render("voir [ici]("+dest+") donc"), 0)
+		if b.Text != "voir ici donc" {
+			t.Errorf("%s : texte = %q", dest, b.Text)
+		}
+		if len(b.Spans) != 0 {
+			t.Errorf("%s : aucun span attendu, obtenu %+v", dest, b.Spans)
+		}
+	}
+
+	// Un lien automatique suit la même règle.
+	if b := bloc(t, Render("<file:///etc/hosts>"), 0); len(b.Spans) != 0 {
+		t.Errorf("lien automatique file: gardé : %+v", b.Spans)
+	}
+}
+
+func TestRenderLienOuvrableGarde(t *testing.T) {
+	for _, dest := range []string{
+		"https://exemple.fr",
+		"http://exemple.fr",
+		"mailto:alice@exemple.fr",
+		"tel:+33123456789",
+		"geo:48.85,2.35",
+	} {
+		b := bloc(t, Render("voir [ici]("+dest+") donc"), 0)
+		if len(b.Spans) != 1 || b.Spans[0].Href != dest {
+			t.Errorf("%s : lien attendu, spans = %+v", dest, b.Spans)
+		}
+	}
+}
+
 // Les bornes de span sont en unités UTF-16, comme TextRange dans Compose.
 //
 // C'est la seule chose que Kotlin ne peut pas rattraper : une borne comptée en

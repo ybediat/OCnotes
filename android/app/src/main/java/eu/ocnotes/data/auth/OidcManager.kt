@@ -31,6 +31,22 @@ data class JetonOidc(
     val serializedState: String,
 )
 
+/**
+ * Demande d'autorisation prête à confier au navigateur.
+ *
+ * [hotesEtrangers] liste les hôtes de l'IdP qui ne sont pas celui du serveur
+ * saisi. C'est le serveur qui désigne son IdP : un serveur malveillant peut
+ * envoyer l'utilisateur s'identifier chez le vrai fournisseur de son
+ * organisation, puis recevoir l'access token obtenu et le rejouer ailleurs.
+ * Une liste non vide exige donc une confirmation explicite avant d'ouvrir le
+ * navigateur.
+ */
+data class DemandeOidc(
+    val intent: Intent,
+    val hoteServeur: String,
+    val hotesEtrangers: List<String>,
+)
+
 /** Parcours OIDC natif : WebFinger, navigateur, PKCE et renouvellement. */
 class OidcManager(private val context: Context) {
 
@@ -40,8 +56,9 @@ class OidcManager(private val context: Context) {
     // chaque tentative de connexion.
     private val service by lazy { AuthorizationService(context) }
 
-    suspend fun authorizationIntent(serverUrl: String): Intent {
+    suspend fun authorizationRequest(serverUrl: String): DemandeOidc {
         val server = normalizeServerUrl(serverUrl)
+        val hoteServeur = requireNotNull(Uri.parse(server).host)
         val discovery = discover(server)
         val configuration = fetchConfiguration(discovery.issuer)
         val request = AuthorizationRequest.Builder(
@@ -52,7 +69,21 @@ class OidcManager(private val context: Context) {
         )
             .setScope(discovery.scopes.joinToString(" "))
             .build()
-        return service.getAuthorizationRequestIntent(request)
+        // L'issuer annoncé par WebFinger ne suffit pas : le document de
+        // découverte peut garder un issuer local et placer ses endpoints
+        // ailleurs. On regarde donc tous les hôtes qui verront l'utilisateur
+        // ou le code d'autorisation.
+        val hotesIdp = listOfNotNull(
+            discovery.issuer.host,
+            configuration.discoveryDoc?.issuer?.let { Uri.parse(it).host },
+            configuration.authorizationEndpoint.host,
+            configuration.tokenEndpoint.host,
+        )
+        val etrangers = hotesIdp
+            .map { it.lowercase() }
+            .filter { it != hoteServeur.lowercase() }
+            .distinct()
+        return DemandeOidc(service.getAuthorizationRequestIntent(request), hoteServeur, etrangers)
     }
 
     suspend fun finishAuthorization(data: Intent?): OidcConnexion {

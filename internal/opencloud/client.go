@@ -101,6 +101,11 @@ func rejectInsecureRedirect(req *http.Request, _ []*http.Request) error {
 	return nil
 }
 
+// CodeServerURLInvalid signale une adresse de serveur refusée. La valeur est
+// celle de config.CodeServerURLInvalid : Android rédige le même message que la
+// règle soit posée par la configuration ou par le client.
+const CodeServerURLInvalid = "SERVER_URL_INVALID"
+
 // New construit un client pour l'URL racine du serveur, par exemple
 // https://cloud.exemple.fr (sans chemin).
 func New(serverURL string, auth Authenticator) (*Client, error) {
@@ -110,13 +115,13 @@ func New(serverURL string, auth Authenticator) (*Client, error) {
 
 	u, err := url.Parse(strings.TrimRight(serverURL, "/"))
 	if err != nil {
-		return nil, fmt.Errorf("opencloud: URL de serveur invalide %q: %w", serverURL, err)
+		return nil, fmt.Errorf("opencloud: [%s] URL de serveur invalide %q: %w", CodeServerURLInvalid, serverURL, err)
 	}
 	if u.Scheme != "https" {
-		return nil, fmt.Errorf("opencloud: URL de serveur invalide %q: HTTPS obligatoire", serverURL)
+		return nil, fmt.Errorf("opencloud: [%s] URL de serveur invalide %q: HTTPS obligatoire", CodeServerURLInvalid, serverURL)
 	}
 	if u.Host == "" {
-		return nil, fmt.Errorf("opencloud: URL de serveur invalide %q: hôte manquant", serverURL)
+		return nil, fmt.Errorf("opencloud: [%s] URL de serveur invalide %q: hôte manquant", CodeServerURLInvalid, serverURL)
 	}
 
 	return &Client{

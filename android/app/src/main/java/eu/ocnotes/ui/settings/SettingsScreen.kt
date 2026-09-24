@@ -38,7 +38,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import eu.ocnotes.data.ConflictDto
-import eu.ocnotes.data.MoteurEdition
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -163,23 +162,6 @@ fun SettingsScreen(
             Text(
                 text = stringResource(R.string.reglages_edition_titre),
                 style = MaterialTheme.typography.titleSmall,
-            )
-            Text(
-                text = stringResource(R.string.reglages_edition_explication),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            ChoixMoteur(
-                titre = stringResource(R.string.reglages_moteur_natif),
-                detail = stringResource(R.string.reglages_moteur_natif_detail),
-                selectionne = etat.moteurEdition == MoteurEdition.NATIF,
-                onClick = { viewModel.definirMoteurEdition(MoteurEdition.NATIF) },
-            )
-            ChoixMoteur(
-                titre = stringResource(R.string.reglages_moteur_virtualise),
-                detail = stringResource(R.string.reglages_moteur_virtualise_detail),
-                selectionne = etat.moteurEdition == MoteurEdition.VIRTUALISE,
-                onClick = { viewModel.definirMoteurEdition(MoteurEdition.VIRTUALISE) },
             )
             OptionBascule(
                 titre = stringResource(R.string.reglages_garder_ecran_lecture_titre),
@@ -605,31 +587,6 @@ fun SettingsScreen(
                 }
             },
         )
-    }
-}
-
-@Composable
-private fun ChoixMoteur(
-    titre: String,
-    detail: String,
-    selectionne: Boolean,
-    onClick: () -> Unit,
-) {
-    Surface(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            RadioButton(selected = selectionne, onClick = null)
-            Column(modifier = Modifier.padding(start = 8.dp)) {
-                Text(titre, style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    text = detail,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
     }
 }
 

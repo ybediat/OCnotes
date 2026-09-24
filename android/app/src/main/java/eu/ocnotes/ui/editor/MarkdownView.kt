@@ -1,5 +1,7 @@
 package eu.ocnotes.ui.editor
 
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
@@ -25,15 +27,25 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -86,21 +98,97 @@ fun VueMarkdown(
     // un défilement horizontal et la même largeur de colonnes.
     val elements = grouperPourApercu(blocs)
 
-    SelectionContainer {
-        LazyColumn(
-            modifier = modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            itemsIndexed(elements) { _, element ->
-                when (element) {
-                    is ElementApercu.Bloc -> Bloc(element.bloc)
-                    is ElementApercu.Tableau -> Tableau(element.lignes)
+    // Un lien touché n'est jamais ouvert d'office : sa destination réelle est
+    // montrée d'abord, parce que le libellé affiché peut dire autre chose.
+    var lienAConfirmer by remember { mutableStateOf<String?>(null) }
+    lienAConfirmer?.let { ConfirmationLien(it, onFermer = { lienAConfirmer = null }) }
+
+    CompositionLocalProvider(LocalOuvrirLien provides { lienAConfirmer = it }) {
+        SelectionContainer {
+            LazyColumn(
+                modifier = modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                itemsIndexed(elements) { _, element ->
+                    when (element) {
+                        is ElementApercu.Bloc -> Bloc(element.bloc)
+                        is ElementApercu.Tableau -> Tableau(element.lignes)
+                    }
                 }
             }
         }
     }
 }
+
+/**
+ * Reçoit la destination d'un lien touché. Fournie par [VueMarkdown] plutôt que
+ * passée de bloc en bloc : seul [enrichi] s'en sert, tout au fond.
+ */
+private val LocalOuvrirLien = staticCompositionLocalOf<(String) -> Unit> { {} }
+
+/**
+ * Demande confirmation avant d'ouvrir un lien de l'aperçu.
+ *
+ * Le libellé d'un lien est choisi par l'auteur de la note, qui peut être
+ * quelqu'un d'autre dans un espace partagé : « https://banque.fr » peut mener
+ * ailleurs, et un `tel:` ou le schéma d'une autre application se déclenche en
+ * un toucher. On affiche donc l'hôte, puis la destination entière. Les liens
+ * vers un fichier de l'appareil n'arrivent pas jusqu'ici : Go les a déjà
+ * rendus en texte (`markdown.OpenableLink`).
+ */
+@Composable
+private fun ConfirmationLien(url: String, onFermer: () -> Unit) {
+    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    val echec = stringResource(R.string.apercu_lien_echec)
+    val hote = remember(url) { Uri.parse(url).host }
+    // Borné : une destination de milliers de caractères sans espace est
+    // justement ce qui fait tomber le moteur de mise en page.
+    val affichee = if (url.length > MAX_URL_AFFICHEE) url.take(MAX_URL_AFFICHEE) + "…" else url
+
+    AlertDialog(
+        onDismissRequest = onFermer,
+        title = { Text(stringResource(R.string.apercu_lien_titre)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.apercu_lien_intro))
+                if (!hote.isNullOrBlank()) {
+                    Text(
+                        text = hote,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Text(
+                    text = affichee,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onFermer()
+                    // Aucune application ne gère ce schéma : Compose lève au
+                    // lieu d'ignorer, et l'aperçu ne doit pas tomber pour ça.
+                    try {
+                        uriHandler.openUri(url)
+                    } catch (_: RuntimeException) {
+                        Toast.makeText(context, echec, Toast.LENGTH_SHORT).show()
+                    }
+                },
+            ) { Text(stringResource(R.string.apercu_lien_ouvrir)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onFermer) { Text(stringResource(R.string.action_annuler)) }
+        },
+    )
+}
+
+private const val MAX_URL_AFFICHEE = 500
 
 /** Un élément de la liste visible, avec les tableaux reconstitués. */
 private sealed interface ElementApercu {
@@ -395,6 +483,7 @@ private fun enrichi(bloc: NoteBlockDto): AnnotatedString {
     if (bloc.spans.isEmpty()) return AnnotatedString(bloc.text)
 
     val couleurLien = MaterialTheme.colorScheme.primary
+    val ouvrirLien = LocalOuvrirLien.current
     val fondCode = MaterialTheme.colorScheme.surfaceVariant
     // Un jaune surligneur, à faible opacité pour que le texte reste lisible et
     // que le thème sombre l'atténue de lui-même. La couleur du document ne
@@ -412,17 +501,19 @@ private fun enrichi(bloc: NoteBlockDto): AnnotatedString {
 
             if (span.style == SpanStyleId.LIEN) {
                 if (span.href.isNotBlank()) {
-                    // addLink ouvre la destination tout seul, via le
-                    // LocalUriHandler : rien à câbler côté écran.
+                    // L'écouteur remplace l'ouverture directe par le
+                    // LocalUriHandler : VueMarkdown demande d'abord confirmation.
+                    val href = span.href
                     addLink(
                         url = LinkAnnotation.Url(
-                            url = span.href,
+                            url = href,
                             styles = TextLinkStyles(
                                 style = SpanStyle(
                                     color = couleurLien,
                                     textDecoration = TextDecoration.Underline,
                                 ),
                             ),
+                            linkInteractionListener = { ouvrirLien(href) },
                         ),
                         start = debut,
                         end = terme,

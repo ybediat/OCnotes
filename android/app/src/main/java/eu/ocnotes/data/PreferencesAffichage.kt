@@ -49,9 +49,6 @@ class PreferencesAffichage internal constructor(
     private val _mode = MutableStateFlow(stockage.lireChaine(CLE_MODE))
     private val _dernierDossier = MutableStateFlow(stockage.lireChaine(CLE_DOSSIER))
     private val _quotaCache = MutableStateFlow(stockage.lireLong(CLE_QUOTA_CACHE, QUOTA_CACHE_DEFAUT))
-    private val _moteurEdition = MutableStateFlow(
-        MoteurEdition.depuis(stockage.lireChaine(CLE_MOTEUR_EDITION)),
-    )
     private val _garderEcranAllumeLecture = MutableStateFlow(
         stockage.lireBooleen(CLE_GARDER_ECRAN_ALLUME_LECTURE, false),
     )
@@ -82,9 +79,6 @@ class PreferencesAffichage internal constructor(
     /** Limite locale des blobs de notes, en octets ; zéro signifie illimité. */
     val quotaCache: StateFlow<Long> = _quotaCache.asStateFlow()
 
-    /** Moteur choisi pour les prochaines sessions d'édition. */
-    val moteurEdition: StateFlow<MoteurEdition> = _moteurEdition.asStateFlow()
-
     /** Vrai s'il faut empêcher la mise en veille de l'écran en lecture (aperçu). */
     val garderEcranAllumeLecture: StateFlow<Boolean> = _garderEcranAllumeLecture.asStateFlow()
 
@@ -100,11 +94,6 @@ class PreferencesAffichage internal constructor(
     fun definirQuotaCache(valeur: Long) {
         _quotaCache.value = valeur
         stockage.ecrireLong(CLE_QUOTA_CACHE, valeur)
-    }
-
-    fun definirMoteurEdition(valeur: MoteurEdition) {
-        _moteurEdition.value = valeur
-        stockage.ecrireChaine(CLE_MOTEUR_EDITION, valeur.valeurPersistante)
     }
 
     fun definirGarderEcranAllumeLecture(valeur: Boolean) {
@@ -133,7 +122,6 @@ class PreferencesAffichage internal constructor(
         const val CLE_MODE = "mode_liste"
         const val CLE_DOSSIER = "dernier_dossier"
         const val CLE_QUOTA_CACHE = "quota_cache_octets"
-        const val CLE_MOTEUR_EDITION = "moteur_edition"
         const val CLE_GARDER_ECRAN_ALLUME_LECTURE = "garder_ecran_allume_lecture"
         const val CLE_GARDER_ECRAN_ALLUME_EDITION = "garder_ecran_allume_edition"
         const val QUOTA_CACHE_DEFAUT = 250L * 1024 * 1024

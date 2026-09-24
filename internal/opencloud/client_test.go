@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -38,8 +39,15 @@ func TestNewRejetteURLInvalide(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := New(tc.url, testAuth()); err == nil {
-				t.Errorf("New(%q) aurait dû échouer", tc.url)
+			_, err := New(tc.url, testAuth())
+			if err == nil {
+				t.Fatalf("New(%q) aurait dû échouer", tc.url)
+			}
+			// Android rédige le message à partir du code : sans lui,
+			// l'utilisateur lirait le texte Go, en français quelle que soit
+			// la langue du téléphone.
+			if !strings.Contains(err.Error(), "["+CodeServerURLInvalid+"]") {
+				t.Errorf("New(%q) : code %s attendu, obtenu %q", tc.url, CodeServerURLInvalid, err)
 			}
 		})
 	}

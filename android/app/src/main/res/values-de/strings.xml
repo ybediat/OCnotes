@@ -70,7 +70,8 @@
     <string name="err_contenu_a_telecharger">Der Inhalt dieser Notiz ist offline nicht verfügbar. Laden Sie sie herunter, sobald die Netzwerkverbindung wiederhergestellt ist.</string>
     <string name="err_contenu_perdu">Der Inhalt dieser Notiz ist auf diesem Gerät nicht auffindbar, und es existiert keine andere Kopie zur Wiederherstellung.</string>
     <string name="err_url_serveur_manquante">Geben Sie die Serveradresse an.</string>
-    <string name="err_url_serveur_invalide">Ungültige Serveradresse. Sie muss mit http:// oder https:// beginnen.</string>
+    <string name="err_url_serveur_invalide">Ungültige Serveradresse. Nur https://-Adressen werden akzeptiert.</string>
+    <string name="err_webdav_hote_etranger">Der Server verweist zum Speichern Ihrer Notizen auf eine andere Website. Aus Sicherheitsgründen sendet OCnotes Ihre Zugangsdaten nicht dorthin. Prüfen Sie die eingegebene Adresse: Es muss die öffentliche Adresse des Servers sein.</string>
     <string name="err_utilisateur_manquant">Geben Sie Ihren Benutzernamen an.</string>
     <string name="err_mode_local">Für diese Aktion ist ein verbundener Server erforderlich.</string>
     <string name="err_quota_local">Das Speicherlimit ist zu niedrig, um alle Notizen auf diesem Gerät zu behalten.</string>
@@ -106,6 +107,10 @@
     <string name="login_oidc_aide">Experimentell — erfordert einen für OCnotes konfigurierten Server.</string>
     <string name="login_oidc_annulee">Browser-Anmeldung wurde abgebrochen.</string>
     <string name="login_oidc_erreur">Die Browser-Anmeldung war nicht erfolgreich. Prüfen Sie, ob dieser Server OCnotes erlaubt.</string>
+    <string name="login_idp_titre">Anmeldung auf einer anderen Website</string>
+    <string name="login_idp_intro">Der Server %1$s leitet Sie zur Anmeldung weiter an:</string>
+    <string name="login_idp_avertissement">Das erhaltene Token wird anschließend an %1$s übergeben. Fahren Sie nur fort, wenn Sie diese Website als Identitätsanbieter Ihrer Organisation erkennen und diesem Server vertrauen.</string>
+    <string name="login_idp_continuer">Fortfahren</string>
     <string name="login_rester_local">Im lokalen Modus bleiben</string>
     <string name="login_rester_local_aide">Die Verbindung wird abgebrochen und Ihre lokalen Notizen bleiben unverändert.</string>
     <string name="login_aide_titre">Noch kein App-Token?</string>
@@ -325,11 +330,6 @@
          Bearbeitung
          ================================================================ -->
     <string name="reglages_edition_titre">Bearbeitung</string>
-    <string name="reglages_edition_explication">Die Auswahl gilt ab dem nächsten Öffnen einer Notiz.</string>
-    <string name="reglages_moteur_virtualise">Virtualisierter Editor</string>
-    <string name="reglages_moteur_virtualise_detail">Stabile Engine, als Rückfalloption erhalten.</string>
-    <string name="reglages_moteur_natif">Nativer Editor</string>
-    <string name="reglages_moteur_natif_detail">Standardmäßig verwendet. Erleichtert das Auswählen von langem Text.</string>
 
     <string name="reglages_sync_titre">Synchronisation</string>
     <string name="reglages_en_attente">Ausstehende Operationen</string>
@@ -470,6 +470,10 @@
     <!-- Platzhalter für einen Seitenumbruch aus einem .docx- oder .odt-Dokument. -->
     <string name="apercu_saut_de_page">Seitenumbruch</string>
     <string name="apercu_vide">Diese Notiz ist leer.</string>
+    <string name="apercu_lien_titre">Diesen Link öffnen?</string>
+    <string name="apercu_lien_intro">Dieser Link führt zu:</string>
+    <string name="apercu_lien_ouvrir">Öffnen</string>
+    <string name="apercu_lien_echec">Keine App kann diesen Link öffnen.</string>
     <!--
         Wird angezeigt, wenn die Notiz eine zu lange Zeichenfolge ohne Leerzeichen enthält,
         um sie in ein Eingabefeld zu schreiben – typischerweise ein über die Weboberfläche eingefügtes Bild.

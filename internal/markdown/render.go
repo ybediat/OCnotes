@@ -402,6 +402,11 @@ func (b *inlineBuilder) span(start int, style Style, href string) {
 	if start >= b.n {
 		return
 	}
+	// Un lien qu'on ne doit pas ouvrir reste du texte : son libellé est déjà
+	// écrit, seul le span disparaît.
+	if style == StyleLink && !OpenableLink(href) {
+		return
+	}
 	b.spans = append(b.spans, Span{Start: start, End: b.n, Style: style, Href: href})
 }
 
