@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
@@ -117,10 +118,11 @@ fun EditorScreen(
 
     // Overlay d'attente tant que le champ natif n'a pas dessiné une fois. Sans
     // lui, le spinner de chargement disparaît puis l'UI gèle ~700 ms sur le
-    // layout de la note : ça se lit comme un plantage. La clé sur `apercu` le
-    // réarme quand on revient de l'aperçu, où le champ est reconstruit.
-    var natifPret by remember(chemin, etat.apercu) { mutableStateOf(false) }
-    val onPretNatif = remember(chemin, etat.apercu) { { natifPret = true } }
+    // layout de la note : ça se lit comme un plantage. Aucune clé sur
+    // `apercu` : le champ survit à l'aperçu, il ne redessine pas « une
+    // première fois » au retour, et l'overlay ne se lèverait plus.
+    var natifPret by remember(chemin) { mutableStateOf(false) }
+    val onPretNatif = remember(chemin) { { natifPret = true } }
 
     // Rédigé hors du `LaunchedEffect` : une coroutine n'est pas un contexte
     // de composition, elle ne peut pas lire de ressource.
@@ -239,93 +241,133 @@ fun EditorScreen(
             return@Scaffold
         }
 
-        // L'aperçu remplace la saisie plutôt que de la doubler : sur un
-        // téléphone, deux volets côte à côte ne laisseraient de place ni à
-        // l'un ni à l'autre.
-        if (etat.apercu) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddings),
-            ) {
-                if (!etat.modifiable) BandeauLectureSeule(etat.documentBureautique)
-                VueMarkdown(blocs = etat.blocs, modifier = Modifier.weight(1f))
-            }
-            return@Scaffold
-        }
-
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddings)
-                .consumeWindowInsets(paddings)
-                .imePadding(),
+                .padding(paddings),
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-            ) {
-                val restauration = dernierInstantaneNatif
-                EditeurNatif(
-                    texteInitial = restauration?.texte ?: etat.document,
-                    session = sessionNative,
-                    selectionInitiale = restauration?.selection
-                        ?: SelectionEditeurNatif(0, 0),
-                    revisionInitiale = restauration?.revision ?: 0,
-                    defilementInitialX = restauration?.defilementX ?: 0,
-                    defilementInitialY = restauration?.defilementY ?: 0,
-                    indication = stringResource(R.string.editeur_saisie_vide),
-                    descriptionDefilementRapide = stringResource(
-                        R.string.editeur_defilement_rapide,
-                    ),
-                    onMutation = viewModel::signalerMutationNative,
-                    onAvantDetachement = onDetachementNatif,
-                    onPret = onPretNatif,
-                    modifier = Modifier.fillMaxSize(),
+            // Une note non modifiable n'a jamais de champ : c'est tout
+            // l'objet de `modifiable`, un mot démesuré tuerait le processus.
+            if (etat.modifiable) {
+                ZoneSaisie(
+                    etat = etat,
+                    sessionNative = sessionNative,
+                    restauration = dernierInstantaneNatif,
+                    natifPret = natifPret,
+                    onPretNatif = onPretNatif,
+                    onDetachementNatif = onDetachementNatif,
+                    viewModel = viewModel,
+                    paddings = paddings,
                 )
+            }
 
-                // Le champ natif fige le thread principal le temps de sa mise
-                // en page ; l'overlay reste opaque par-dessus jusqu'au premier
-                // dessin, pour ne pas laisser voir un champ vide ni un gel nu.
-                if (!natifPret) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surface),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator()
-                            Text(
-                                text = stringResource(R.string.editeur_ouverture_longue),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 16.dp),
-                            )
-                        }
+            // L'aperçu se pose **par-dessus** la saisie au lieu de la
+            // remplacer : le champ reste composé, masqué. Le reconstruire au
+            // retour coûtait 1,4 s sur 285 ko et vidait la pile d'annulation.
+            // Côte à côte, deux volets ne laisseraient de place à aucun des
+            // deux sur un téléphone.
+            if (etat.apercu) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surface),
+                ) {
+                    if (!etat.modifiable) BandeauLectureSeule(etat.documentBureautique)
+                    VueMarkdown(blocs = etat.blocs, modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Le champ natif, son overlay d'attente et la barre de mise en forme.
+ *
+ * Composé tant que la note est modifiable, **aperçu compris** : [EditeurNatif]
+ * y est seulement masqué.
+ */
+@Composable
+private fun ZoneSaisie(
+    etat: EditorUiState,
+    sessionNative: SessionEditeurNatif,
+    restauration: InstantaneEditeurNatif?,
+    natifPret: Boolean,
+    onPretNatif: () -> Unit,
+    onDetachementNatif: (InstantaneEditeurNatif) -> Unit,
+    viewModel: EditorViewModel,
+    paddings: PaddingValues,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .consumeWindowInsets(paddings)
+            .imePadding(),
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        ) {
+            EditeurNatif(
+                texteInitial = restauration?.texte ?: etat.document,
+                session = sessionNative,
+                selectionInitiale = restauration?.selection
+                    ?: SelectionEditeurNatif(0, 0),
+                revisionInitiale = restauration?.revision ?: 0,
+                defilementInitialX = restauration?.defilementX ?: 0,
+                defilementInitialY = restauration?.defilementY ?: 0,
+                masque = etat.apercu,
+                indication = stringResource(R.string.editeur_saisie_vide),
+                descriptionDefilementRapide = stringResource(
+                    R.string.editeur_defilement_rapide,
+                ),
+                onMutation = viewModel::signalerMutationNative,
+                onAvantDetachement = onDetachementNatif,
+                onPret = onPretNatif,
+                modifier = Modifier.fillMaxSize(),
+            )
+
+            // Le champ natif fige le thread principal le temps de sa mise
+            // en page ; l'overlay reste opaque par-dessus jusqu'au premier
+            // dessin, pour ne pas laisser voir un champ vide ni un gel nu.
+            if (!natifPret) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surface),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Text(
+                            text = stringResource(R.string.editeur_ouverture_longue),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 16.dp),
+                        )
                     }
                 }
             }
+        }
 
-            // Rien à mettre en forme dans un .txt : les marqueurs y
-            // resteraient des marqueurs, y compris à l'aperçu.
-            if (!etat.texteBrut) {
-                FormatToolbar(
-                    actions = etat.actions,
-                    onAction = { action ->
-                        sessionNative.instantane()?.let { instantane ->
-                            viewModel.appliquer(action, instantane) { resultat ->
-                                sessionNative.appliquerRemplacement(
-                                    revisionAttendue = resultat.revisionSource,
-                                    remplacement = resultat.remplacement,
-                                    selection = resultat.selection,
-                                )
-                            }
+        // Rien à mettre en forme dans un .txt : les marqueurs y
+        // resteraient des marqueurs, y compris à l'aperçu. Rien non plus
+        // pendant l'aperçu, qui recouvre la barre.
+        if (!etat.texteBrut && !etat.apercu) {
+            FormatToolbar(
+                actions = etat.actions,
+                onAction = { action ->
+                    sessionNative.instantane()?.let { instantane ->
+                        viewModel.appliquer(action, instantane) { resultat ->
+                            sessionNative.appliquerRemplacement(
+                                revisionAttendue = resultat.revisionSource,
+                                remplacement = resultat.remplacement,
+                                selection = resultat.selection,
+                            )
                         }
-                    },
-                )
-            }
+                    }
+                },
+            )
         }
     }
 }

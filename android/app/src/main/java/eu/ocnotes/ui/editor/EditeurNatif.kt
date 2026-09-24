@@ -177,6 +177,7 @@ fun EditeurNatif(
     defilementInitialX: Int = 0,
     defilementInitialY: Int = 0,
     demanderFocus: Boolean = false,
+    masque: Boolean = false,
     description: String? = null,
     indication: String? = null,
     descriptionDefilementRapide: String? = null,
@@ -304,7 +305,8 @@ fun EditeurNatif(
                     }
                 },
                 update = { champ ->
-                    // Styles seulement : jamais de setText dans ce bloc.
+                    // Styles et visibilité seulement : jamais de setText dans ce bloc.
+                    champ.masquer(masque)
                     champ.setTextColor(couleurTexte)
                     champ.setHintTextColor(couleurIndication)
                     champ.setBackgroundColor(couleurFond)
@@ -318,12 +320,14 @@ fun EditeurNatif(
                 },
             )
 
-            BandeDefilementRapideNatif(
-                etat = defilement,
-                description = descriptionDefilementRapide,
-                onDefiler = session::defilerVers,
-                modifier = Modifier.align(Alignment.CenterEnd),
-            )
+            if (!masque) {
+                BandeDefilementRapideNatif(
+                    etat = defilement,
+                    description = descriptionDefilementRapide,
+                    onDefiler = session::defilerVers,
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                )
+            }
         }
     }
 }
@@ -348,4 +352,23 @@ private fun EditText.teinterCurseur(couleur: Int) {
             textCursorDrawable = enveloppe
         }
     }
+}
+
+/**
+ * Retire le champ de la vue sans le détruire : texte, mise en page,
+ * défilement et pile d'annulation restent en place.
+ *
+ * C'est ce que fait l'aperçu. Reconstruire le champ au retour coûtait
+ * 1,4 s de mise en page sur 285 ko et vidait l'historique d'annulation
+ * (section 7 bis d'`ARCHITECTURE.md`).
+ */
+private fun EditText.masquer(masque: Boolean) {
+    val visibilite = if (masque) View.INVISIBLE else View.VISIBLE
+    if (visibility == visibilite) return
+    if (masque) {
+        (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+            .hideSoftInputFromWindow(windowToken, 0)
+        clearFocus()
+    }
+    visibility = visibilite
 }

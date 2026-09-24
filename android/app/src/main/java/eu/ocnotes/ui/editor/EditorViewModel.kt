@@ -370,7 +370,11 @@ class EditorViewModel(
             return
         }
         if (instantane == null || instantane.revision != _uiState.value.revision) return
-        conserverInstantaneNatif(instantane)
+        // Le champ survit à l'aperçu, masqué : aucun détachement n'enregistre
+        // plus au passage, et l'enregistrement différé est suspendu pendant la
+        // lecture. Sans cet appel, la frappe des 700 dernières millisecondes
+        // attendrait le retour en saisie ou la sortie de l'écran.
+        enregistrerInstantaneNatif(instantane, survivreEcran = false)
 
         viewModelScope.launch {
             try {
