@@ -1337,10 +1337,7 @@ func (a *App) renameLocal(itemPath, newName string, differer bool) (string, erro
 	if err != nil {
 		return "", err
 	}
-	if differer {
-		return target, a.cache.Rename(itemPath, target)
-	}
-	return target, a.cache.RenameLocal(itemPath, target)
+	return a.renameInCache(itemPath, target, differer)
 }
 
 // Move déplace une note ou un dossier vers un autre dossier.
@@ -1388,10 +1385,27 @@ func (a *App) moveLocal(itemPath, targetDir string, differer bool) (string, erro
 	if err != nil {
 		return "", err
 	}
+	return a.renameInCache(itemPath, target, differer)
+}
+
+// renameInCache applique au cache seul un chemin cible déjà calculé.
+//
+// Jamais RenameLocal ici : il écrase une cible occupée, ce qui n'est juste que
+// lorsque le serveur vient de confirmer qu'elle était libre. Sans serveur — ou
+// sans réseau — une cible que le cache connaît est une vraie note, et le geste
+// est refusé comme le serveur l'aurait refusé.
+func (a *App) renameInCache(itemPath, target string, differer bool) (string, error) {
+	itemPath = notes.CleanPath(itemPath)
+	var err error
 	if differer {
-		return target, a.cache.Rename(itemPath, target)
+		err = a.cache.Rename(itemPath, target)
+	} else {
+		err = a.cache.RenameOnDevice(itemPath, target)
 	}
-	return target, a.cache.RenameLocal(itemPath, target)
+	if err != nil {
+		return "", err
+	}
+	return target, nil
 }
 
 // CopyJSON duplique une note dans un autre dossier et renvoie la copie créée.

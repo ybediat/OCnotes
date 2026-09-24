@@ -270,3 +270,71 @@ func TestStartLocalRefuseSiUnServeurEstEnregistre(t *testing.T) {
 		t.Errorf("code = %q, attendu %s", code, CodeLocalMode)
 	}
 }
+
+// La boîte de renommage s'ouvre sur le nom actuel, et le déplacement groupé
+// propose la racine : valider sans rien changer est le geste le plus courant
+// qui soit. Il effaçait le contenu de la note — la seule copie, en mode local.
+func TestModeLocalRenommerOuDeplacerSurPlaceGardeLeContenu(t *testing.T) {
+	app, _ := prepareLocal(t)
+	if _, err := app.CreateFolderJSON("", "Carnets"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.CreateNoteJSON("Carnets", "idée", "# Idée"); err != nil {
+		t.Fatal(err)
+	}
+
+	if p, err := app.Rename("Carnets/idée.md", "idée"); err != nil || p != "Carnets/idée.md" {
+		t.Fatalf("Rename sur place = %q, %v", p, err)
+	}
+	if p, err := app.Move("Carnets/idée.md", "Carnets"); err != nil || p != "Carnets/idée.md" {
+		t.Fatalf("Move sur place = %q, %v", p, err)
+	}
+	if p, err := app.Rename("Carnets", "Carnets"); err != nil || p != "Carnets" {
+		t.Fatalf("Rename de dossier sur place = %q, %v", p, err)
+	}
+
+	content, err := app.ReadNote("Carnets/idée.md")
+	if err != nil || content != "# Idée" {
+		t.Fatalf("contenu = %q, %v", content, err)
+	}
+}
+
+// Le serveur refuse d'écraser une cible (Overwrite: F) ; le mode local n'avait
+// pas ce garde-fou, et un renommage vers un nom pris détruisait l'autre note —
+// ou, pour un dossier, fusionnait les deux en écrasant les homonymes.
+func TestModeLocalRefuseDEcraserUneCible(t *testing.T) {
+	app, _ := prepareLocal(t)
+	for _, d := range []string{"A", "B"} {
+		if _, err := app.CreateFolderJSON("", d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, n := range []struct{ dir, name, content string }{
+		{"", "a", "note a"}, {"", "b", "note b"},
+		{"A", "n", "de A"}, {"B", "n", "de B"},
+	} {
+		if _, err := app.CreateNoteJSON(n.dir, n.name, n.content); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	gestes := map[string]func() (string, error){
+		"note renommée":   func() (string, error) { return app.Rename("a.md", "b") },
+		"dossier renommé": func() (string, error) { return app.Rename("A", "B") },
+		"note déplacée":   func() (string, error) { return app.Move("A/n.md", "B") },
+	}
+	for nom, geste := range gestes {
+		_, err := geste()
+		if err == nil || ErrorCode(err.Error()) != store.CodeTargetExists {
+			t.Errorf("%s : erreur = %v, attendu %s", nom, err, store.CodeTargetExists)
+		}
+	}
+
+	for chemin, attendu := range map[string]string{
+		"a.md": "note a", "b.md": "note b", "A/n.md": "de A", "B/n.md": "de B",
+	} {
+		if got, err := app.ReadNote(chemin); err != nil || got != attendu {
+			t.Errorf("%s = %q, %v ; attendu %q", chemin, got, err, attendu)
+		}
+	}
+}

@@ -29,6 +29,12 @@ import (
 // dans mobile/ vérifie que les deux ne divergent pas.
 const CodeStorageIO = "STORAGE_IO"
 
+// CodeTargetExists étiquette un renommage ou un déplacement vers un chemin que
+// le cache sait déjà occupé. Le serveur refuse le même geste (Overwrite: F) ;
+// sans ce refus, le cache écraserait la note visée — et en mode local, c'est
+// la seule copie.
+const CodeTargetExists = "TARGET_EXISTS"
+
 // indexVersion permet de reconnaître un index écrit par une version
 // antérieure du format. Un index d'une version inconnue est ignoré plutôt que
 // mal interprété : le cache se reconstruit depuis le serveur.
@@ -556,29 +562,62 @@ func (s *Store) dropLocked(itemPath string) {
 }
 
 // Rename déplace une note dans le cache et inscrit le déplacement en file.
-// À utiliser quand le renommage n'a pas encore atteint le serveur.
+// À utiliser quand le renommage n'a pas encore atteint le serveur. Une cible
+// que le cache sait occupée est refusée : le serveur la refuserait aussi, et
+// d'ici là la note visée aurait été écrasée dans le cache.
 func (s *Store) Rename(from, to string) error {
-	return s.rename(from, to, true)
+	return s.rename(from, to, true, true)
 }
 
 // RenameLocal déplace une note dans le cache sans rien inscrire en file.
 // À utiliser quand le serveur a déjà appliqué le renommage : le rejouer
-// échouerait, la source n'existant plus là-bas.
+// échouerait, la source n'existant plus là-bas. Le serveur fait foi, donc une
+// entrée qui occuperait encore la cible est périmée et se laisse écraser.
 func (s *Store) RenameLocal(from, to string) error {
-	return s.rename(from, to, false)
+	return s.rename(from, to, false, false)
 }
 
-func (s *Store) rename(from, to string, enqueue bool) error {
+// RenameOnDevice déplace une note ou un dossier quand l'appareil est le seul
+// stockage : rien en file, et une cible occupée refusée — il n'y a pas de
+// serveur pour dire qu'elle est périmée, c'est une vraie note.
+func (s *Store) RenameOnDevice(from, to string) error {
+	return s.rename(from, to, false, true)
+}
+
+func (s *Store) rename(from, to string, enqueue, refuseTaken bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Rien à faire, et surtout rien à tenter : le chemin de cache dérive du
+	// chemin de note, donc la boucle plus bas réécrirait le fichier puis le
+	// supprimerait comme s'il s'agissait de l'ancien. Renommer une note sous
+	// son propre nom effaçait ainsi son contenu.
+	if from == to {
+		return nil
+	}
 
 	expectedETag := s.expectedETagLocked(from)
 	if enqueue && s.folders[from] {
 		return fmt.Errorf("store: [STRUCTURAL_OFFLINE_FOLDER] déplacement différé du dossier %s refusé", from)
 	}
-	if s.folders[from] {
+	if refuseTaken && s.takenLocked(to) {
+		return fmt.Errorf("store: [%s] %s existe déjà", CodeTargetExists, to)
+	}
+
+	// Les sous-dossiers suivent leur parent, vides compris : ne réinscrire que
+	// la cible les faisait disparaître du sélecteur de destination, et pour
+	// de bon en mode local, où aucun listing serveur ne les rapporte.
+	dossiers := make([]string, 0)
+	for d := range s.folders {
+		if suffixe, ok := sousChemin(d, from); ok {
+			dossiers = append(dossiers, to+suffixe)
+		}
+	}
+	if len(dossiers) > 0 {
 		s.forgetFolderLocked(from)
-		s.rememberFolderLocked(to)
+		for _, d := range dossiers {
+			s.rememberFolderLocked(d)
+		}
 	}
 
 	// La descendance suit. Le cas ne se présente que pour un dossier renommé
@@ -648,6 +687,28 @@ func (s *Store) dequeueWritesUnderLocked(base string) []string {
 	}
 	s.queue = restantes
 	return retirees
+}
+
+// takenLocked dit si le cache connaît déjà quelque chose à ce chemin : une
+// note détenue ou seulement inventoriée, un dossier retenu, ou un dossier
+// implicite — le parent d'une note, que rien n'a inscrit comme dossier.
+func (s *Store) takenLocked(chemin string) bool {
+	for p := range s.entries {
+		if _, ok := sousChemin(p, chemin); ok {
+			return true
+		}
+	}
+	for p := range s.known {
+		if _, ok := sousChemin(p, chemin); ok {
+			return true
+		}
+	}
+	for d := range s.folders {
+		if _, ok := sousChemin(d, chemin); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // EnsureFolder retient un dossier et inscrit sa création en file d'attente.

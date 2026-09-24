@@ -76,6 +76,7 @@
     <string name="err_nom_aucun_libre">Too many notes already have this name.</string>
     <string name="err_racine_protegee">The notes folder itself cannot be renamed, moved, or deleted.</string>
     <string name="err_deplacement_dans_soi">A folder cannot be moved into itself.</string>
+    <string name="err_cible_existe">An item with this name already exists here.</string>
     <string name="err_chemin_vide">No item specified.</string>
     <string name="err_dossier_hors_ligne">A folder cannot be renamed, moved, or deleted while offline. Reconnect first.</string>
     <string name="err_lecture_seule">This document cannot be edited here.</string>

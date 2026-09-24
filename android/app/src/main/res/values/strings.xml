@@ -70,6 +70,7 @@
     <string name="err_nom_aucun_libre">Trop de notes portent déjà ce nom.</string>
     <string name="err_racine_protegee">Le dossier de notes lui-même ne peut être ni renommé, ni déplacé, ni supprimé.</string>
     <string name="err_deplacement_dans_soi">Un dossier ne peut pas être déplacé dans lui-même.</string>
+    <string name="err_cible_existe">Un élément porte déjà ce nom à cet endroit.</string>
     <string name="err_chemin_vide">Aucun élément désigné.</string>
     <string name="err_dossier_hors_ligne">Un dossier ne peut pas être renommé, déplacé ou supprimé hors connexion. Reconnectez-vous d\'abord.</string>
     <string name="err_lecture_seule">Ce document ne peut pas être modifié ici.</string>

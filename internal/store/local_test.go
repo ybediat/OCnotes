@@ -190,3 +190,144 @@ func TestClearOublieAussiLInventaireEtLesConflits(t *testing.T) {
 		t.Errorf("des dossiers ont survécu : %v", folders)
 	}
 }
+
+// Le chemin de cache dérive du chemin de note : renommer une note sous son
+// propre nom réécrivait son fichier puis le supprimait comme s'il s'agissait
+// de l'ancien. En mode local, c'était la seule copie.
+func TestRenommerSurPlaceGardeLeContenu(t *testing.T) {
+	gestes := map[string]func(*Store, string, string) error{
+		"Rename":         (*Store).Rename,
+		"RenameLocal":    (*Store).RenameLocal,
+		"RenameOnDevice": (*Store).RenameOnDevice,
+	}
+	for nom, geste := range gestes {
+		t.Run(nom, func(t *testing.T) {
+			s := newStore(t)
+			if err := s.Put("carnet.md", []byte("# Carnet")); err != nil {
+				t.Fatalf("Put: %v", err)
+			}
+			avant := len(s.Pending())
+
+			if err := geste(s, "carnet.md", "carnet.md"); err != nil {
+				t.Fatalf("%s sur place: %v", nom, err)
+			}
+
+			content, _, ok := s.Get("carnet.md")
+			if !ok || string(content) != "# Carnet" {
+				t.Fatalf("contenu après %s sur place = %q, présent = %v", nom, content, ok)
+			}
+			if apres := len(s.Pending()); apres != avant {
+				t.Errorf("file passée de %d à %d opérations pour un geste sans effet", avant, apres)
+			}
+		})
+	}
+}
+
+// Sans serveur, une cible que le cache connaît est une vraie note : l'écraser
+// la détruit. Le serveur refuse le même geste (Overwrite: F).
+func TestRenameOnDeviceRefuseUneCibleOccupee(t *testing.T) {
+	cas := []struct {
+		nom, from, to string
+	}{
+		{"note sur note", "a.md", "b.md"},
+		{"dossier sur dossier retenu", "A", "B"},
+		{"dossier sur dossier implicite", "A", "C"},
+	}
+	for _, c := range cas {
+		t.Run(c.nom, func(t *testing.T) {
+			s := newLocalStore(t)
+			for chemin, contenu := range map[string]string{
+				"a.md": "note a", "b.md": "note b",
+				"A/n.md": "de A", "B/n.md": "de B", "C/n.md": "de C",
+			} {
+				if err := s.Put(chemin, []byte(contenu)); err != nil {
+					t.Fatalf("Put %s: %v", chemin, err)
+				}
+			}
+			if err := s.RememberFolder("A"); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.RememberFolder("B"); err != nil {
+				t.Fatal(err)
+			}
+
+			err := s.RenameOnDevice(c.from, c.to)
+			if err == nil || !strings.Contains(err.Error(), "["+CodeTargetExists+"]") {
+				t.Fatalf("RenameOnDevice(%s, %s) = %v, attendu un refus %s", c.from, c.to, err, CodeTargetExists)
+			}
+
+			for chemin, contenu := range map[string]string{
+				"a.md": "note a", "b.md": "note b",
+				"A/n.md": "de A", "B/n.md": "de B", "C/n.md": "de C",
+			} {
+				if got, _, ok := s.Get(chemin); !ok || string(got) != contenu {
+					t.Errorf("%s = %q (présent : %v) après le refus, attendu %q", chemin, got, ok, contenu)
+				}
+			}
+		})
+	}
+}
+
+// Le renommage différé refuse lui aussi une cible connue : le serveur la
+// refuserait à la synchronisation, et d'ici là la note visée aurait été
+// écrasée dans le cache.
+func TestRenameDiffereRefuseUneCibleConnue(t *testing.T) {
+	s := newStore(t)
+	if err := s.Put("a.md", []byte("note a")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetIndex([]Known{{Path: "b.md", ETag: "e1", Size: 6}}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	err := s.Rename("a.md", "b.md")
+	if err == nil || !strings.Contains(err.Error(), "["+CodeTargetExists+"]") {
+		t.Fatalf("Rename vers une note inventoriée = %v, attendu %s", err, CodeTargetExists)
+	}
+	if got, _, ok := s.Get("a.md"); !ok || string(got) != "note a" {
+		t.Errorf("a.md = %q après le refus", got)
+	}
+}
+
+// Après un renommage confirmé par le serveur, la cible était libre là-bas :
+// une entrée qui l'occupe encore dans le cache est périmée et doit céder.
+func TestRenameLocalEcraseUneCiblePerimee(t *testing.T) {
+	s := newStore(t)
+	if err := s.Accept("a.md", []byte("nouvelle"), "e1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Accept("b.md", []byte("périmée"), "e2"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.RenameLocal("a.md", "b.md"); err != nil {
+		t.Fatalf("RenameLocal: %v", err)
+	}
+	if got, _, ok := s.Get("b.md"); !ok || string(got) != "nouvelle" {
+		t.Errorf("b.md = %q, attendu le contenu renommé", got)
+	}
+}
+
+// Les sous-dossiers suivent leur parent, vides compris. Seule la cible était
+// réinscrite : ils disparaissaient du sélecteur de destination, et pour de bon
+// en mode local, où aucun listing serveur ne les rapporte.
+func TestRenommerUnDossierGardeSesSousDossiers(t *testing.T) {
+	s := newLocalStore(t)
+	for _, d := range []string{"P/vide", "P/plein/profond"} {
+		if err := s.RememberFolder(d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Put("P/plein/n.md", []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.RenameOnDevice("P", "Q"); err != nil {
+		t.Fatalf("RenameOnDevice: %v", err)
+	}
+
+	got := strings.Join(s.Folders(), ",")
+	if want := "Q,Q/plein,Q/plein/profond,Q/vide"; got != want {
+		t.Errorf("dossiers = %s, attendu %s", got, want)
+	}
+}

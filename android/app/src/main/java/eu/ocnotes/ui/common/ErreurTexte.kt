@@ -56,6 +56,7 @@ private fun texteLocal(code: String): Texte? = when (code) {
     "NAME_NO_SLOT" -> Texte.de(R.string.err_nom_aucun_libre)
     "ROOT_IMMUTABLE" -> Texte.de(R.string.err_racine_protegee)
     "MOVE_INTO_SELF" -> Texte.de(R.string.err_deplacement_dans_soi)
+    "TARGET_EXISTS" -> Texte.de(R.string.err_cible_existe)
     "STRUCTURAL_OFFLINE_FOLDER" -> Texte.de(R.string.err_dossier_hors_ligne)
     "PATH_EMPTY" -> Texte.de(R.string.err_chemin_vide)
     "READONLY" -> Texte.de(R.string.err_lecture_seule)

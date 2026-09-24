@@ -57,6 +57,7 @@
     <string name="err_nom_aucun_libre">Ya hay demasiadas notas con este nombre.</string>
     <string name="err_racine_protegee">La carpeta de notas no se puede renombrar, mover ni eliminar.</string>
     <string name="err_deplacement_dans_soi">Una carpeta no se puede mover dentro de sí misma.</string>
+    <string name="err_cible_existe">Ya existe un elemento con este nombre aquí.</string>
     <string name="err_chemin_vide">No se ha seleccionado ningún elemento.</string>
     <string name="err_dossier_hors_ligne">No se puede cambiar el nombre, mover ni eliminar una carpeta sin conexión. Vuelve a conectarte primero.</string>
     <string name="err_lecture_seule">Este documento no se puede editar aquí.</string>

@@ -3,6 +3,8 @@ package mobile
 import (
 	"strings"
 	"testing"
+
+	"github.com/ybediat/OpenNote/internal/store"
 )
 
 // Ces tests couvrent le défaut constaté sur un vrai téléphone en mode avion :
@@ -358,4 +360,53 @@ func keysBool(m map[string]bool) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// En ligne, Library.Rename ne touche pas au serveur quand le nom ne change
+// pas, mais la façade répercutait quand même le « renommage » dans le cache —
+// qui effaçait alors le fichier. Une modification pas encore synchronisée y
+// disparaissait, et la note devenait illisible.
+func TestRenommerSurPlaceEnLigneGardeUneModificationEnAttente(t *testing.T) {
+	app, _, _ := prepare(t)
+
+	if _, err := app.CreateNoteJSON("", "brouillon", "v1"); err != nil {
+		t.Fatalf("CreateNoteJSON: %v", err)
+	}
+	if err := app.WriteNote("brouillon.md", "v2 pas encore envoyée"); err != nil {
+		t.Fatalf("WriteNote: %v", err)
+	}
+
+	if _, err := app.Rename("brouillon.md", "brouillon"); err != nil {
+		t.Fatalf("Rename sur place: %v", err)
+	}
+	if _, err := app.Move("brouillon.md", ""); err != nil {
+		t.Fatalf("Move sur place: %v", err)
+	}
+
+	content, err := app.ReadNote("brouillon.md")
+	if err != nil || content != "v2 pas encore envoyée" {
+		t.Fatalf("contenu = %q, %v", content, err)
+	}
+}
+
+// Hors connexion, une cible que le cache connaît est refusée comme le serveur
+// la refuserait : l'accepter écrasait la note visée dans le cache avant même
+// que la synchronisation ne découvre le refus.
+func TestRenommageHorsConnexionRefuseUneCibleConnue(t *testing.T) {
+	app, server, _ := prepare(t)
+
+	for _, n := range []string{"a", "b"} {
+		if _, err := app.CreateNoteJSON("", n, "note "+n); err != nil {
+			t.Fatalf("CreateNoteJSON: %v", err)
+		}
+	}
+
+	server.setOffline(true)
+	_, err := app.Rename("a.md", "b")
+	if err == nil || ErrorCode(err.Error()) != store.CodeTargetExists {
+		t.Fatalf("renommage hors connexion vers un nom pris = %v, attendu %s", err, store.CodeTargetExists)
+	}
+	if got, err := app.ReadNote("b.md"); err != nil || got != "note b" {
+		t.Errorf("b.md = %q, %v", got, err)
+	}
 }
