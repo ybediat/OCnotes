@@ -15,12 +15,14 @@ import eu.ocnotes.ui.common.Texte
 import eu.ocnotes.ui.common.texte
 import eu.ocnotes.sync.SyncScheduler
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class EditorUiState(
     val chemin: String = "",
@@ -325,10 +327,18 @@ class EditorViewModel(
                 if (!revisionNativeToujoursCourante(instantane.revision, _uiState.value.revision)) {
                     return@launch
                 }
+                // Le diff parcourt deux textes complets : hors du thread
+                // principal, comme le JSON qui les a transportés.
+                val remplacement = withContext(Dispatchers.Default) {
+                    calculerRemplacementNatif(instantane.texte, apres.text)
+                }
+                if (!revisionNativeToujoursCourante(instantane.revision, _uiState.value.revision)) {
+                    return@launch
+                }
                 onAppliquer(
                     FormatNatifApplique(
                         revisionSource = instantane.revision,
-                        remplacement = calculerRemplacementNatif(instantane.texte, apres.text),
+                        remplacement = remplacement,
                         selection = SelectionEditeurNatif(apres.start, apres.end),
                     ),
                 )

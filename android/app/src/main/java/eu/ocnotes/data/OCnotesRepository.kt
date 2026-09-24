@@ -53,7 +53,9 @@ enum class ValidationSession {
  *
  *  - **basculer sur [Dispatchers.IO]** — tous les appels de la façade sont
  *    bloquants, y compris ceux qui parlent au réseau ;
- *  - **traduire le JSON** en objets Kotlin (voir `Dto.kt`) ;
+ *  - **traduire le JSON** en objets Kotlin (voir `Dto.kt`), hors du thread
+ *    principal lui aussi — jamais `json.decodeFromString(call { … })`, qui
+ *    décode au retour, sur le thread de l'appelant : passer par [callJson] ;
  *  - **normaliser les erreurs** en [OCnotesException], catégorie comprise.
  *
  * Aucune règle métier ici : elle vit en Go, sous `internal/`, où elle est
@@ -201,16 +203,44 @@ class OCnotesRepository(
         return call(block)
     }
 
+    /**
+     * [call], puis décodage de la réponse JSON — **hors du thread principal
+     * lui aussi**.
+     *
+     * Décoder une réponse de la façade n'est pas gratuit : `prepareEdit` sur
+     * une note de 285 ko prenait 139 ms sur le thread principal du téléphone,
+     * 418 ms quand la note porte une image (section 7 bis
+     * d'`ARCHITECTURE.md`). Un appel Go déporté sur `IO` dont on décode le
+     * résultat au retour ne déporte que la moitié du travail.
+     *
+     * Une erreur de décodage garde son type : elle n'est pas une erreur du
+     * cœur et ne passe pas par [OCnotesException.from].
+     */
+    private suspend inline fun <reified T> callJson(noinline block: (GoApp) -> String): T {
+        val brut = call(block)
+        return withContext(Dispatchers.Default) { json.decodeFromString<T>(brut) }
+    }
+
+    /** [callJson] derrière un renouvellement OIDC, comme [authenticatedCall]. */
+    private suspend inline fun <reified T> authenticatedCallJson(noinline block: (GoApp) -> String): T {
+        val brut = authenticatedCall(block)
+        return withContext(Dispatchers.Default) { json.decodeFromString<T>(brut) }
+    }
+
+    /** Encode une requête pour la façade hors du thread principal. */
+    private suspend inline fun <reified T> encoder(valeur: T): String =
+        withContext(Dispatchers.Default) { json.encodeToString(valeur) }
+
     // --- État et session ---------------------------------------------------
 
     suspend fun state(): AppStateDto {
-        val result: AppStateDto = json.decodeFromString(call { it.stateJSON() })
+        val result: AppStateDto = callJson { it.stateJSON() }
         _mode.value = result.mode
         return result
     }
 
     suspend fun cacheState(): CacheStateDto =
-        json.decodeFromString(call { it.cacheStateJSON() })
+        callJson { it.cacheStateJSON() }
 
     suspend fun setCacheQuota(quota: Long) {
         call { it.setCacheQuota(quota) }
@@ -401,7 +431,7 @@ class OCnotesRepository(
     // --- Espaces -----------------------------------------------------------
 
     suspend fun listDrives(): List<DriveDto> =
-        json.decodeFromString(authenticatedCall { it.listDrivesJSON() })
+        authenticatedCallJson { it.listDrivesJSON() }
 
     suspend fun selectWorkspace(driveId: String, root: String) {
         authenticatedCall { it.selectWorkspace(driveId, root) }
@@ -410,8 +440,8 @@ class OCnotesRepository(
     /** Termine le branchement commencé par [connect] depuis le mode local. */
     suspend fun attach(driveId: String, root: String, adopt: Boolean): AttachResultDto {
         return operationMutex.withLock {
-            val request = json.encodeToString(AttachRequestDto(driveId, root, adopt))
-            val result: AttachResultDto = json.decodeFromString(authenticatedCall { it.attachJSON(request) })
+            val request = encoder(AttachRequestDto(driveId, root, adopt))
+            val result: AttachResultDto = authenticatedCallJson { it.attachJSON(request) }
             sessionOpen = true
             _sessionValidee.value = true
             _sessionExpired.value = false
@@ -422,17 +452,17 @@ class OCnotesRepository(
     }
 
     suspend fun detachPlan(): DetachPlanDto = operationMutex.withLock {
-        json.decodeFromString(authenticatedCall { it.detachPlanJSON() })
+        authenticatedCallJson { it.detachPlanJSON() }
     }
 
     suspend fun downloadBatch(max: Int = 25): DownloadReportDto = operationMutex.withLock {
-        json.decodeFromString(authenticatedCall { it.downloadBatchJSON(max.toLong()) })
+        authenticatedCallJson { it.downloadBatchJSON(max.toLong()) }
     }
 
     /** Coupe le serveur une fois les écritures poussées et les contenus rapatriés. */
     suspend fun detach(): DetachResultDto {
         return operationMutex.withLock {
-            val result: DetachResultDto = json.decodeFromString(authenticatedCall { it.detachJSON() })
+            val result: DetachResultDto = authenticatedCallJson { it.detachJSON() }
             retainCoreQuota()
             tokenStore.clear()
             sessionOpen = true
@@ -470,7 +500,7 @@ class OCnotesRepository(
      * Un `fromCache` à vrai signale un listing servi hors connexion.
      */
     suspend fun listFolder(dir: String): FolderListingDto =
-        json.decodeFromString(authenticatedCall { it.listFolderJSON(dir) })
+        authenticatedCallJson { it.listFolderJSON(dir) }
 
     /**
      * Inventaire complet, à plat : toutes les notes, aucun dossier.
@@ -479,7 +509,7 @@ class OCnotesRepository(
      * préfixe — la façade n'ajoute pas de champ pour ça.
      */
     suspend fun listAll(): FolderListingDto =
-        json.decodeFromString(authenticatedCall { it.listAllJSON() })
+        authenticatedCallJson { it.listAllJSON() }
 
     /**
      * Reconstruit l'inventaire sans rien renvoyer.
@@ -504,7 +534,7 @@ class OCnotesRepository(
      * suite. La première entrée, de chemin vide, est le dossier de notes.
      */
     suspend fun folders(): List<FolderRefDto> =
-        json.decodeFromString(call { it.foldersJSON() })
+        callJson { it.foldersJSON() }
 
     suspend fun readNote(notePath: String): String = authenticatedCall { it.readNote(notePath) }
 
@@ -525,10 +555,10 @@ class OCnotesRepository(
     }
 
     suspend fun createNote(dir: String, name: String, content: String): NoteRefDto =
-        json.decodeFromString(call { it.createNoteJSON(dir, name, content) })
+        callJson { it.createNoteJSON(dir, name, content) }
 
     suspend fun createFolder(dir: String, name: String): NoteRefDto =
-        json.decodeFromString(call { it.createFolderJSON(dir, name) })
+        callJson { it.createFolderJSON(dir, name) }
 
     /** Renomme et renvoie le **nouveau chemin**, que l'appelant doit adopter. */
     suspend fun rename(itemPath: String, newName: String): String =
@@ -547,7 +577,7 @@ class OCnotesRepository(
      * un suffixe « (2) », comme une création qui bute sur un nom pris.
      */
     suspend fun copy(itemPath: String, targetDir: String): NoteRefDto =
-        json.decodeFromString(call { it.copyJSON(itemPath, targetDir) })
+        callJson { it.copyJSON(itemPath, targetDir) }
 
     suspend fun delete(itemPath: String) {
         call { it.delete(itemPath) }
@@ -573,7 +603,7 @@ class OCnotesRepository(
     suspend fun sync(): SyncResultDto {
         return operationMutex.withLock {
             refreshOidcToken(allowStaleOnFailure = true)
-            val result: SyncResultDto = json.decodeFromString(call { it.syncJSON() })
+            val result: SyncResultDto = callJson { it.syncJSON() }
             _lastSync.value = result
             _pendingCount.value = result.remaining
             result
@@ -625,13 +655,13 @@ class OCnotesRepository(
 
     /** Conflits ouverts, conservés par le cœur Go au-delà d'une passe Sync. */
     suspend fun conflicts(): List<ConflictDto> =
-        json.decodeFromString(call { it.conflictsJSON() })
+        callJson { it.conflictsJSON() }
 
     /** Applique une décision explicite, protégée côté Go par l'ETag mémorisé. */
     suspend fun resolveConflict(id: String, resolution: String): ResolveConflictResultDto {
         return operationMutex.withLock {
-            val request = json.encodeToString(ResolveConflictRequestDto(id, resolution))
-            json.decodeFromString(authenticatedCall { it.resolveConflictJSON(request) })
+            val request = encoder(ResolveConflictRequestDto(id, resolution))
+            authenticatedCallJson { it.resolveConflictJSON(request) }
         }
     }
 
@@ -648,7 +678,7 @@ class OCnotesRepository(
      * suffit à la faire apparaître.
      */
     suspend fun formatActions(): List<FormatAction> {
-        val ids: List<String> = json.decodeFromString(call { it.formatActionsJSON() })
+        val ids: List<String> = callJson { it.formatActionsJSON() }
         return ids.map(::FormatAction)
     }
 
@@ -670,10 +700,10 @@ class OCnotesRepository(
         end: Int,
         action: FormatAction,
     ): FormatResultDto {
-        val request = json.encodeToString(
+        val request = encoder(
             FormatRequestDto(text = text, start = start, end = end, action = action.id),
         )
-        return json.decodeFromString(call { it.applyFormatJSON(request) })
+        return callJson { it.applyFormatJSON(request) }
     }
 
     // --- Aperçu -------------------------------------------------------------
@@ -689,7 +719,7 @@ class OCnotesRepository(
      * texte est interprété comme du Markdown ou rendu tel quel.
      */
     suspend fun renderNote(name: String, content: String): List<NoteBlockDto> =
-        json.decodeFromString(call { it.renderNoteJSON(name, content) })
+        callJson { it.renderNoteJSON(name, content) }
 
     /**
      * Blocs d'affichage d'un document Office, lu et analysé côté Go.
@@ -699,7 +729,7 @@ class OCnotesRepository(
      * serveur quand il est disponible et retombe sur le cache hors connexion.
      */
     suspend fun renderFile(filePath: String): List<NoteBlockDto> =
-        json.decodeFromString(authenticatedCall { it.renderFileJSON(filePath) })
+        authenticatedCallJson { it.renderFileJSON(filePath) }
 
     /**
      * Vrai pour un fichier affiché tel quel, sans interprétation.
@@ -728,7 +758,7 @@ class OCnotesRepository(
      * Le résultat doit toujours repartir par [restoreImages] avant écriture.
      */
     suspend fun prepareEdit(name: String, content: String): PreparedEditDto =
-        json.decodeFromString(call { it.prepareEditJSON(name, content) })
+        callJson { it.prepareEditJSON(name, content) }
 
     /**
      * Remet les données en ligne à la place de leurs jetons.
@@ -739,7 +769,7 @@ class OCnotesRepository(
      */
     suspend fun restoreImages(text: String, images: List<String>): String {
         if (images.isEmpty()) return text
-        val encodees = json.encodeToString(images)
+        val encodees = encoder(images)
         return call { it.restoreImages(text, encodees) }
     }
 }
