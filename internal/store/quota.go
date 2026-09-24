@@ -69,6 +69,10 @@ func (s *Store) pruneLocked(keep string) error {
 // pruneForSizeLocked évince selon LRU. newSize >= 0 décrit la taille finale du
 // blob keep ; -1 demande seulement de rentrer sous le quota actuel.
 func (s *Store) pruneForSizeLocked(keep string, newSize int64) error {
+	if newSize >= 0 && s.declaredUsageLocked(keep)+newSize <= s.quota {
+		return nil
+	}
+
 	usage, sizes := s.usageLocked()
 	projected := usage
 	if newSize >= 0 {
@@ -112,6 +116,29 @@ func (s *Store) pruneForSizeLocked(keep string, newSize int64) error {
 		return fmt.Errorf("store: [%s] quota de cache atteint (%d octets, %d occupés par des données protégées)", CodeStorageIO, s.quota, projected)
 	}
 	return nil
+}
+
+// declaredUsageLocked additionne Entry.Size, hors keep : aucun appel système.
+//
+// C'est le chemin rapide de chaque écriture. usageLocked fait un Stat par
+// entrée, et il était appelé à chaque enregistrement automatique : 34,7 ms
+// par Put sur 1 000 notes avec le quota par défaut, contre 9,8 ms sans quota
+// (poste de développement ; le téléphone est une quinzaine de fois plus lent).
+//
+// Ce total ne décide jamais d'une éviction, seulement de son inutilité. Un
+// blob disparu le fait surestimer, ce qui renvoie vers le calcul exact ; il ne
+// sous-estime que si un blob grossit sans que son Size suive, et aucun chemin
+// d'écriture ne le permet — Accept, putLocked et le déplacement le tiennent à
+// jour. Le quota est de toute façon une cible, pas une borne : Prune et
+// SetQuota repassent par le calcul exact.
+func (s *Store) declaredUsageLocked(keep string) int64 {
+	var usage int64
+	for path, entry := range s.entries {
+		if path != keep {
+			usage += entry.Size
+		}
+	}
+	return usage
 }
 
 // usageLocked interroge les fichiers, pas Entry.Size. Les blobs propres qui ont

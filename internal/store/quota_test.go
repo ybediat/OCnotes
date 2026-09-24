@@ -52,6 +52,49 @@ func TestPruneEvinceLesNotesPropresSelonLRU(t *testing.T) {
 	}
 }
 
+// Une écriture qui fait dépasser le quota évince, sans attendre Prune.
+//
+// Le chemin d'écriture additionne Entry.Size pour éviter un Stat par note à
+// chaque enregistrement ; ce raccourci ne doit dispenser que d'une éviction
+// inutile, jamais d'une nécessaire.
+func TestPutAuDelaDuQuotaEvinceSelonLRU(t *testing.T) {
+	s := newStore(t)
+	if err := s.SetQuota(10); err != nil {
+		t.Fatalf("SetQuota: %v", err)
+	}
+	accepteSansQuota(t, s, "ancienne.md", "aaaa")
+	accepteSansQuota(t, s, "recente.md", "bbbb")
+	fixeAcces(t, s, "ancienne.md", time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC))
+	fixeAcces(t, s, "recente.md", time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC))
+
+	// Pas de Get : il compte comme un accès et fausserait l'ordre LRU.
+	enCache := func(notePath string) bool {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		_, ok := s.entries[notePath]
+		return ok
+	}
+
+	// 8 octets en cache, 2 de plus tiennent : rien ne part.
+	if err := s.Put("petite.md", []byte("cc")); err != nil {
+		t.Fatalf("Put sous le quota: %v", err)
+	}
+	if !enCache("ancienne.md") {
+		t.Fatal("éviction sans dépassement")
+	}
+
+	// 4 de plus dépassent : la plus ancienne note propre part.
+	if err := s.Put("nouvelle.md", []byte("dddd")); err != nil {
+		t.Fatalf("Put au-delà du quota: %v", err)
+	}
+	if enCache("ancienne.md") {
+		t.Error("la note LRU est restée dans le cache malgré le dépassement")
+	}
+	if !enCache("recente.md") {
+		t.Error("la note récente a été évincée")
+	}
+}
+
 func TestPruneProtegeUneNoteDirtyEtUneCopieDeConflit(t *testing.T) {
 	s := newStore(t)
 	if err := s.SetQuota(UnlimitedQuota); err != nil {
