@@ -50,6 +50,8 @@ data class CacheStateDto(
     val quota: Long = 0,
     /** Mesuré depuis les fichiers réellement présents. */
     val usage: Long = 0,
+    /** L'occupation dépasse un quota qui n'est pas « illimité ». */
+    val overQuota: Boolean = false,
 )
 
 /** Un élément de `App.listDrivesJSON()`. */

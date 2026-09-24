@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SortByAlpha
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -68,6 +69,8 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.ocnotes.R
@@ -116,6 +119,10 @@ fun BrowserScreen(
     val evenement by viewModel.evenements.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
+
+    // Revenir des réglages ne recharge pas la liste : c'est pourtant là que
+    // le seuil d'alerte se relève, et le bandeau doit tomber aussitôt.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.verifierSeuil() }
 
     var dialogue by remember { mutableStateOf<Dialogue?>(null) }
 
@@ -271,6 +278,18 @@ fun BrowserScreen(
             )
 
             if (etat.depuisCache) BandeauCache()
+
+            etat.seuilDepasse?.let { octets ->
+                Bandeau(
+                    texte = stringResource(
+                        R.string.browser_seuil_depasse,
+                        Formatter.formatShortFileSize(context, octets),
+                    ),
+                    icone = Icons.Default.Storage,
+                    couleurFond = MaterialTheme.colorScheme.tertiaryContainer,
+                    couleurTexte = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+            }
 
             etat.erreur?.let { message ->
                 Bandeau(

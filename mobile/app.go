@@ -184,9 +184,13 @@ type appState struct {
 // cacheState est l'état d'espace présenté dans les réglages. Quota vaut zéro
 // pour « illimité » ; usage ne compte que les blobs de contenu réellement
 // présents, jamais l'inventaire ni la file persistante.
+//
+// OverQuota dit que l'occupation dépasse un quota qui n'est pas « illimité ».
+// En mode local, c'est l'alerte que le quota promet : il n'évince plus rien.
 type cacheState struct {
-	Quota int64 `json:"quota"`
-	Usage int64 `json:"usage"`
+	Quota     int64 `json:"quota"`
+	Usage     int64 `json:"usage"`
+	OverQuota bool  `json:"overQuota"`
 }
 
 // StateJSON renvoie l'état courant.
@@ -213,9 +217,12 @@ func (a *App) StateJSON() (string, error) {
 	})
 }
 
-// CacheStateJSON renvoie le quota local et l'occupation réelle du cache.
+// CacheStateJSON renvoie le quota local, l'occupation réelle du cache et le
+// fait qu'elle dépasse le quota — d'un seul relevé, pour que les trois se
+// répondent.
 func (a *App) CacheStateJSON() (string, error) {
-	return toJSON(cacheState{Quota: a.cache.Quota(), Usage: a.cache.Usage()})
+	quota, usage, depasse := a.cache.Occupancy()
+	return toJSON(cacheState{Quota: quota, Usage: usage, OverQuota: depasse})
 }
 
 // SetCacheQuota applique le quota choisi par l'utilisateur. La préférence

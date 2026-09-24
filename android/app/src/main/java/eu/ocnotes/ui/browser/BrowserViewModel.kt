@@ -62,6 +62,13 @@ data class BrowserUiState(
     val selection: Set<String> = emptySet(),
     /** Les suppressions sont définitives : aucune copie serveur n'existe. */
     val modeLocal: Boolean = false,
+    /**
+     * Occupation des notes, en octets, quand elle dépasse le seuil d'alerte
+     * du mode local ; nul sinon. C'est la seule chose que ce seuil fait : il
+     * n'évince rien. Un nombre et non un [Texte] : la taille se met en forme
+     * dans le composable, qui a le `Context`.
+     */
+    val seuilDepasse: Long? = null,
 ) {
     val enListePlate: Boolean get() = mode == ModeAffichage.LISTE
 
@@ -320,9 +327,36 @@ class BrowserViewModel(
                 }
                 repository.refreshPending()
                 rechargerDossiers()
+                verifierSeuil()
             } catch (e: OCnotesException) {
                 _uiState.update { it.copy(chargement = false, erreur = e.texte()) }
             }
+        }
+    }
+
+    /**
+     * Compare l'occupation au seuil d'alerte, en mode local seulement.
+     *
+     * En mode serveur, dépasser le quota ne demande rien à l'utilisateur :
+     * l'éviction s'en charge, et ce qui déborde attend la synchronisation.
+     *
+     * Appelé à chaque rechargement **et** à chaque retour sur l'écran : la
+     * liste ne se recharge pas en revenant des réglages, où le seuil se
+     * relève, ni de l'éditeur, où une note grossit. Un échec ne doit rien
+     * casser : sans mesure, pas d'alerte.
+     */
+    fun verifierSeuil() {
+        if (!_uiState.value.modeLocal) {
+            _uiState.update { it.copy(seuilDepasse = null) }
+            return
+        }
+        viewModelScope.launch {
+            val cache = try {
+                repository.cacheState()
+            } catch (_: OCnotesException) {
+                return@launch
+            }
+            _uiState.update { it.copy(seuilDepasse = cache.usage.takeIf { cache.overQuota }) }
         }
     }
 

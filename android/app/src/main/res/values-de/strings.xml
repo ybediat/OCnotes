@@ -249,6 +249,7 @@
     <!-- Suche. Sie bezieht sich nur auf den angezeigten Ordner: Die Eingabeaufforderung muss dies angeben,
          sonst könnte ein fehlendes Ergebnis als verlorene Notiz interpretiert werden. -->
     <string name="browser_recherche_invite">In diesem Ordner suchen</string>
+    <string name="browser_seuil_depasse">Ihre Notizen belegen %1$s auf diesem Gerät, mehr als der in den Einstellungen festgelegte Schwellenwert.</string>
     <string name="browser_recherche_invite_tout">In allen Notizen suchen</string>
     <string name="browser_recherche_effacer">Suche löschen</string>
     <string name="browser_recherche_vide_titre">Keine Ergebnisse</string>

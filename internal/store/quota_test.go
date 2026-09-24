@@ -418,6 +418,40 @@ func TestLibererLEspaceEvinceToutLeRecuperable(t *testing.T) {
 	}
 }
 
+// Le seuil dépassé doit pouvoir se lire. En mode local, c'est toute la raison
+// d'être du quota : il n'évince plus rien et ne sert qu'à alerter — encore
+// faut-il que quelqu'un le compare à l'occupation.
+func TestOccupationSignaleUnSeuilDepasse(t *testing.T) {
+	for _, local := range []bool{false, true} {
+		s := newStore(t)
+		if err := s.SetLocalOnly(local); err != nil {
+			t.Fatalf("SetLocalOnly: %v", err)
+		}
+		if err := s.SetQuota(UnlimitedQuota); err != nil {
+			t.Fatalf("SetQuota illimité: %v", err)
+		}
+		if err := s.Put("a.md", []byte("12345678")); err != nil {
+			t.Fatalf("Put: %v", err)
+		}
+
+		for _, cas := range []struct {
+			quota   int64
+			depasse bool
+		}{
+			{UnlimitedQuota, false},
+			{8, false}, // atteint n'est pas dépassé
+			{7, true},
+		} {
+			_ = s.SetQuota(cas.quota) // la note est protégée : l'erreur est attendue sous 8
+			quota, usage, depasse := s.Occupancy()
+			if quota != cas.quota || usage != 8 || depasse != cas.depasse {
+				t.Errorf("local=%v, quota %d : Occupancy = (%d, %d, %v), attendu (%d, 8, %v)",
+					local, cas.quota, quota, usage, depasse, cas.quota, cas.depasse)
+			}
+		}
+	}
+}
+
 func indexContains(entries []Known, path string) bool {
 	for _, entry := range entries {
 		if entry.Path == path {

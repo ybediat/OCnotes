@@ -256,6 +256,42 @@ func TestStartLocalReleveLeSeuil(t *testing.T) {
 	}
 }
 
+// Le seuil d'alerte du mode local traverse la façade : c'est overQuota que
+// l'interface lit pour afficher son bandeau.
+func TestCacheStateSignaleLeSeuilDepasse(t *testing.T) {
+	app, _ := prepareLocal(t)
+	if _, err := app.CreateNoteJSON("", "Note", "un texte de quelques octets"); err != nil {
+		t.Fatalf("CreateNoteJSON: %v", err)
+	}
+
+	lire := func() cacheState {
+		t.Helper()
+		raw, err := app.CacheStateJSON()
+		if err != nil {
+			t.Fatalf("CacheStateJSON: %v", err)
+		}
+		var cache cacheState
+		decodeJSON(t, raw, &cache)
+		return cache
+	}
+
+	if cache := lire(); cache.OverQuota {
+		t.Errorf("seuil signalé dépassé sous le plancher local : %+v", cache)
+	}
+	if err := app.SetCacheQuota(1); err != nil {
+		t.Fatalf("SetCacheQuota: %v", err)
+	}
+	if cache := lire(); !cache.OverQuota {
+		t.Errorf("seuil dépassé non signalé : %+v", cache)
+	}
+	if err := app.SetCacheQuota(store.UnlimitedQuota); err != nil {
+		t.Fatalf("SetCacheQuota illimité: %v", err)
+	}
+	if cache := lire(); cache.OverQuota {
+		t.Errorf("« illimité » ne peut pas être dépassé : %+v", cache)
+	}
+}
+
 // Quitter le mode serveur passe par le débranchement, qui rapatrie d'abord.
 // Basculer directement laisserait sur le serveur des notes dont l'appareil ne
 // connaît que le nom.

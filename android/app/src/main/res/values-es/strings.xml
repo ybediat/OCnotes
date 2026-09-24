@@ -269,6 +269,7 @@
     <!-- Recherche. Elle ne porte que sur le dossier affiché : l'invite doit
          le dire, sinon un résultat manquant passe pour une note perdue. -->
     <string name="browser_recherche_invite">Buscar en esta carpeta</string>
+    <string name="browser_seuil_depasse">Sus notas ocupan %1$s en este dispositivo, por encima del umbral definido en los ajustes.</string>
     <string name="browser_recherche_invite_tout">Buscar en todas las notas</string>
     <string name="browser_recherche_effacer">Borrar búsqueda</string>
     <string name="browser_recherche_vide_titre">Ningún resultado</string>

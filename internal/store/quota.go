@@ -41,6 +41,20 @@ func (s *Store) Usage() int64 {
 	return usage
 }
 
+// Occupancy relève d'un seul tenant le quota, l'occupation réelle et leur
+// verdict : depasse dit que l'occupation excède un quota qui n'est pas
+// « illimité ». Atteindre le seuil n'est pas le dépasser.
+//
+// C'est ce verdict que le mode local promet d'afficher : là, le quota n'évince
+// plus rien et ne sert qu'à alerter. En mode serveur, il signale que des
+// contenus protégés débordent — ce que l'écriture laisse désormais passer.
+func (s *Store) Occupancy() (quota, usage int64, depasse bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	usage, _ = s.usageLocked()
+	return s.quota, usage, s.quota != UnlimitedQuota && usage > s.quota
+}
+
 // Prune évince **tous** les contenus récupérables, quel que soit le quota :
 // c'est le geste « Libérer l'espace ». Les brouillons, conflits et données
 // liées à une opération en attente ne sont jamais candidats, et les notes
