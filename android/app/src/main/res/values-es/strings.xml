@@ -183,6 +183,8 @@
     <string name="reglages_cache_explication_locale">Todas sus notas se guardan en este dispositivo. El límite es solo una advertencia: ninguna nota se elimina automáticamente.</string>
     <string name="reglages_cache_modifier_quota">Cambiar el límite</string>
     <string name="reglages_cache_liberer">Liberar espacio</string>
+    <string name="reglages_cache_libere">%1$s liberados.</string>
+    <string name="reglages_cache_rien_a_liberer">Nada que liberar.</string>
     <string name="reglages_cache_choix_titre">Límite de caché sin conexión</string>
     <string name="reglages_cache_50_mo">50 MB</string>
     <string name="reglages_cache_250_mo">250 MB</string>

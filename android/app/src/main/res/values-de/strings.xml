@@ -349,6 +349,8 @@
     <string name="reglages_cache_explication_locale">Alle Ihre Notizen befinden sich auf diesem Gerät. Das Limit dient nur als Warnung: Notizen werden nie automatisch gelöscht.</string>
     <string name="reglages_cache_modifier_quota">Limit ändern</string>
     <string name="reglages_cache_liberer">Speicherplatz freigeben</string>
+    <string name="reglages_cache_libere">%1$s freigegeben.</string>
+    <string name="reglages_cache_rien_a_liberer">Nichts freizugeben.</string>
     <string name="reglages_cache_choix_titre">Offline-Cache-Limit</string>
     <string name="reglages_cache_50_mo">50 MB</string>
     <string name="reglages_cache_250_mo">250 MB</string>

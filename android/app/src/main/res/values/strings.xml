@@ -372,6 +372,8 @@
     <string name="reglages_cache_explication_locale">Toutes vos notes vivent sur cet appareil. La limite sert uniquement d\'alerte : aucune note n\'est supprimée automatiquement.</string>
     <string name="reglages_cache_modifier_quota">Modifier la limite</string>
     <string name="reglages_cache_liberer">Libérer l\'espace</string>
+    <string name="reglages_cache_libere">%1$s libérés.</string>
+    <string name="reglages_cache_rien_a_liberer">Aucun contenu à libérer.</string>
     <string name="reglages_cache_choix_titre">Limite du cache hors ligne</string>
     <string name="reglages_cache_50_mo">50 Mo</string>
     <string name="reglages_cache_250_mo">250 Mo</string>

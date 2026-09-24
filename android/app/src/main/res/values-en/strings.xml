@@ -202,6 +202,8 @@
     <string name="reglages_cache_explication_locale">All your notes live on this device. The limit is only a warning: notes are never deleted automatically.</string>
     <string name="reglages_cache_modifier_quota">Change limit</string>
     <string name="reglages_cache_liberer">Free up space</string>
+    <string name="reglages_cache_libere">%1$s freed.</string>
+    <string name="reglages_cache_rien_a_liberer">Nothing to free up.</string>
     <string name="reglages_cache_choix_titre">Offline cache limit</string>
     <string name="reglages_cache_50_mo">50 MB</string>
     <string name="reglages_cache_250_mo">250 MB</string>

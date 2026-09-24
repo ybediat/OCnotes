@@ -371,6 +371,53 @@ func TestConflitSousQuotaProtegeEstSignale(t *testing.T) {
 	}
 }
 
+// « Libérer l'espace » évince tout ce qui est récupérable, pas seulement ce qui
+// dépasse le quota.
+//
+// Prune s'arrêtait au quota. Or le chemin d'écriture y maintient déjà le
+// cache : le bouton ne libérait rien, presque à chaque fois, et sans un mot.
+// Sous « illimité », il ne libérait jamais rien.
+func TestLibererLEspaceEvinceToutLeRecuperable(t *testing.T) {
+	for _, quota := range []int64{DefaultQuotaBytes, UnlimitedQuota, 12} {
+		s := newStore(t)
+		if err := s.SetQuota(UnlimitedQuota); err != nil {
+			t.Fatalf("SetQuota illimité: %v", err)
+		}
+		accepteSansQuota(t, s, "propre-1.md", "aaaa")
+		accepteSansQuota(t, s, "propre-2.md", "bbbb")
+		if err := s.Put("brouillon.md", []byte("brouillon")); err != nil {
+			t.Fatalf("Put: %v", err)
+		}
+		accepteSansQuota(t, s, "copie (conflit).md", "copie")
+		if err := s.MarkConflict("copie (conflit).md"); err != nil {
+			t.Fatalf("MarkConflict: %v", err)
+		}
+		// 12 : sous les 14 octets protégés, le seuil ne peut pas être tenu.
+		// Le geste libère quand même tout ce qu'il peut, sans erreur.
+		_ = s.SetQuota(quota)
+
+		if err := s.Prune(); err != nil {
+			t.Errorf("quota %d : Prune: %v", quota, err)
+		}
+		for _, chemin := range []string{"propre-1.md", "propre-2.md"} {
+			if cacheDetient(s, chemin) {
+				t.Errorf("quota %d : %s n'a pas été libérée", quota, chemin)
+			}
+			if !indexContains(s.Index(), chemin) {
+				t.Errorf("quota %d : %s a disparu de l'inventaire", quota, chemin)
+			}
+		}
+		for _, chemin := range []string{"brouillon.md", "copie (conflit).md"} {
+			if !cacheDetient(s, chemin) {
+				t.Errorf("quota %d : %s, protégée, a été évincée", quota, chemin)
+			}
+		}
+		if usage := s.Usage(); usage != int64(len("brouillon")+len("copie")) {
+			t.Errorf("quota %d : usage = %d après libération, attendu les seuls contenus protégés", quota, usage)
+		}
+	}
+}
+
 func indexContains(entries []Known, path string) bool {
 	for _, entry := range entries {
 		if entry.Path == path {

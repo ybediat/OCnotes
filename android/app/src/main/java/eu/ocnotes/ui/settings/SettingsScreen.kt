@@ -303,6 +303,20 @@ fun SettingsScreen(
                 ) {
                     Text(stringResource(R.string.reglages_cache_liberer))
                 }
+                etat.liberes?.let { octets ->
+                    Text(
+                        text = if (octets > 0) {
+                            stringResource(
+                                R.string.reglages_cache_libere,
+                                Formatter.formatShortFileSize(context, octets),
+                            )
+                        } else {
+                            stringResource(R.string.reglages_cache_rien_a_liberer)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))

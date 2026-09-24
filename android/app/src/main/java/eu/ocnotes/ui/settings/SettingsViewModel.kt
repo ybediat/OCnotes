@@ -31,6 +31,13 @@ data class SettingsUiState(
     val enAttente: Int = 0,
     val cache: CacheStateDto = CacheStateDto(),
     /**
+     * Octets rendus par le dernier « Libérer l'espace », zéro s'il n'y avait
+     * rien à libérer, nul tant que le geste n'a pas été fait. Un nombre et non
+     * un [Texte] : la taille se met en forme dans le composable, qui a le
+     * `Context`.
+     */
+    val liberes: Long? = null,
+    /**
      * Faux tant que le serveur n'a pas confirmé le token depuis le lancement.
      * `Restore` ouvre une session utilisable hors connexion : l'application
      * marche, mais sans preuve que le jeton soit encore valide.
@@ -327,7 +334,9 @@ class SettingsViewModel(
             try {
                 repository.setCacheQuota(quota)
                 val cache = repository.cacheState()
-                _uiState.update { it.copy(cache = cache, erreur = null) }
+                // Le compte rendu d'une libération antérieure ne décrit plus
+                // l'occupation affichée.
+                _uiState.update { it.copy(cache = cache, liberes = null, erreur = null) }
             } catch (e: OCnotesException) {
                 // Le quota est appliqué même si des brouillons protégés le
                 // dépassent. Afficher alors l'occupation réelle, sans annuler
@@ -357,9 +366,13 @@ class SettingsViewModel(
     fun libererEspace() {
         viewModelScope.launch {
             try {
+                // Mesuré avant et après plutôt que renvoyé par le cœur : la
+                // signature de PruneCache appartient au contrat gelé.
+                val avant = repository.cacheState().usage
                 repository.pruneCache()
                 val cache = repository.cacheState()
-                _uiState.update { it.copy(cache = cache, erreur = null) }
+                val liberes = (avant - cache.usage).coerceAtLeast(0)
+                _uiState.update { it.copy(cache = cache, liberes = liberes, erreur = null) }
             } catch (e: OCnotesException) {
                 val cache = try {
                     repository.cacheState()

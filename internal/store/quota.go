@@ -41,12 +41,35 @@ func (s *Store) Usage() int64 {
 	return usage
 }
 
-// Prune évince les contenus récupérables jusqu'au quota courant. Les brouillons,
-// conflits et données liées à une opération en attente ne sont jamais candidats.
+// Prune évince **tous** les contenus récupérables, quel que soit le quota :
+// c'est le geste « Libérer l'espace ». Les brouillons, conflits et données
+// liées à une opération en attente ne sont jamais candidats, et les notes
+// évincées restent dans l'inventaire.
+//
+// S'arrêter au quota, comme le fait une écriture, rendait le geste inerte : le
+// chemin d'écriture y maintient déjà le cache, et sous « illimité » il n'y a
+// pas de quota à rejoindre. Des contenus protégés au-delà du seuil ne sont pas
+// non plus une erreur ici : le geste a libéré tout ce qu'il pouvait, et
+// l'occupation affichée dit le reste.
 func (s *Store) Prune() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.pruneLocked("")
+
+	_, sizes := s.usageLocked()
+	changed := false
+	for _, entry := range s.candidatesLocked("") {
+		if sizes[entry.Path] == 0 {
+			continue
+		}
+		if err := s.evictLocked(entry); err != nil {
+			return err
+		}
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return s.save()
 }
 
 // ensureSpaceLocked prépare une écriture de blob en évinçant ce qui peut

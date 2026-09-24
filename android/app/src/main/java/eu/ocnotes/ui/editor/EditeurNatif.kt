@@ -416,7 +416,13 @@ private fun EditText.masquer(masque: Boolean) {
  * le banc (Android 15, `dumpsys autofill`) : une session vers le service Google
  * et une vers l'autofill « augmenté » avec les deux exclusions, aucune avec
  * celle-ci.
+ *
+ * `EditText` et non `AppCompatEditText`, malgré lint : l'application n'est pas
+ * une activité AppCompat et n'en dépend pas directement (la bibliothèque n'arrive
+ * que par AppAuth). Ses aides — emoji, teinte, réception de contenu — viendraient
+ * s'ajouter au champ dont les mesures sur la note de 295 ko ont été faites sans.
  */
+@SuppressLint("AppCompatCustomView")
 internal class ChampEditeur(context: Context) : EditText(context) {
     var saisieAutomatique: Boolean = true
 
