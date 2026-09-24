@@ -320,42 +320,56 @@ class EditorViewModel(
     )
 
     /**
-     * Applique une action de mise en forme à l'instantané complet, sans jamais
+     * Applique une action de mise en forme à une fenêtre de lignes, sans jamais
      * conserver l'Editable.
      *
+     * Go ne reçoit que les lignes sélectionnées et une ligne de contexte de
+     * chaque côté ; son résultat remplace cette fenêtre, et elle seule. Le
+     * résultat est **identique** à celui d'une mise en forme du document entier
+     * — `TestFenetreEquivautAuDocumentEntier` le prouve, voir
+     * [fenetreMiseEnForme] pour la règle.
+     *
      * Le cœur du contrat : les bornes de sélection partent telles quelles, et
-     * celles renvoyées par Go sont réappliquées telles quelles. Android et Go
-     * comptent tous deux en unités UTF-16 : pas de conversion, dans aucun sens.
+     * celles renvoyées par Go sont réappliquées telles quelles, au décalage de
+     * la fenêtre près. Android et Go comptent tous deux en unités UTF-16 : pas
+     * de conversion, dans aucun sens.
      */
     fun appliquer(
         action: FormatAction,
-        instantane: InstantaneEditeurNatif,
+        fenetre: FenetreNatif,
         onAppliquer: (FormatNatifApplique) -> Unit,
     ) {
         viewModelScope.launch {
             try {
                 val apres = repository.applyFormat(
-                    text = instantane.texte,
-                    start = instantane.selection.debut,
-                    end = instantane.selection.fin,
+                    text = fenetre.texte,
+                    start = fenetre.selection.debut - fenetre.debut,
+                    end = fenetre.selection.fin - fenetre.debut,
                     action = action,
                 )
-                if (!revisionNativeToujoursCourante(instantane.revision, _uiState.value.revision)) {
+                if (!revisionNativeToujoursCourante(fenetre.revision, _uiState.value.revision)) {
                     return@launch
                 }
-                // Le diff parcourt deux textes complets : hors du thread
-                // principal, comme le JSON qui les a transportés.
-                val remplacement = withContext(Dispatchers.Default) {
-                    calculerRemplacementNatif(instantane.texte, apres.text)
+                // Une fenêtre reste petite, sauf sur une sélection de tout le
+                // document : le diff reste hors du thread principal.
+                val local = withContext(Dispatchers.Default) {
+                    calculerRemplacementNatif(fenetre.texte, apres.text)
                 }
-                if (!revisionNativeToujoursCourante(instantane.revision, _uiState.value.revision)) {
+                if (!revisionNativeToujoursCourante(fenetre.revision, _uiState.value.revision)) {
                     return@launch
                 }
                 onAppliquer(
                     FormatNatifApplique(
-                        revisionSource = instantane.revision,
-                        remplacement = remplacement,
-                        selection = SelectionEditeurNatif(apres.start, apres.end),
+                        revisionSource = fenetre.revision,
+                        remplacement = RemplacementNatif(
+                            debut = local.debut + fenetre.debut,
+                            fin = local.fin + fenetre.debut,
+                            texte = local.texte,
+                        ),
+                        selection = SelectionEditeurNatif(
+                            apres.start + fenetre.debut,
+                            apres.end + fenetre.debut,
+                        ),
                     ),
                 )
             } catch (e: OCnotesException) {

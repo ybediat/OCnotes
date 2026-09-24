@@ -72,6 +72,29 @@ class SessionEditeurNatif {
         )
     }
 
+    /**
+     * Portion du texte à confier à une mise en forme (voir [fenetreMiseEnForme]).
+     *
+     * Seule la tranche est copiée hors de l'`Editable` : [instantane]
+     * photographierait les 285 ko pour une action qui n'en lit que trois lignes.
+     */
+    @MainThread
+    fun fenetre(): FenetreNatif? = champ?.let { vue ->
+        val texte = vue.text
+        val selection = SelectionEditeurNatif(
+            vue.selectionStart.coerceIn(0, texte.length),
+            vue.selectionEnd.coerceIn(0, texte.length),
+        )
+        val bornes = fenetreMiseEnForme(texte, selection.debut, selection.fin)
+        FenetreNatif(
+            texte = texte.subSequence(bornes.debut, bornes.fin).toString(),
+            debut = bornes.debut,
+            fin = bornes.fin,
+            selection = selection,
+            revision = revision,
+        )
+    }
+
     @MainThread
     fun selection(): SelectionEditeurNatif? = champ?.let {
         SelectionEditeurNatif(it.selectionStart, it.selectionEnd)

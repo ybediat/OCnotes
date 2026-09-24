@@ -357,8 +357,8 @@ private fun ZoneSaisie(
             FormatToolbar(
                 actions = etat.actions,
                 onAction = { action ->
-                    sessionNative.instantane()?.let { instantane ->
-                        viewModel.appliquer(action, instantane) { resultat ->
+                    sessionNative.fenetre()?.let { fenetre ->
+                        viewModel.appliquer(action, fenetre) { resultat ->
                             sessionNative.appliquerRemplacement(
                                 revisionAttendue = resultat.revisionSource,
                                 remplacement = resultat.remplacement,
