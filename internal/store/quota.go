@@ -11,9 +11,8 @@ import (
 // récupérables. Un quota nul signifie illimité.
 //
 // Si les seuls contenus restants sont protégés, le quota est tout de même
-// retenu afin que l'état affiché soit honnête, puis une STORAGE_IO explique que
-// le travail local doit d'abord être synchronisé ou que le disque doit être
-// libéré.
+// retenu afin que l'état affiché soit honnête, puis une QUOTA_PROTECTED dit
+// que le travail local le dépasse et sera conservé.
 func (s *Store) SetQuota(quota int64) error {
 	if quota < 0 {
 		return fmt.Errorf("store: [%s] quota négatif", CodeStorageIO)
@@ -95,8 +94,8 @@ func (s *Store) Prune() error {
 // refuser bloquait l'éditeur dès que brouillons et copies de conflit
 // dépassaient le quota — un branchement depuis le mode local, où le quota ne
 // fait qu'alerter, y suffit — et, hors connexion, pour de bon. Seul un disque
-// réellement plein peut refuser une écriture ; SetQuota et Prune, eux,
-// continuent de dire qu'un seuil n'est pas tenu.
+// réellement plein peut refuser une écriture ; SetQuota, lui, continue de dire
+// qu'un seuil n'est pas tenu.
 func (s *Store) ensureSpaceLocked(keep string, newSize int64) error {
 	if s.quota == UnlimitedQuota || s.localOnly {
 		return nil
@@ -115,8 +114,8 @@ func (s *Store) ensureSpaceLocked(keep string, newSize int64) error {
 	return err
 }
 
-// pruneLocked ramène le cache sous le quota, et signale en STORAGE_IO un seuil
-// que les seuls contenus protégés empêchent de tenir.
+// pruneLocked ramène le cache sous le quota, et signale en QUOTA_PROTECTED un
+// seuil que les seuls contenus protégés empêchent de tenir.
 func (s *Store) pruneLocked(keep string) error {
 	if s.quota == UnlimitedQuota || s.localOnly {
 		return nil
@@ -126,7 +125,7 @@ func (s *Store) pruneLocked(keep string) error {
 		return err
 	}
 	if projected > s.quota {
-		return fmt.Errorf("store: [%s] quota de cache atteint (%d octets, %d occupés par des données protégées)", CodeStorageIO, s.quota, projected)
+		return fmt.Errorf("store: [%s] quota de cache retenu mais dépassé par les données protégées (%d octets, %d occupés)", CodeQuotaProtected, s.quota, projected)
 	}
 	return nil
 }

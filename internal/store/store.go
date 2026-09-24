@@ -35,6 +35,14 @@ const CodeStorageIO = "STORAGE_IO"
 // la seule copie.
 const CodeTargetExists = "TARGET_EXISTS"
 
+// CodeQuotaProtected étiquette un quota retenu mais que les seuls contenus
+// protégés — brouillons, copies de conflit, opérations en attente — dépassent
+// déjà. Rien n'est en panne et rien n'est perdu : ce n'est pas une STORAGE_IO,
+// qui envoyait l'utilisateur vérifier un disque qui avait toute la place
+// voulue. Seul SetQuota le renvoie ; une écriture n'est jamais refusée pour
+// cela.
+const CodeQuotaProtected = "QUOTA_PROTECTED"
+
 // indexVersion permet de reconnaître un index écrit par une version
 // antérieure du format. Un index d'une version inconnue est ignoré plutôt que
 // mal interprété : le cache se reconstruit depuis le serveur.
@@ -358,11 +366,13 @@ func (s *Store) Get(notePath string) ([]byte, Entry, bool) {
 		// cache comme absent plutôt que de propager une erreur d'E/S.
 		return nil, Entry{}, false
 	}
+	// La date d'accès reste en mémoire : l'éviction la voit tout de suite, et
+	// la prochaine écriture de l'index l'emporte. La persister ici réécrivait
+	// l'index entier à chaque lecture — trois fois par ouverture en ligne, avec
+	// l'Accept du rafraîchissement. Un arrêt brutal avant toute écriture perd
+	// cette date ; au pire une note lue est évincée un peu tôt et se
+	// retélécharge. En mode local, rien n'est évincé.
 	entry.LastAccess = time.Now().UTC()
-	// Le contenu lu reste valable même si une persistance de sa date d'accès
-	// échoue. La prochaine écriture de l'index la rendra durable ; ne pas rendre
-	// une note illisible pour une information de classement non critique.
-	_ = s.save()
 	return content, *entry, true
 }
 

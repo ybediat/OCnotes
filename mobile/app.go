@@ -565,6 +565,11 @@ func (a *App) AttachJSON(requestJSON string) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	// Le seuil relevé par le mode local reste en place, et c'est voulu. Avec
+	// `adopt`, l'appareil porte encore toutes ses notes : redescendre au
+	// défaut ferait évincer, sitôt synchronisées, des notes qu'il détenait
+	// jusque-là. Et rien ne distingue ce plancher d'un gigaoctet choisi par
+	// l'utilisateur, qui garde la main dans les réglages.
 	a.cfg.Mode = config.ModeServer
 	result.Root = a.cfg.Root
 	if err := config.Save(a.dataDir, a.cfg); err != nil {

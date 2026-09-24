@@ -73,6 +73,7 @@ private fun texteLocal(code: String): Texte? = when (code) {
     "USERNAME_MISSING" -> Texte.de(R.string.err_utilisateur_manquant)
     "LOCAL_MODE" -> Texte.de(R.string.err_mode_local)
     "QUOTA_TOO_LOW" -> Texte.de(R.string.err_quota_local)
+    "QUOTA_PROTECTED" -> Texte.de(R.string.err_quota_protege)
     "PENDING_CHANGES" -> Texte.de(R.string.err_modifications_attente)
     else -> null
 }

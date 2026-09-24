@@ -59,6 +59,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,6 +92,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.time.format.FormatStyle
+import kotlinx.coroutines.launch
 
 /** Boîte de dialogue ouverte, s'il y en a une. */
 private sealed interface Dialogue {
@@ -131,6 +133,13 @@ fun BrowserScreen(
     val messageEvenement = (evenement as? BrowserEvent.Message)?.texte?.resoudre()
     val avertissementPartage = (evenement as? BrowserEvent.Partager)?.avertissement?.resoudre()
 
+    // Consommer l'événement change la clé du `LaunchedEffect`, qui s'annule à
+    // la recomposition suivante. Tout ce qui suspend part donc dans cette
+    // portée-ci, qui survit à la consommation : sans elle, `partagerFichiers`
+    // était annulé au retour de `Dispatchers.IO`, avant `startActivity`, et le
+    // bouton « Partager » ne produisait rien.
+    val portee = rememberCoroutineScope()
+
     LaunchedEffect(evenement) {
         when (val e = evenement) {
             is BrowserEvent.OuvrirNote -> {
@@ -140,13 +149,15 @@ fun BrowserScreen(
 
             is BrowserEvent.Message -> {
                 viewModel.evenementConsomme()
-                messageEvenement?.let { snackbar.showSnackbar(it) }
+                portee.launch { messageEvenement?.let { snackbar.showSnackbar(it) } }
             }
 
             is BrowserEvent.Partager -> {
                 viewModel.evenementConsomme()
-                partagerFichiers(context, e.fichiers)
-                avertissementPartage?.let { snackbar.showSnackbar(it) }
+                portee.launch {
+                    partagerFichiers(context, e.fichiers)
+                    avertissementPartage?.let { snackbar.showSnackbar(it) }
+                }
             }
 
             null -> Unit

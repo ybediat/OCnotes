@@ -39,3 +39,29 @@ func BenchmarkPutLocal10Notes(b *testing.B)   { bancPut(b, 10, true, UnlimitedQu
 func BenchmarkPutLocal1000Notes(b *testing.B) { bancPut(b, 1000, true, UnlimitedQuota) }
 func BenchmarkPutQuota10Notes(b *testing.B)   { bancPut(b, 10, false, 250<<20) }
 func BenchmarkPutQuota1000Notes(b *testing.B) { bancPut(b, 1000, false, 250<<20) }
+
+// bancGet mesure l'ouverture répétée d'une note en cache, dans un cache de n
+// notes. Get ne doit pas coûter l'écriture de l'index entier.
+func bancGet(b *testing.B, notes int) {
+	s, err := Open(b.TempDir())
+	if err != nil {
+		b.Fatal(err)
+	}
+	s.quota = UnlimitedQuota
+	petite := []byte(strings.Repeat("x", 2000))
+	for i := 0; i < notes; i++ {
+		if err := s.Accept(fmt.Sprintf("n%04d.md", i), petite, `"e"`); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, _, ok := s.Get(fmt.Sprintf("n%04d.md", i%notes)); !ok {
+			b.Fatal("note absente")
+		}
+	}
+}
+
+func BenchmarkGet10Notes(b *testing.B)   { bancGet(b, 10) }
+func BenchmarkGet1000Notes(b *testing.B) { bancGet(b, 1000) }

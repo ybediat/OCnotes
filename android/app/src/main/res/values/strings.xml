@@ -78,7 +78,7 @@
     <string name="err_document_invalide">Ce document est invalide ou incomplet.</string>
     <string name="err_document_trop_volumineux">Le contenu de ce document est trop volumineux à afficher.</string>
     <string name="err_fichier_trop_volumineux">Ce document est trop volumineux à ouvrir.</string>
-    <string name="err_stockage">Impossible d\'écrire sur le stockage de l\'appareil. Vérifiez l\'espace disponible ou synchronisez d\'abord vos modifications locales.</string>
+    <string name="err_stockage">Impossible d\'écrire sur le stockage de l\'appareil. Vérifiez l\'espace disponible.</string>
     <string name="err_contenu_a_telecharger">Le contenu de cette note n\'est pas disponible hors connexion. Téléchargez-la une fois le réseau revenu.</string>
     <string name="err_contenu_perdu">Le contenu de cette note est introuvable sur cet appareil, et aucune copie n\'existe ailleurs pour le récupérer.</string>
     <string name="err_url_serveur_manquante">Indiquez l\'adresse du serveur.</string>
@@ -87,6 +87,7 @@
     <string name="err_utilisateur_manquant">Indiquez votre nom d\'utilisateur.</string>
     <string name="err_mode_local">Cette action nécessite un serveur connecté.</string>
     <string name="err_quota_local">La limite de stockage est trop basse pour conserver toutes les notes sur cet appareil.</string>
+    <string name="err_quota_protege">Limite enregistrée. Vos modifications non synchronisées et vos copies de conflit la dépassent déjà : elles sont conservées.</string>
     <string name="err_modifications_attente">Des modifications doivent encore être synchronisées avant de déconnecter le serveur.</string>
 
     <!-- ================================================================

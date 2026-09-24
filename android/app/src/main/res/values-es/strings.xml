@@ -65,7 +65,7 @@
     <string name="err_document_invalide">Este documento no es válido o está incompleto.</string>
     <string name="err_document_trop_volumineux">El contenido de este documento es demasiado grande para mostrarlo.</string>
     <string name="err_fichier_trop_volumineux">Este documento es demasiado grande para abrirlo.</string>
-    <string name="err_stockage">No se puede escribir en el almacenamiento del dispositivo. Compruebe el espacio disponible o sincronice primero los cambios locales.</string>
+    <string name="err_stockage">No se puede escribir en el almacenamiento del dispositivo. Compruebe el espacio disponible.</string>
     <string name="err_contenu_a_telecharger">Esta nota no está disponible sin conexión. Descárguela de nuevo cuando vuelva la red.</string>
     <string name="err_contenu_perdu">No se encuentra el contenido de esta nota en este dispositivo, y no existe ninguna otra copia para recuperarlo.</string>
     <string name="err_url_serveur_manquante">Introduzca la dirección del servidor.</string>
@@ -74,6 +74,7 @@
     <string name="err_utilisateur_manquant">Introduzca su nombre de usuario.</string>
     <string name="err_mode_local">Esta acción requiere un servidor conectado.</string>
     <string name="err_quota_local">El límite de almacenamiento es demasiado bajo para guardar todas las notas en este dispositivo.</string>
+    <string name="err_quota_protege">Límite guardado. Sus cambios sin sincronizar y sus copias de conflicto ya lo superan: se conservan.</string>
     <string name="err_modifications_attente">Aún deben sincronizarse algunos cambios antes de desconectar el servidor.</string>
 
     <!-- ================================================================

@@ -113,8 +113,8 @@ func TestPruneProtegeUneNoteDirtyEtUneCopieDeConflit(t *testing.T) {
 	if err == nil {
 		t.Fatal("un quota sous les contenus protégés doit être signalé")
 	}
-	if !strings.Contains(err.Error(), "["+CodeStorageIO+"]") {
-		t.Errorf("erreur = %q, étiquette %s attendue", err, CodeStorageIO)
+	if !strings.Contains(err.Error(), "["+CodeQuotaProtected+"]") {
+		t.Errorf("erreur = %q, étiquette %s attendue", err, CodeQuotaProtected)
 	}
 	for _, path := range []string{"brouillon.md", "copie (conflit).md"} {
 		if _, _, ok := s.Get(path); !ok {
@@ -449,6 +449,64 @@ func TestOccupationSignaleUnSeuilDepasse(t *testing.T) {
 					local, cas.quota, quota, usage, depasse, cas.quota, cas.depasse)
 			}
 		}
+	}
+}
+
+// Lire une note ne réécrit pas l'index : la date d'accès reste en mémoire et
+// part avec le prochain enregistrement.
+//
+// Get réécrivait l'index entier à chaque lecture, pour cette seule date — et
+// une ouverture en ligne lit deux fois, autour d'un Accept qui l'écrit déjà.
+// Ce que l'on perd : la date d'une lecture suivie d'un arrêt brutal sans la
+// moindre écriture. Au pire, une note récemment lue est évincée un peu tôt,
+// et se retélécharge.
+func TestLectureNeReecritPasLIndex(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	accepteSansQuota(t, s, "lue.md", "aaaa")
+	accepteSansQuota(t, s, "autre.md", "bbbb")
+	ancienne := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	fixeAcces(t, s, "lue.md", ancienne)
+
+	avant, err := os.ReadFile(s.indexPath())
+	if err != nil {
+		t.Fatalf("lecture de l'index: %v", err)
+	}
+	if _, _, ok := s.Get("lue.md"); !ok {
+		t.Fatal("note absente")
+	}
+	apres, err := os.ReadFile(s.indexPath())
+	if err != nil {
+		t.Fatalf("lecture de l'index: %v", err)
+	}
+	if string(avant) != string(apres) {
+		t.Error("Get a réécrit l'index")
+	}
+
+	// En mémoire, l'accès compte tout de suite pour l'éviction…
+	s.mu.Lock()
+	enMemoire := s.entries["lue.md"].LastAccess
+	s.mu.Unlock()
+	if !enMemoire.After(ancienne) {
+		t.Errorf("LastAccess en mémoire = %v, la lecture n'a pas été retenue", enMemoire)
+	}
+
+	// …et la prochaine écriture le rend durable.
+	if err := s.Put("autre.md", []byte("modifiée")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	rouvert, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	rouvert.mu.Lock()
+	persistee := rouvert.entries["lue.md"].LastAccess
+	rouvert.mu.Unlock()
+	if !persistee.Equal(enMemoire) {
+		t.Errorf("LastAccess après redémarrage = %v, attendu %v", persistee, enMemoire)
 	}
 }
 
