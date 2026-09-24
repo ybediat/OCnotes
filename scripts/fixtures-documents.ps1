@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Fabrique les fixtures .docx et .odt du chantier « lecture seule des
     documents bureautiques ».

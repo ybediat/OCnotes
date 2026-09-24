@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Brique 1a — valide qu'un App Token OpenCloud donne acces au WebDAV.
 

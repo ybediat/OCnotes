@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Banc de mesure de l'éditeur : combien coûte une image, et dans quelle phase.
 

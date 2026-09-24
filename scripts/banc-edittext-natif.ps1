@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Compare un android.widget.EditText monolithique à l'éditeur Compose mesuré
     par banc-editeur.ps1.

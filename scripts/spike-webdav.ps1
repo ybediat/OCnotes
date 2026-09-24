@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Brique 1b/3 — valide les operations WebDAV et la detection de conflit.
 
