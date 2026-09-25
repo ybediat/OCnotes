@@ -3,8 +3,14 @@
 Le corps ci-dessous est en anglais : c'est la langue du tracker
 <https://gitlab.com/fdroid/rfp/-/issues>. Le reste du projet reste en français.
 
-Joindre [`eu.ocnotes.yml`](eu.ocnotes.yml) à l'issue, ou coller son contenu
-dans un bloc de code.
+Joindre [`eu.ocnotes.yml`](eu.ocnotes.yml) **en pièce jointe**, sans le coller
+dans le corps de l'issue : l'issuebot compte les URLs de dépôt du texte, et les
+champs `Repo`/`SourceCode`/`Binaries` de la recette suffisent à le faire échouer
+sur « too many git repo URLs » (carnet : `OUTIL-RFP-URLS`).
+
+Pour la même raison, la **seule** URL de dépôt du corps ci-dessous est celle de
+*Source Code*. Les dépendances sont nommées sans lien, et l'URL de `Binaries`
+est laissée en placeholder — la vraie valeur est dans la recette jointe.
 
 ---
 
@@ -35,7 +41,8 @@ accessible without the app.
 - Native Markdown preview and formatting toolbar.
 - ETag-based conflict detection, so a note edited on both sides is never
   silently overwritten.
-- Authentication by OpenCloud App Token, stored with the Android Keystore.
+- Authentication by OpenCloud App Token, stored with the Android Keystore;
+  experimental OIDC browser login as an alternative when the server offers it.
 
 The server is configured by the user. There is no vendor backend, no account
 system, no telemetry.
@@ -84,7 +91,7 @@ registry by CI on every run
 (`gradle/actions/wrapper-validation`).
 
 **Dependencies** are AndroidX, Kotlin, kotlinx.serialization, WorkManager and
-[goldmark](https://github.com/yuin/goldmark) (MIT). No Google Play Services, no
+goldmark (MIT). No Google Play Services, no
 Firebase, no analytics, no ad SDK, no remote crash reporter. A single sanitized
 crash report may remain in the app's private cache until the user deletes or
 explicitly shares it; it is never uploaded automatically. It holds exception
@@ -114,7 +121,7 @@ that a user can move between an F-Droid install, a direct APK download and
 Obtainium without uninstalling. The recipe sets:
 
 ```yaml
-Binaries: https://github.com/ybediat/OCnotes/releases/download/v%v/OCnotes-%v.apk
+# Binaries: <GitHub release asset OCnotes-%v.apk — see the attached recipe>
 AllowedAPKSigningKeys: b81ebfae3753d5b8fdb703cc0f5177d20bde66a57297f63759d40e771dca9ca4
 ```
 
@@ -130,7 +137,7 @@ inclusion if you prefer that order.
 
 ### Notes
 
-- Current release: `v0.1.4` (versionCode 4).
+- Current release: `v0.1.5` (versionCode 6).
 - The app is **alpha**. It works day to day, but the UI has no instrumented
   tests, and the Spanish and German translations have not been reviewed by
   native speakers on device.

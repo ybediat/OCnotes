@@ -1,0 +1,6 @@
+L'éditeur reste réactif sur les notes longues ou illustrées : la mise en forme
+et le retour à l'aperçu ne retravaillent plus tout le document.
+
+La synchronisation ne bloque plus la saisie ni ne perd de frappe pendant son
+passage. Le mode local avertit avant que l'espace de stockage du serveur ne
+soit plein, et la saisie automatique peut être coupée dans l'éditeur.

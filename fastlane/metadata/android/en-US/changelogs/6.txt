@@ -1,0 +1,6 @@
+The editor stays responsive on long or illustrated notes: formatting and
+returning from preview no longer rework the whole document.
+
+Sync no longer blocks typing or drops keystrokes while it runs. Local mode now
+warns before the server's storage quota fills up, and autofill can be turned
+off in the editor.

@@ -26,6 +26,56 @@ Changelog: https://github.com/ybediat/OCnotes/releases
 RepoType: git
 Repo: https://github.com/ybediat/OCnotes.git
 Builds:
+  - versionName: 0.1.5
+    versionCode: 6
+    commit: v0.1.5
+    subdir: android/app
+    gradle:
+      - yes
+
+    # Révision r27d. À vérifier contre la liste des NDK connus de
+    # fdroidserver : si elle n'y figure pas, n'importe quelle r27 convient. Le
+    # module accepte `-Pocnotes.ndkVersion=<révision>` et le script Linux ne
+    # compare que des minima, précisément pour que cette ligne n'ait pas
+    # besoin d'être exacte.
+    ndk: r27d
+
+    # Le cœur métier est en Go, lié par `gomobile bind`. La chaîne Go n'est pas
+    # dans l'image de build : on l'installe à la révision exacte de go.mod,
+    # checksum vérifié.
+    sudo:
+      - apt-get update
+      - apt-get install -y curl
+      - curl -fsSL -o /tmp/go.tar.gz https://go.dev/dl/go1.26.0.linux-amd64.tar.gz
+      - echo 'aac1b08a0fb0c4e0a7c1555beb7b59180b05dfc5a3d62e40e9de90cd42f88235  /tmp/go.tar.gz' | sha256sum -c -
+      - rm -rf /usr/local/go
+      - tar -C /usr/local -xzf /tmp/go.tar.gz
+      - rm /tmp/go.tar.gz
+
+    # Les lignes sont enchaînées par `&&` : `cd` et `export` tiennent jusqu'au
+    # bout. `git rev-parse` évite de supposer si prebuild démarre à la racine du
+    # dépôt ou dans `subdir`.
+    #
+    # GOPATH reste à son défaut, $HOME/go, donc hors de l'arbre de build : les
+    # exécutables gomobile et gobind n'y sont jamais vus par le scanner.
+    prebuild:
+      - cd $(git rev-parse --show-toplevel)
+      - export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH
+      - export ANDROID_NDK_HOME=$$NDK$$
+      - export GOFLAGS=-mod=readonly
+      - go install golang.org/x/mobile/cmd/gomobile@v0.0.0-20260821190718-4776eadac327
+      - go install golang.org/x/mobile/cmd/gobind@v0.0.0-20260821190718-4776eadac327
+      - gomobile init
+      - mkdir -p android/app/libs
+      - gomobile bind -target=android/arm64,android/amd64 -androidapi 26 -trimpath -ldflags='-s -w' -o android/app/libs/ocnotes.aar ./mobile
+
+    # `gomobile bind` produit cet AAR *avant* Gradle. Le scanner de sources
+    # rejette tout binaire trouvé dans l'arbre de build : sans cette ligne, le
+    # build s'arrête sur « Found binary » alors que le fichier vient d'être
+    # construit depuis les sources du dépôt, sous nos yeux.
+    scanignore:
+      - android/app/libs/ocnotes.aar
+
   - versionName: 0.1.4
     versionCode: 5
     commit: v0.1.4
@@ -149,5 +199,5 @@ AllowedAPKSigningKeys: b81ebfae3753d5b8fdb703cc0f5177d20bde66a57297f63759d40e771
 
 AutoUpdateMode: Version v%v
 UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
-CurrentVersion: 0.1.4
-CurrentVersionCode: 5
+CurrentVersion: 0.1.5
+CurrentVersionCode: 6
