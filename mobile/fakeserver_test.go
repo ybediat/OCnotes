@@ -3,6 +3,7 @@ package mobile
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -44,6 +45,11 @@ type fakeServer struct {
 	// doit fonctionner — c'est le chemin que la plupart des tests éprouvent
 	// sans avoir à le demander.
 	search bool
+
+	// putRetenu, s'il est posé, reçoit un signal à chaque PUT, qui reste
+	// ensuite suspendu jusqu'à ce que le client abandonne : de quoi saisir
+	// une passe en plein échange avec le serveur.
+	putRetenu chan struct{}
 }
 
 // setOffline simule la perte du réseau, de façon réversible.
@@ -134,6 +140,21 @@ func (f *fakeServer) handle(w http.ResponseWriter, r *http.Request) {
 	p, ok := rel(r.URL.Path)
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	f.mu.Lock()
+	retenu := f.putRetenu
+	f.mu.Unlock()
+	if retenu != nil && r.Method == http.MethodPut {
+		// Le corps lu, le serveur surveille la connexion : c'est ce qui
+		// annule le contexte de la requête quand le client abandonne.
+		_, _ = io.Copy(io.Discard, r.Body)
+		select {
+		case retenu <- struct{}{}:
+		default:
+		}
+		<-r.Context().Done()
 		return
 	}
 

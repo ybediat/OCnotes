@@ -139,9 +139,11 @@ func (s *Store) enqueueLocked(op Operation) {
 // d'autre ne remet une note en file, l'éditeur n'écrivant pas ce qu'il n'a pas
 // modifié.
 //
-// Elle ne s'exécute qu'au démarrage et à l'ouverture d'une passe, jamais dans
-// la boucle de drainage : une note qui resterait sale ferait tourner la passe
-// sans fin.
+// Elle s'exécute au démarrage, à l'ouverture et à la clôture d'une passe,
+// jamais dans la boucle de drainage : une note qui resterait sale ferait
+// tourner la passe sans fin. La clôture compte : sans elle, une frappe arrivée
+// pendant la passe n'était réclamée qu'à la passe suivante, et la file se
+// disait vide entre-temps — de quoi laisser partir un débranchement.
 func (s *Store) requeueOrphanWritesLocked() bool {
 	orphelines := make([]string, 0)
 	for chemin, entry := range s.entries {
@@ -180,21 +182,39 @@ func (s *Store) requeueOrphanWritesLocked() bool {
 //
 // Un conflit, lui, n'interrompt rien : il est résolu sur place et la
 // synchronisation continue.
-func (s *Store) Push(ctx context.Context, remote Remote) (Report, error) {
-	var report Report
-
+func (s *Store) Push(ctx context.Context, remote Remote) (report Report, err error) {
 	// Une passe s'ouvre sur la remise en file de ce qui a été perdu de vue.
 	// Une seule fois, hors de la boucle : voir requeueOrphanWritesLocked.
 	s.mu.Lock()
-	reinscrites := s.requeueOrphanWritesLocked()
-	var err error
-	if reinscrites {
+	if s.requeueOrphanWritesLocked() {
 		err = s.save()
 	}
 	s.mu.Unlock()
 	if err != nil {
 		return report, err
 	}
+
+	// L'index n'est plus réécrit après chaque opération, mais par lots : il
+	// porte toutes les entrées, et le réécrire deux fois par note rendait une
+	// passe quadratique — 23 s pour 2 000 notes adoptées, sans même de réseau.
+	// Un arrêt brutal entre deux écritures ne coûte que de rejouer quelques
+	// opérations, que l'If-Match et la comparaison des contenus rendent sans
+	// effet.
+	aEcrire := false
+	derniereEcriture := time.Now()
+	defer func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.requeueOrphanWritesLocked() {
+			aEcrire = true
+		}
+		if aEcrire {
+			if errSave := s.save(); errSave != nil && err == nil {
+				err = errSave
+			}
+		}
+		report.Remaining = len(s.queue)
+	}()
 
 	// misesDeCote compte les opérations que le serveur a refusées pendant cette
 	// passe et qui sont passées en fin de file. Quand elles occupent toute la
@@ -212,23 +232,26 @@ func (s *Store) Push(ctx context.Context, remote Remote) (Report, error) {
 		s.mu.Unlock()
 
 		if err := ctx.Err(); err != nil {
-			report.Remaining = len(s.Pending())
 			return report, err
 		}
 
 		conflict, err := s.apply(ctx, remote, op, &report)
 		if err != nil {
-			if estPanneDeTransport(err) {
-				report.Remaining = len(s.Pending())
+			if condamneLaPasse(err) {
 				return report, err
 			}
 			if premierRefus == nil {
 				premierRefus = err
 			}
-			if err := s.setAside(op); err != nil {
+			deplacee, err := s.setAside(op)
+			if err != nil {
 				return report, err
 			}
-			misesDeCote++
+			// Une tête de file changée entre-temps n'a rien mis de côté : la
+			// compter arrêtait la passe avant d'avoir tout tenté.
+			if deplacee {
+				misesDeCote++
+			}
 			continue
 		}
 		if conflict != nil {
@@ -241,27 +264,40 @@ func (s *Store) Push(ctx context.Context, remote Remote) (Report, error) {
 		if len(s.queue) > 0 && s.queue[0] == op {
 			s.queue = s.queue[1:]
 		}
-		err = s.save()
+		aEcrire = true
+		if time.Since(derniereEcriture) >= intervalleEcritureIndex {
+			err = s.save()
+			aEcrire = false
+			derniereEcriture = time.Now()
+		}
 		s.mu.Unlock()
 		if err != nil {
 			return report, err
 		}
 	}
 
-	report.Remaining = len(s.Pending())
 	return report, premierRefus
 }
 
-// estPanneDeTransport distingue les deux natures d'échec, et c'est toute la
-// décision : une panne de transport condamne la passe entière — rien d'autre ne
-// passera, et l'ordre de la file doit être gardé intact pour la prochaine —
-// tandis qu'un refus ne vise que l'opération qui l'a provoqué.
+// intervalleEcritureIndex espace les écritures de l'index pendant une passe.
+const intervalleEcritureIndex = 2 * time.Second
+
+// condamneLaPasse distingue les deux natures d'échec, et c'est toute la
+// décision : une panne de transport ou un jeton refusé condamne la passe
+// entière — rien d'autre ne passera, et l'ordre de la file doit être gardé
+// intact pour la prochaine — tandis qu'un refus ne vise que l'opération qui
+// l'a provoqué.
+//
+// Le jeton refusé en fait partie : traité comme un refus, il faisait tenter
+// chaque opération de la file avec des identifiants que le serveur venait de
+// rejeter.
 //
 // Un 5xx passe pour un refus alors qu'il est passager. Ce n'est pas grave :
 // toutes les opérations le rencontreront, chacune sera mise de côté une fois,
 // et la passe s'arrêtera d'elle-même après un tour de file.
-func estPanneDeTransport(err error) bool {
+func condamneLaPasse(err error) bool {
 	return errors.Is(err, opencloud.ErrOffline) ||
+		errors.Is(err, opencloud.ErrUnauthorized) ||
 		errors.Is(err, context.DeadlineExceeded) ||
 		errors.Is(err, context.Canceled)
 }
@@ -277,14 +313,17 @@ func estPanneDeTransport(err error) bool {
 // n'a pas le même effet dans l'autre sens — mais il n'engage que des opérations
 // qui s'appliquent. Celle-ci n'a rien appliqué : la faire passer derrière ne
 // change l'effet d'aucune autre, alors que la laisser devant les annule toutes.
-func (s *Store) setAside(op Operation) error {
+//
+// Renvoie faux si l'opération n'était plus en tête : rien n'a été déplacé.
+func (s *Store) setAside(op Operation) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if len(s.queue) > 0 && s.queue[0] == op {
-		s.queue = append(append([]Operation(nil), s.queue[1:]...), op)
+	if len(s.queue) == 0 || s.queue[0] != op {
+		return false, nil
 	}
-	return s.save()
+	s.queue = append(append([]Operation(nil), s.queue[1:]...), op)
+	return true, s.save()
 }
 
 // apply exécute une opération. Un conflit est renvoyé plutôt que remonté comme
@@ -322,6 +361,11 @@ func (s *Store) apply(ctx context.Context, remote Remote, op Operation, report *
 			return s.resolveMoveConflict(ctx, remote, op)
 		}
 		err = remote.MoveTo(ctx, op.Path, op.Target)
+		if errors.Is(err, opencloud.ErrConflict) {
+			// Overwrite: F — la cible a été prise sur le serveur pendant que le
+			// renommage attendait. Le refus se répéterait à chaque passe.
+			return nil, s.resolveMoveTargetTaken(ctx, remote, op, report)
+		}
 		if err != nil && !errors.Is(err, opencloud.ErrNotFound) {
 			return nil, err
 		}
@@ -354,6 +398,9 @@ func (s *Store) structuralChange(ctx context.Context, remote Remote, op Operatio
 }
 
 func (s *Store) resolveDeleteConflict(ctx context.Context, remote Remote, notePath string) (*Conflict, error) {
+	// Observé avant la lecture : une note recréée localement sous ce nom
+	// pendant l'appel ne doit pas être remplacée par la version du serveur.
+	obs := s.Observe(notePath)
 	server, etag, err := remote.Read(ctx, notePath)
 	if errors.Is(err, opencloud.ErrNotFound) {
 		return nil, nil
@@ -361,7 +408,10 @@ func (s *Store) resolveDeleteConflict(ctx context.Context, remote Remote, notePa
 	if err != nil {
 		return nil, err
 	}
-	if err := s.Accept(notePath, server, etag); err != nil {
+	accepted, err := s.AcceptIfUnchanged(notePath, obs, server, etag)
+	if err != nil || !accepted {
+		// Refusée, la note locale repartira par sa propre écriture, qui
+		// trouvera la version du serveur et la confrontera.
 		return nil, err
 	}
 	conflict, err := s.recordConflict(OpDelete, notePath, "", etag)
@@ -372,6 +422,8 @@ func (s *Store) resolveDeleteConflict(ctx context.Context, remote Remote, notePa
 }
 
 func (s *Store) resolveMoveConflict(ctx context.Context, remote Remote, op Operation) (*Conflict, error) {
+	local, _, obsCible, ok := s.getObserved(op.Target)
+	obsSource := s.Observe(op.Path)
 	server, etag, err := remote.Read(ctx, op.Path)
 	if errors.Is(err, opencloud.ErrNotFound) {
 		return nil, nil
@@ -379,16 +431,14 @@ func (s *Store) resolveMoveConflict(ctx context.Context, remote Remote, op Opera
 	if err != nil {
 		return nil, err
 	}
-	local, _, ok := s.Get(op.Target)
 	if !ok {
 		return nil, fmt.Errorf("store: copie locale absente pendant le conflit de déplacement de %s", op.Path)
 	}
-	copyPath := conflictPath(op.Target, time.Now())
-	copyETag, err := remote.Save(ctx, copyPath, local, "")
+	copyPath, copyETag, err := s.saveConflictCopy(ctx, remote, op.Target, local)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.Accept(op.Path, server, etag); err != nil {
+	if _, err := s.AcceptIfUnchanged(op.Path, obsSource, server, etag); err != nil {
 		return nil, err
 	}
 	if err := s.Accept(copyPath, local, copyETag); err != nil {
@@ -397,7 +447,9 @@ func (s *Store) resolveMoveConflict(ctx context.Context, remote Remote, op Opera
 	if err := s.MarkConflict(copyPath); err != nil {
 		return nil, err
 	}
-	if err := s.Forget(op.Target); err != nil {
+	// Une note modifiée pendant la résolution reste où elle est : son écriture
+	// en file la recréera sous ce nom, à côté de la copie.
+	if _, err := s.ForgetIfUnchanged(op.Target, obsCible); err != nil {
 		return nil, err
 	}
 	conflict, err := s.recordConflict(OpMove, op.Path, copyPath, etag)
@@ -407,10 +459,78 @@ func (s *Store) resolveMoveConflict(ctx context.Context, remote Remote, op Opera
 	return &conflict, nil
 }
 
+// resolveMoveTargetTaken place sous un nom libre une note dont le renommage
+// hors connexion visait un nom pris entre-temps sur le serveur.
+//
+// Ce n'est pas un conflit : les deux notes n'ont rien de commun, et proposer
+// « garder le serveur » supprimerait celle de l'utilisateur. Le renommage
+// aboutit donc sous « nom (2) », comme une création sur un nom déjà pris.
+// Sans cela, le serveur refusait le MOVE à chaque passe : l'opération restait
+// en file pour toujours, et le débranchement avec elle.
+//
+// Le cache suit, écritures en attente comprises, et les opérations suivantes
+// qui visaient la cible sont reportées sur le nouveau nom : laissées telles
+// quelles, elles s'appliqueraient à la note de quelqu'un d'autre.
+func (s *Store) resolveMoveTargetTaken(ctx context.Context, remote Remote, op Operation, report *Report) error {
+	for n := 2; n <= maxNomsLibres; n++ {
+		candidat := numberedPath(op.Target, n)
+		s.mu.Lock()
+		pris := s.takenLocked(candidat)
+		s.mu.Unlock()
+		if pris {
+			continue
+		}
+		existe, err := remote.Exists(ctx, candidat)
+		if err != nil {
+			return err
+		}
+		if existe {
+			continue
+		}
+		err = remote.MoveTo(ctx, op.Path, candidat)
+		if errors.Is(err, opencloud.ErrConflict) {
+			continue
+		}
+		// Une source disparue du serveur n'empêche pas le cache de suivre : la
+		// note repartira de là comme une création, sous un nom qui est libre.
+		if err != nil && !errors.Is(err, opencloud.ErrNotFound) {
+			return err
+		}
+
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if err := s.renameLocked(op.Target, candidat, false, false); err != nil {
+			return err
+		}
+		for i := range s.queue {
+			if s.queue[i] == op || (s.queue[i].Kind != OpMove && s.queue[i].Kind != OpDelete) {
+				continue
+			}
+			if suffixe, ok := sousChemin(s.queue[i].Path, op.Target); ok {
+				s.queue[i].Path = candidat + suffixe
+			}
+		}
+		report.Moved++
+		return s.save()
+	}
+	return fmt.Errorf("store: [%s] aucun nom libre pour %s", CodeTargetExists, op.Target)
+}
+
+// maxNomsLibres borne la recherche d'un nom libre, comme notes.availableName.
+const maxNomsLibres = 100
+
+// numberedPath ajoute le suffixe « (n) » avant l'extension.
+func numberedPath(notePath string, n int) string {
+	dir, file := path.Split(notePath)
+	ext := path.Ext(file)
+	base := strings.TrimSuffix(file, ext)
+	return dir + fmt.Sprintf("%s (%d)%s", base, n, ext)
+}
+
 // pushWrite envoie le contenu en cache, en protégeant la version du serveur
 // par un If-Match.
 func (s *Store) pushWrite(ctx context.Context, remote Remote, notePath string, report *Report) (*Conflict, error) {
-	content, entry, ok := s.Get(notePath)
+	content, entry, obs, ok := s.getObserved(notePath)
 	if !ok {
 		// La note a été supprimée entre-temps : il n'y a plus rien à pousser.
 		return nil, nil
@@ -425,7 +545,8 @@ func (s *Store) pushWrite(ctx context.Context, remote Remote, notePath string, r
 	// ferait naître une copie de conflit sur une version qui n'a rien à
 	// arbitrer. On se contente donc de constater l'alignement.
 	if entry.ETag != "" && entry.BaseHash != "" && entry.BaseHash == contentHash(content) {
-		return nil, s.settle(notePath, entry, entry.ETag, entry.BaseHash)
+		s.settle(notePath, obs, entry.ETag, entry.BaseHash)
+		return nil, nil
 	}
 
 	// Un ETag vide signale une note que le serveur n'a jamais vue : elle a été
@@ -446,7 +567,7 @@ func (s *Store) pushWrite(ctx context.Context, remote Remote, notePath string, r
 			return nil, existsErr
 		}
 		if exists {
-			return s.resolveConflict(ctx, remote, notePath, content, entry.BaseHash, report)
+			return s.resolveConflict(ctx, remote, notePath, content, entry.BaseHash, obs, report)
 		}
 		etag, err = remote.SaveNew(ctx, notePath, content)
 	} else {
@@ -454,9 +575,7 @@ func (s *Store) pushWrite(ctx context.Context, remote Remote, notePath string, r
 	}
 
 	if err == nil {
-		if err := s.settle(notePath, entry, etag, contentHash(content)); err != nil {
-			return nil, err
-		}
+		s.settle(notePath, obs, etag, contentHash(content))
 		report.Pushed++
 		return nil, nil
 	}
@@ -464,28 +583,32 @@ func (s *Store) pushWrite(ctx context.Context, remote Remote, notePath string, r
 	if !errors.Is(err, opencloud.ErrConflict) {
 		return nil, err
 	}
-	return s.resolveConflict(ctx, remote, notePath, content, entry.BaseHash, report)
+	return s.resolveConflict(ctx, remote, notePath, content, entry.BaseHash, obs, report)
 }
 
 // settle enregistre qu'une note est alignée sur le serveur : ETag et base
 // décrivent désormais la version distante.
 //
-// sent est l'entrée telle qu'elle était au moment de l'envoi. La note a pu
-// être modifiée depuis : elle reste alors sale, et une nouvelle écriture est
-// déjà en file. L'ETag et la base, eux, décrivent le serveur et se posent dans
-// tous les cas.
-func (s *Store) settle(notePath string, sent Entry, etag, hash string) error {
+// sent est l'observation prise au moment de l'envoi. La note a pu être
+// modifiée depuis : elle reste alors sale, et sa nouvelle version partira à
+// son tour. L'ETag et la base, eux, décrivent le serveur et se posent dans
+// tous les cas — sauf après une purge, où il n'y a plus rien à décrire.
+//
+// L'index n'est pas écrit ici : Push s'en charge, par lots.
+func (s *Store) settle(notePath string, sent Observation, etag, hash string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if current, ok := s.entries[notePath]; ok {
-		current.ETag = etag
-		current.BaseHash = hash
-		if current.Size == sent.Size && current.LocalMod.Equal(sent.LocalMod) {
-			current.Dirty = false
-		}
+	current, ok := s.entries[notePath]
+	if !ok || s.epoch != sent.epoch {
+		return
 	}
-	return s.save()
+	current.ETag = etag
+	current.BaseHash = hash
+	if current.gen == sent.gen {
+		current.Dirty = false
+	}
+	s.touchLocked(current)
 }
 
 // resolveConflict traite une écriture refusée par le serveur.
@@ -496,11 +619,15 @@ func (s *Store) settle(notePath string, sent Entry, etag, hash string) error {
 // perdre du texte que l'utilisateur avait écrit.
 //
 // Encore faut-il qu'il y ait un conflit. Un refus du serveur dit seulement que
-// la version distante a bougé, pas que la locale a quelque chose à opposer :
-// il faut confronter trois versions, et baseHash porte la troisième — celle
-// sur laquelle les deux côtés étaient d'accord. Sans elle, une note simplement
-// périmée produisait une copie.
-func (s *Store) resolveConflict(ctx context.Context, remote Remote, notePath string, local []byte, baseHash string, report *Report) (*Conflict, error) {
+// la version distante a bougé, pas que les deux côtés ont écrit : il faut
+// confronter trois versions, et baseHash porte la troisième — celle sur
+// laquelle les deux côtés étaient d'accord. Seul le cas où chacun s'en est
+// écarté produit une copie.
+//
+// obs est l'observation prise à l'envoi. Tout ce qui remplace la note locale
+// passe par elle : une frappe arrivée pendant ces allers-retours n'est jamais
+// écrasée, elle reste en attente et la passe suivante la confrontera.
+func (s *Store) resolveConflict(ctx context.Context, remote Remote, notePath string, local []byte, baseHash string, obs Observation, report *Report) (*Conflict, error) {
 	serverContent, serverETag, err := remote.Read(ctx, notePath)
 
 	// Le serveur n'a plus la note : elle a été supprimée ailleurs — interface
@@ -512,19 +639,14 @@ func (s *Store) resolveConflict(ctx context.Context, remote Remote, notePath str
 	// La note réapparaît donc côté serveur, et c'est le comportement voulu :
 	// entre perdre une suppression et perdre un texte, on perd la suppression,
 	// qui se refait d'un geste.
-	//
-	// Sans ce cas, l'erreur remontait jusqu'à Push, qui laissait l'opération en
-	// tête de file : chaque passe rejouait la même lecture, échouait pareil, et
-	// toute la file restait derrière. Une note supprimée depuis l'interface web
-	// suffisait à arrêter la synchronisation de l'appareil, sans que rien ne
-	// désigne la coupable.
 	if errors.Is(err, opencloud.ErrNotFound) {
 		etag, err := remote.SaveNew(ctx, notePath, local)
 		if err != nil {
 			return nil, err
 		}
 		report.Pushed++
-		return nil, s.Accept(notePath, local, etag)
+		s.settle(notePath, obs, etag, contentHash(local))
+		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("store: lecture de la version serveur de %s: %w", notePath, err)
@@ -534,32 +656,50 @@ func (s *Store) resolveConflict(ctx context.Context, remote Remote, notePath str
 	// l'ETag local était simplement périmé (écriture faite par cette même
 	// application depuis un autre appareil, ou passe précédente interrompue).
 	if string(serverContent) == string(local) {
-		if err := s.Accept(notePath, serverContent, serverETag); err != nil {
-			return nil, err
-		}
+		s.settle(notePath, obs, serverETag, contentHash(local))
 		return nil, nil
 	}
 
-	// La version locale est encore celle sur laquelle les deux côtés étaient
-	// d'accord : elle n'a rien à opposer à celle du serveur, qui l'emporte
-	// donc en silence. En conserver une copie ne sauverait aucun texte — elle
-	// ne contient rien que le serveur n'ait déjà eu — et donnerait à
-	// l'utilisateur un doublon à trier pour une modification qu'il n'a pas
-	// faite.
-	//
-	// Une base vide vient d'un index écrit avant que le champ n'existe : on ne
-	// sait alors rien, et l'ancien comportement — conserver — s'applique.
-	if baseHash != "" && contentHash(local) == baseHash {
-		return nil, s.Accept(notePath, serverContent, serverETag)
+	// Une base vide vient d'un index écrit avant que le champ n'existe, ou
+	// d'une note jamais vue du serveur : on ne sait alors rien, et le
+	// comportement prudent — conserver — s'applique.
+	if baseHash != "" {
+		// La version locale est encore la base : elle n'a rien à opposer à
+		// celle du serveur, qui l'emporte donc en silence. En conserver une
+		// copie ne sauverait aucun texte et donnerait à l'utilisateur un
+		// doublon à trier pour une modification qu'il n'a pas faite.
+		if contentHash(local) == baseHash {
+			_, err := s.AcceptIfUnchanged(notePath, obs, serverContent, serverETag)
+			return nil, err
+		}
+
+		// Symétrique : le serveur n'a changé que d'ETag — déplacement,
+		// réindexation, réécriture à l'identique. La version locale est la
+		// seule à s'être écartée de la base, elle l'emporte. Sans ce cas,
+		// une simple modification locale produisait une copie de conflit.
+		if contentHash(serverContent) == baseHash {
+			etag, err := remote.Save(ctx, notePath, local, serverETag)
+			if err != nil {
+				// Un nouveau refus veut dire que le serveur a encore bougé
+				// entre la lecture et l'écriture : la passe suivante
+				// recommencera sur sa nouvelle version.
+				return nil, err
+			}
+			s.settle(notePath, obs, etag, contentHash(local))
+			report.Pushed++
+			return nil, nil
+		}
 	}
 
-	copyPath := conflictPath(notePath, time.Now())
-	copyETag, err := remote.Save(ctx, copyPath, local, "")
+	copyPath, copyETag, err := s.saveConflictCopy(ctx, remote, notePath, local)
 	if err != nil {
 		return nil, fmt.Errorf("store: [%s] sauvegarde de la version locale de %s: %w", CodeStorageIO, notePath, err)
 	}
 
-	if err := s.Accept(notePath, serverContent, serverETag); err != nil {
+	// Refusé, le remplacement laisse la note telle que l'utilisateur vient de
+	// l'écrire : sa prochaine écriture rencontrera le même serveur et produira
+	// sa propre copie. Deux copies valent mieux qu'une frappe perdue.
+	if _, err := s.AcceptIfUnchanged(notePath, obs, serverContent, serverETag); err != nil {
 		return nil, err
 	}
 	if err := s.Accept(copyPath, local, copyETag); err != nil {
@@ -574,6 +714,45 @@ func (s *Store) resolveConflict(ctx context.Context, remote Remote, notePath str
 		return nil, err
 	}
 	return &conflict, nil
+}
+
+// saveConflictCopy envoie la version locale sous un nom de copie libre.
+//
+// Jamais d'écriture inconditionnelle : l'horodatage est à la seconde, et deux
+// conflits sur la même note dans la même seconde — deux appareils, ou un
+// déplacement suivi d'une écriture — faisaient écraser la première copie par
+// la seconde. Le nom est donc vérifié dans le cache et sur le serveur, puis
+// créé avec SaveNew, et un suffixe départage.
+func (s *Store) saveConflictCopy(ctx context.Context, remote Remote, notePath string, content []byte) (string, string, error) {
+	now := time.Now()
+	for n := 1; n <= maxNomsLibres; n++ {
+		candidat := conflictPath(notePath, now)
+		if n > 1 {
+			candidat = numberedPath(candidat, n)
+		}
+		s.mu.Lock()
+		pris := s.takenLocked(candidat)
+		s.mu.Unlock()
+		if pris {
+			continue
+		}
+		existe, err := remote.Exists(ctx, candidat)
+		if err != nil {
+			return "", "", err
+		}
+		if existe {
+			continue
+		}
+		etag, err := remote.SaveNew(ctx, candidat, content)
+		if errors.Is(err, opencloud.ErrConflict) {
+			continue
+		}
+		if err != nil {
+			return "", "", err
+		}
+		return candidat, etag, nil
+	}
+	return "", "", fmt.Errorf("store: [%s] aucun nom libre pour la copie de %s", CodeTargetExists, notePath)
 }
 
 // conflictPath construit le nom de la copie de secours.
@@ -597,20 +776,26 @@ func (s *Store) Pull(ctx context.Context, remote Remote, notePath string) error 
 	s.mu.Lock()
 	entry, known := s.entries[notePath]
 	dirty := known && entry.Dirty
+	obs := s.observeLocked(notePath)
 	s.mu.Unlock()
 
 	if dirty {
 		return nil
 	}
 
+	// La note a pu être modifiée pendant la lecture : l'éditeur enregistre
+	// seul, et une passe de fond ne prévient personne. La version du serveur
+	// n'est alors plus la bonne à poser, et l'effacement encore moins.
 	content, etag, err := remote.Read(ctx, notePath)
 	if err != nil {
 		if errors.Is(err, opencloud.ErrNotFound) {
-			return s.Forget(notePath)
+			_, err := s.ForgetIfUnchanged(notePath, obs)
+			return err
 		}
 		return err
 	}
-	return s.Accept(notePath, content, etag)
+	_, err = s.AcceptIfUnchanged(notePath, obs, content, etag)
+	return err
 }
 
 // Adopt prépare la montée de tout le contenu local vers un serveur qu'on vient
@@ -663,6 +848,7 @@ func (s *Store) Adopt() error {
 		entry.ETag = ""
 		entry.BaseHash = ""
 		entry.Dirty = true
+		s.touchLocked(entry)
 
 		s.enqueueLocked(Operation{Kind: OpWrite, Path: chemin})
 		s.known[chemin] = &Known{Path: chemin, Size: entry.Size, ModTime: entry.LocalMod}
@@ -696,5 +882,7 @@ func (s *Store) Clear() error {
 	s.known = map[string]*Known{}
 	s.conflicts = map[string]Conflict{}
 	s.indexed = false
+	// Une réponse du serveur encore en route ne doit rien réécrire ici.
+	s.epoch++
 	return s.save()
 }
