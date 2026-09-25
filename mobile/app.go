@@ -74,6 +74,13 @@ type App struct {
 	// réessayer à chaque geste.
 	offlineUntil time.Time
 
+	// passeCtx est le contexte dont dérivent les passes serveur — synchro,
+	// résolution de conflit — de la session courante. La déconnexion l'annule
+	// pour ne pas attendre qu'une passe engagée finisse de parler au serveur,
+	// ni la laisser réécrire le cache qu'elle vient de purger.
+	passeCtx  context.Context
+	passeStop context.CancelFunc
+
 	// edits garde les images retirées des notes ouvertes en saisie, par
 	// session d'édition (voir OpenEditJSON). Verrou à part : une écriture ne
 	// doit pas attendre une synchronisation qui tient a.mu.
@@ -147,6 +154,37 @@ func (a *App) session() (*notes.Library, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.lib, a.cfg.IsLocal()
+}
+
+// sessionDePasse est session() augmentée du contexte des passes, lu sous le
+// même verrou : une passe qui a obtenu la bibliothèque d'une session obtient
+// aussi de quoi être annulée avec elle.
+func (a *App) sessionDePasse() (*notes.Library, bool, context.Context) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.passeCtx == nil {
+		a.passeCtx, a.passeStop = context.WithCancel(context.Background())
+	}
+	return a.lib, a.cfg.IsLocal(), a.passeCtx
+}
+
+// couperPassesLocked annule toute passe engagée sur la session courante.
+// L'appelant détient a.mu.
+func (a *App) couperPassesLocked() {
+	if a.passeStop != nil {
+		a.passeStop()
+	}
+	a.passeCtx, a.passeStop = nil, nil
+}
+
+// prendrePasse réserve le serveur pour une passe, ou renonce à l'échéance.
+func (a *App) prendrePasse(ctx context.Context) (func(), error) {
+	select {
+	case a.syncPass <- struct{}{}:
+		return func() { <-a.syncPass }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 // rememberLastPath retient le dernier dossier consulté, pour rouvrir
@@ -390,11 +428,23 @@ func (a *App) connectClient(serverURL, username, authMode string, client *opencl
 //
 // Dans les deux cas l'application revient au mode vide, celui d'une
 // installation neuve : le choix entre serveur et mode local se repose.
+//
+// Une passe en cours est annulée, puis attendue : sans cela, elle continuait
+// de répondre au serveur après la purge et réécrivait dans le cache des notes
+// du compte qu'on venait de quitter.
 func (a *App) Disconnect() error {
 	a.mu.Lock()
-	defer a.mu.Unlock()
-
+	a.couperPassesLocked()
 	a.client, a.oidcAuth, a.lib, a.cfg = nil, nil, nil, config.Config{}
+	a.mu.Unlock()
+
+	// Plus aucune passe ne peut démarrer — la bibliothèque est nulle — et celle
+	// qui tourne vient d'être annulée : l'attente est brève.
+	a.syncPass <- struct{}{}
+	defer func() { <-a.syncPass }()
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if err := a.cache.Clear(); err != nil {
 		return err
 	}
@@ -749,6 +799,18 @@ func (a *App) DetachJSON() (string, error) {
 	if lib == nil {
 		return "", errNoWorkspace()
 	}
+
+	// La file n'est vérifiée qu'une fois le serveur réservé : une passe en
+	// cours pouvait encore y remettre une écriture, ou résoudre un conflit
+	// dans un cache déjà devenu le seul dépositaire.
+	ctx, cancel := context.WithTimeout(context.Background(), syncPassTimeout)
+	defer cancel()
+	liberer, err := a.prendrePasse(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer liberer()
+
 	if n := len(a.cache.Pending()); n > 0 {
 		return "", fmt.Errorf(
 			"mobile: [%s] %d modification(s) n'ont pas atteint le serveur, synchroniser d'abord",
@@ -765,6 +827,7 @@ func (a *App) DetachJSON() (string, error) {
 
 	// Le token n'a jamais été écrit ici ; c'est Android qui le retire du
 	// Keystore de son côté.
+	a.couperPassesLocked()
 	a.client, a.oidcAuth, a.lib = nil, nil, nil
 	a.cfg = config.Config{Mode: config.ModeLocal, LastPath: a.cfg.LastPath}
 	if err := config.Save(a.dataDir, a.cfg); err != nil {
@@ -1627,7 +1690,7 @@ type syncResult struct {
 // dans le résultat, avec ce qui a tout de même été propagé. L'interface peut
 // ainsi afficher « 3 notes envoyées, 2 en attente » plutôt qu'un échec sec.
 func (a *App) SyncJSON() (string, error) {
-	lib, local := a.session()
+	lib, local, base := a.sessionDePasse()
 
 	if local {
 		return "", errLocalMode("la synchronisation")
@@ -1636,17 +1699,14 @@ func (a *App) SyncJSON() (string, error) {
 		return "", errNoWorkspace()
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), syncPassTimeout)
+	ctx, cancel := context.WithTimeout(base, syncPassTimeout)
 	defer cancel()
 
 	// WorkManager, le bouton manuel et tout futur appel de la façade convergent
 	// ici. Le Store protège sa mémoire, mais une passe entière doit être seule à
 	// parler au serveur : sinon deux appels peuvent rejouer la même tête de file.
-	select {
-	case a.syncPass <- struct{}{}:
-		defer func() { <-a.syncPass }()
-	case <-ctx.Done():
-		err := ctx.Err()
+	liberer, err := a.prendrePasse(ctx)
+	if err != nil {
 		return toJSON(syncResult{
 			Conflicts: []conflictInfo{},
 			Remaining: a.PendingCount(),
@@ -1654,6 +1714,7 @@ func (a *App) SyncJSON() (string, error) {
 			ErrorCode: ErrorCode(err.Error()),
 		})
 	}
+	defer liberer()
 
 	report, err := a.cache.Push(ctx, lib)
 
@@ -1702,7 +1763,7 @@ func (a *App) ResolveConflictJSON(requestJSON string) (string, error) {
 		return "", errors.New("résolution de conflit invalide : décision inconnue")
 	}
 
-	lib, local := a.session()
+	lib, local, base := a.sessionDePasse()
 	if local {
 		return "", errLocalMode("arbitrer un conflit")
 	}
@@ -1710,14 +1771,13 @@ func (a *App) ResolveConflictJSON(requestJSON string) (string, error) {
 		return "", errNoWorkspace()
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), syncPassTimeout)
+	ctx, cancel := context.WithTimeout(base, syncPassTimeout)
 	defer cancel()
-	select {
-	case a.syncPass <- struct{}{}:
-		defer func() { <-a.syncPass }()
-	case <-ctx.Done():
-		return "", ctx.Err()
+	liberer, err := a.prendrePasse(ctx)
+	if err != nil {
+		return "", err
 	}
+	defer liberer()
 
 	next, err := a.cache.ResolveConflict(ctx, lib, request.ID, resolution)
 	if err != nil {

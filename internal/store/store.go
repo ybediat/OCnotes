@@ -98,6 +98,24 @@ type Entry struct {
 	Size       int64     `json:"size"`
 	LocalMod   time.Time `json:"localMod"`
 	LastAccess time.Time `json:"lastAccess,omitempty"`
+
+	// gen change à chaque modification de l'entrée. Il n'est pas persisté :
+	// il ne sert qu'à comparer deux états observés par le même processus, de
+	// part et d'autre d'un appel réseau. Voir Observation.
+	gen uint64
+}
+
+// Observation fige l'état d'une entrée avant un appel réseau.
+//
+// Entre la lecture d'une note et le retour du serveur, l'utilisateur a pu
+// taper, renommer ou se déconnecter. Tout ce qui écrit dans le cache une
+// réponse du serveur doit donc vérifier que l'entrée est restée celle qu'il a
+// observée : sinon il remplacerait un texte qu'il n'a jamais vu, et le
+// marquerait propre — la frappe disparaîtrait sans laisser de trace.
+type Observation struct {
+	present bool
+	gen     uint64
+	epoch   uint64
 }
 
 // Store est le cache local.
@@ -132,6 +150,11 @@ type Store struct {
 	// localOnly dit qu'aucun serveur ne double ce cache : il n'est plus un
 	// cache mais le stockage. Voir SetLocalOnly pour ce que cela change.
 	localOnly bool
+
+	// gen alimente Entry.gen ; epoch change à chaque purge, pour qu'aucune
+	// réponse arrivée après une déconnexion ne réécrive le cache vidé.
+	gen   uint64
+	epoch uint64
 }
 
 // persisted est la forme sérialisée de l'état du cache.
@@ -353,18 +376,26 @@ func (s *Store) save() error {
 
 // Get renvoie le contenu en cache d'une note.
 func (s *Store) Get(notePath string) ([]byte, Entry, bool) {
+	content, entry, _, ok := s.getObserved(notePath)
+	return content, entry, ok
+}
+
+// getObserved lit une note et l'observation qui l'accompagne, d'un seul
+// verrou : lues séparément, une frappe pourrait se glisser entre les deux.
+func (s *Store) getObserved(notePath string) ([]byte, Entry, Observation, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	obs := s.observeLocked(notePath)
 	entry, ok := s.entries[notePath]
 	if !ok {
-		return nil, Entry{}, false
+		return nil, Entry{}, obs, false
 	}
 
 	content, err := os.ReadFile(s.blobPath(entry.Cache))
 	if err != nil {
 		// L'index connaît la note mais le fichier a disparu : on traite le
 		// cache comme absent plutôt que de propager une erreur d'E/S.
-		return nil, Entry{}, false
+		return nil, Entry{}, obs, false
 	}
 	// La date d'accès reste en mémoire : l'éviction la voit tout de suite, et
 	// la prochaine écriture de l'index l'emporte. La persister ici réécrivait
@@ -373,7 +404,41 @@ func (s *Store) Get(notePath string) ([]byte, Entry, bool) {
 	// cette date ; au pire une note lue est évincée un peu tôt et se
 	// retélécharge. En mode local, rien n'est évincé.
 	entry.LastAccess = time.Now().UTC()
-	return content, *entry, true
+	return content, *entry, obs, true
+}
+
+// Observe fige l'état actuel d'une entrée, présente ou non.
+func (s *Store) Observe(notePath string) Observation {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.observeLocked(notePath)
+}
+
+func (s *Store) observeLocked(notePath string) Observation {
+	obs := Observation{epoch: s.epoch}
+	if entry, ok := s.entries[notePath]; ok {
+		obs.present = true
+		obs.gen = entry.gen
+	}
+	return obs
+}
+
+// unchangedSinceLocked dit si l'entrée est toujours celle qui a été observée.
+func (s *Store) unchangedSinceLocked(notePath string, obs Observation) bool {
+	if s.epoch != obs.epoch {
+		return false
+	}
+	entry, ok := s.entries[notePath]
+	if ok != obs.present {
+		return false
+	}
+	return !ok || entry.gen == obs.gen
+}
+
+// touchLocked signale qu'une entrée vient de changer.
+func (s *Store) touchLocked(entry *Entry) {
+	s.gen++
+	entry.gen = s.gen
 }
 
 // CachedEntry indique si le contenu est disponible sans le lire ni modifier
@@ -467,16 +532,47 @@ func (s *Store) hasQueuedWriteLocked(notePath string) bool {
 	return false
 }
 
-// Store enregistre une version reçue du serveur : le cache est alors aligné,
+// Accept enregistre une version reçue du serveur : le cache est alors aligné,
 // donc propre, et rien n'est mis en file.
+//
+// Sans condition : réservé aux chemins que personne d'autre ne peut toucher
+// pendant l'appel réseau — une copie de conflit qu'on vient de nommer, une
+// note qu'on vient de créer. Partout ailleurs, AcceptIfUnchanged.
 func (s *Store) Accept(notePath string, content []byte, etag string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if err := s.acceptLocked(notePath, content, etag); err != nil {
+		return err
+	}
+	return s.save()
+}
+
+// AcceptIfUnchanged enregistre une version reçue du serveur seulement si
+// l'entrée est restée celle qui a été observée avant l'appel réseau.
+//
+// Le refus n'est pas une erreur : la note a bougé localement, elle reste telle
+// quelle et la synchronisation suivante la confrontera au serveur. Accepter
+// quand même remplaçait la frappe par la version distante et la marquait
+// propre — elle n'existait plus nulle part.
+func (s *Store) AcceptIfUnchanged(notePath string, obs Observation, content []byte, etag string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.unchangedSinceLocked(notePath, obs) {
+		return false, nil
+	}
+	if err := s.acceptLocked(notePath, content, etag); err != nil {
+		return false, err
+	}
+	return true, s.save()
+}
+
+func (s *Store) acceptLocked(notePath string, content []byte, etag string) error {
 	if err := s.writeBlob(notePath, content); err != nil {
 		return err
 	}
-	s.entries[notePath] = &Entry{
+	entry := &Entry{
 		Path:       notePath,
 		Cache:      cacheName(notePath),
 		ETag:       etag,
@@ -486,7 +582,9 @@ func (s *Store) Accept(notePath string, content []byte, etag string) error {
 		LocalMod:   time.Now().UTC(),
 		LastAccess: time.Now().UTC(),
 	}
-	return s.save()
+	s.touchLocked(entry)
+	s.entries[notePath] = entry
+	return nil
 }
 
 func (s *Store) putLocked(notePath string, content []byte, enqueue bool) error {
@@ -507,6 +605,7 @@ func (s *Store) putLocked(notePath string, content []byte, enqueue bool) error {
 	entry.Size = int64(len(content))
 	entry.LocalMod = time.Now().UTC()
 	entry.LastAccess = entry.LocalMod
+	s.touchLocked(entry)
 
 	if enqueue {
 		s.enqueueLocked(Operation{Kind: OpWrite, Path: notePath})
@@ -598,6 +697,15 @@ func (s *Store) rename(from, to string, enqueue, refuseTaken bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if err := s.renameLocked(from, to, enqueue, refuseTaken); err != nil {
+		return err
+	}
+	return s.save()
+}
+
+// renameLocked porte le renommage sans écrire l'index. L'appelant doit
+// détenir le verrou, et sauvegarder.
+func (s *Store) renameLocked(from, to string, enqueue, refuseTaken bool) error {
 	// Rien à faire, et surtout rien à tenter : le chemin de cache dérive du
 	// chemin de note, donc la boucle plus bas réécrirait le fichier puis le
 	// supprimerait comme s'il s'agissait de l'ancien. Renommer une note sous
@@ -660,6 +768,7 @@ func (s *Store) rename(from, to string, enqueue, refuseTaken bool) error {
 		}
 		entry.Path = cible
 		entry.Cache = nom
+		s.touchLocked(entry)
 		delete(s.entries, chemin)
 		s.entries[cible] = entry
 	}
@@ -682,7 +791,7 @@ func (s *Store) rename(from, to string, enqueue, refuseTaken bool) error {
 		suffixe, _ := sousChemin(chemin, from)
 		s.enqueueLocked(Operation{Kind: OpWrite, Path: to + suffixe})
 	}
-	return s.save()
+	return nil
 }
 
 // dequeueWritesUnderLocked retire de la file les écritures visant un chemin ou
@@ -792,4 +901,17 @@ func (s *Store) Forget(itemPath string) error {
 
 	s.dropLocked(itemPath)
 	return s.save()
+}
+
+// ForgetIfUnchanged est à Forget ce qu'AcceptIfUnchanged est à Accept : une
+// note modifiée pendant l'appel réseau n'est pas oubliée, sa frappe avec.
+func (s *Store) ForgetIfUnchanged(itemPath string, obs Observation) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.unchangedSinceLocked(itemPath, obs) {
+		return false, nil
+	}
+	s.dropLocked(itemPath)
+	return true, s.save()
 }

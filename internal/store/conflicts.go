@@ -111,6 +111,25 @@ func (s *Store) keepLocal(ctx context.Context, remote Remote, conflict Conflict)
 	if !cached || entry.ETag == "" {
 		return nil, fmt.Errorf("store: copie locale absente ou sans ETag pour %s", conflict.CopyPath)
 	}
+
+	// La référence a pu être modifiée depuis le conflit, ou pendant les appels
+	// qui suivent. Dans les deux cas, la remplacer effacerait ce texte : elle
+	// reste telle quelle, et sa propre écriture rencontrera sur le serveur la
+	// version choisie ici — un nouveau conflit, avec sa copie, plutôt qu'une
+	// perte.
+	s.mu.Lock()
+	ref, refCached := s.entries[conflict.Path]
+	refDirty := refCached && ref.Dirty
+	refObs := s.observeLocked(conflict.Path)
+	s.mu.Unlock()
+	accepter := func(content []byte, etag string) error {
+		if refDirty {
+			return nil
+		}
+		_, err := s.AcceptIfUnchanged(conflict.Path, refObs, content, etag)
+		return err
+	}
+
 	copyETag, err := remote.Stat(ctx, conflict.CopyPath)
 	if err != nil {
 		return nil, err
@@ -120,7 +139,7 @@ func (s *Store) keepLocal(ctx context.Context, remote Remote, conflict Conflict)
 	}
 	etag, err := remote.Save(ctx, conflict.Path, local, conflict.ServerETag)
 	if err == nil {
-		if err := s.Accept(conflict.Path, local, etag); err != nil {
+		if err := accepter(local, etag); err != nil {
 			return nil, err
 		}
 		if _, err := s.ResolveConflict(ctx, remote, conflict.ID, KeepServer); err != nil {
@@ -139,7 +158,7 @@ func (s *Store) keepLocal(ctx context.Context, remote Remote, conflict Conflict)
 	if string(server) == string(local) {
 		// La première écriture a pu aboutir, puis la réponse se perdre. La
 		// référence contient déjà le choix local : on ne la réécrit pas.
-		if err := s.Accept(conflict.Path, server, serverETag); err != nil {
+		if err := accepter(server, serverETag); err != nil {
 			return nil, err
 		}
 		if _, err := s.ResolveConflict(ctx, remote, conflict.ID, KeepServer); err != nil {
@@ -147,7 +166,7 @@ func (s *Store) keepLocal(ctx context.Context, remote Remote, conflict Conflict)
 		}
 		return nil, nil
 	}
-	if err := s.Accept(conflict.Path, server, serverETag); err != nil {
+	if err := accepter(server, serverETag); err != nil {
 		return nil, err
 	}
 	next, err := s.recordConflict(conflict.Operation, conflict.Path, conflict.CopyPath, serverETag)

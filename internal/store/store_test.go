@@ -133,6 +133,11 @@ func (r *fakeRemote) MoveTo(_ context.Context, from, to string) error {
 	if !ok {
 		return fmt.Errorf("fake: %s: %w", from, opencloud.ErrNotFound)
 	}
+	// Overwrite: F, comme le client réel : une cible occupée est refusée en
+	// 412. Le faux serveur l'écrasait, et masquait ainsi une file bloquée.
+	if _, taken := r.files[to]; taken {
+		return fmt.Errorf("fake: %s: %w", to, opencloud.ErrConflict)
+	}
 	r.files[to], r.etags[to] = content, r.etags[from]
 	delete(r.files, from)
 	delete(r.etags, from)

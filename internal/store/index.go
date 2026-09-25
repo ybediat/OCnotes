@@ -179,6 +179,7 @@ func (s *Store) GoLocal() ([]string, error) {
 		s.known[chemin] = &Known{Path: chemin, Size: e.Size, ModTime: e.LocalMod}
 		e.Dirty = false
 		e.Conflict = false
+		s.touchLocked(e)
 	}
 	s.conflicts = map[string]Conflict{}
 	s.queue = nil
