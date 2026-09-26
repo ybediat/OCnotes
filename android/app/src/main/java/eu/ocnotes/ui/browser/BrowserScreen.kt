@@ -135,9 +135,9 @@ fun BrowserScreen(
 
     // Consommer l'événement change la clé du `LaunchedEffect`, qui s'annule à
     // la recomposition suivante. Tout ce qui suspend part donc dans cette
-    // portée-ci, qui survit à la consommation : sans elle, `partagerFichiers`
-    // était annulé au retour de `Dispatchers.IO`, avant `startActivity`, et le
-    // bouton « Partager » ne produisait rien.
+    // portée-ci, qui survit à la consommation : sans elle, le partage était
+    // annulé avant `startActivity` et le bouton « Partager » ne produisait
+    // rien — le même sort attendait chaque snackbar de cet écran.
     val portee = rememberCoroutineScope()
 
     LaunchedEffect(evenement) {
@@ -154,10 +154,8 @@ fun BrowserScreen(
 
             is BrowserEvent.Partager -> {
                 viewModel.evenementConsomme()
-                portee.launch {
-                    partagerFichiers(context, e.fichiers)
-                    avertissementPartage?.let { snackbar.showSnackbar(it) }
-                }
+                partagerFichiers(context, e.fichiers)
+                portee.launch { avertissementPartage?.let { snackbar.showSnackbar(it) } }
             }
 
             null -> Unit
@@ -565,10 +563,10 @@ private fun ListeEntrees(
                     onBasculer = { onBasculer(entree) },
                     onRenommer = { onRenommer(entree) },
                     onDeplacer = if (entree.isDir) null else ({ onDeplacer(entree) }),
-                    // Partage réservé aux notes : ni dossier (pas de contenu),
-                    // ni document `.docx`/`.odt` (seul son texte extrait
-                    // traverse la façade, pas son binaire).
-                    onPartager = if (entree.isDir || entree.readOnly) {
+                    // Partage réservé aux fichiers : un dossier n'a pas de
+                    // contenu à joindre. Un document `.docx`/`.odt` part tel
+                    // quel, recopié par le cœur Go.
+                    onPartager = if (entree.isDir) {
                         null
                     } else {
                         ({ onPartager(entree) })
@@ -694,7 +692,7 @@ private fun LigneEntree(
     // `null` retire l'action du menu plutôt que de l'y laisser inerte —
     // c'est le cas d'un dossier, que DeplacerDialog ne couvre pas.
     onDeplacer: (() -> Unit)?,
-    // `null` pour un dossier ou un document : le partage ne joint que des notes.
+    // `null` pour un dossier : le partage ne joint que des fichiers.
     onPartager: (() -> Unit)?,
     onSupprimer: () -> Unit,
 ) {

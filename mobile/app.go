@@ -28,6 +28,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -1920,6 +1921,25 @@ func (a *App) RenderFileJSON(filePath string) (string, error) {
 		return "", err
 	}
 	return toJSON(versNoteBlocks(blocks))
+}
+
+// ExportFile recopie un fichier, note ou document, vers un chemin du disque
+// choisi par l'interface — pour le joindre à un partage.
+//
+// Le contenu ne traverse pas la frontière : seuls les deux chemins le font.
+// C'est ce qui permet de partager un .docx ou un .odt, qu'une chaîne UTF-8
+// mutilerait, et d'épargner à une note illustrée l'aller-retour de ses images
+// par Kotlin. Les octets écrits sont exactement ceux du cache, avec le même
+// repli hors connexion que ReadNote.
+func (a *App) ExportFile(filePath, destPath string) error {
+	content, err := a.readBytes(filePath)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(destPath, content, 0o600); err != nil {
+		return fmt.Errorf("mobile: [%s] écriture de la copie de %s : %w", store.CodeStorageIO, filePath, err)
+	}
+	return nil
 }
 
 // versNoteBlocks convertit les blocs du cœur vers la forme sérialisée.

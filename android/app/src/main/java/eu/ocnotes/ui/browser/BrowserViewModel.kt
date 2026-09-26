@@ -14,7 +14,8 @@ import eu.ocnotes.data.FolderRefDto
 import eu.ocnotes.data.OCnotesException
 import eu.ocnotes.data.OCnotesRepository
 import eu.ocnotes.data.PreferencesAffichage
-import eu.ocnotes.ui.common.FichierPartage
+import eu.ocnotes.ui.common.cibleLibre
+import eu.ocnotes.ui.common.preparerDossierPartage
 import eu.ocnotes.ui.common.Texte
 import eu.ocnotes.ui.common.texte
 import eu.ocnotes.sync.SyncScheduler
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 
 data class BrowserUiState(
     /**
@@ -103,12 +105,12 @@ data class BrowserUiState(
         get() = peutDeplacerSelection && !selectionContientDocument
 
     /**
-     * Le partage groupé est proposable dans les mêmes conditions que la copie :
-     * on ne joint en pièce jointe que des notes `.md` ou `.txt`. Un dossier n'a
-     * pas de contenu, et le binaire d'un document `.docx` ne traverse pas la
-     * façade — seul son texte extrait le fait.
+     * Le partage groupé est proposable dans les mêmes conditions que le
+     * déplacement : aucune entrée n'est un dossier, qui n'a pas de contenu à
+     * joindre. Un document `.docx`/`.odt` part tel quel — le cœur Go le recopie
+     * octet pour octet, sans qu'il traverse la façade.
      */
-    val peutPartagerSelection: Boolean get() = peutCopierSelection
+    val peutPartagerSelection: Boolean get() = peutDeplacerSelection
 
     /**
      * Ce que la liste montre réellement : [entrees] filtré puis ordonné.
@@ -162,15 +164,15 @@ sealed interface BrowserEvent {
     data class Message(val texte: Texte) : BrowserEvent
 
     /**
-     * Ouvrir le sélecteur de partage avec ces notes en pièce jointe.
+     * Ouvrir le sélecteur de partage avec ces fichiers en pièce jointe.
      *
-     * Le contenu est déjà lu : l'écriture des fichiers et l'intent sont du
-     * ressort de la vue, qui seule a un `Context`. [avertissement] porte le cas
-     * d'un lot dont une partie n'a pas pu être lue hors connexion — les autres
-     * partent quand même, et le message le dit après coup.
+     * Les copies sont déjà écrites : ne reste que l'intent, du ressort de la
+     * vue, qui seule a un `Context`. [avertissement] porte le cas d'un lot dont
+     * une partie n'a pas pu être lue hors connexion — les autres partent quand
+     * même, et le message le dit après coup.
      */
     data class Partager(
-        val fichiers: List<FichierPartage>,
+        val fichiers: List<File>,
         val avertissement: Texte? = null,
     ) : BrowserEvent
 }
@@ -187,6 +189,8 @@ class BrowserViewModel(
     private val repository: OCnotesRepository,
     private val syncScheduler: SyncScheduler,
     private val preferences: PreferencesAffichage,
+    /** `cacheDir/partage/`, le seul dossier que le `FileProvider` expose. */
+    private val dossierPartage: File,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BrowserUiState())
@@ -521,20 +525,20 @@ class BrowserViewModel(
     }
 
     /**
-     * Partage une note en pièce jointe.
+     * Partage une note ou un document en pièce jointe.
      *
-     * La lecture passe par le cache (`readNote`) : elle aboutit hors connexion
-     * si la note a déjà été ouverte, et échoue proprement sinon —
-     * `[CONTENT_NOT_CACHED]`, formulé par la couche d'erreur. L'écriture du
-     * fichier et l'intent sont laissés à la vue.
+     * La copie passe par le cache (`exportFile`) : elle aboutit hors connexion
+     * si le fichier a déjà été ouvert, et échoue proprement sinon —
+     * `[CONTENT_NOT_CACHED]`, formulé par la couche d'erreur. L'intent est
+     * laissé à la vue.
      */
     fun partager(entree: FolderEntryDto) {
         viewModelScope.launch {
             try {
-                val contenu = repository.readNote(entree.path)
-                _evenements.value = BrowserEvent.Partager(
-                    listOf(FichierPartage(entree.name, contenu)),
-                )
+                val dossier = preparerDossierPartage(dossierPartage)
+                val cible = cibleLibre(dossier, entree.name, mutableSetOf())
+                repository.exportFile(entree.path, cible)
+                _evenements.value = BrowserEvent.Partager(listOf(cible))
             } catch (e: OCnotesException) {
                 _evenements.value = BrowserEvent.Message(e.texte())
             }
@@ -556,24 +560,28 @@ class BrowserViewModel(
         executerLot(R.plurals.browser_lot_supprimes) { repository.delete(it) }
 
     /**
-     * Lit chaque note sélectionnée et émet un [BrowserEvent.Partager].
+     * Recopie chaque fichier sélectionné et émet un [BrowserEvent.Partager].
      *
-     * Ce n'est pas un [executerLot] : rien n'est écrit ni synchronisé, et le
-     * résultat n'est pas un résumé mais une liste de fichiers à joindre. Une
-     * note illisible hors connexion est retirée du lot — les autres partent, et
-     * l'avertissement porté par l'événement le signale. Si aucune n'a pu être
-     * lue, on ne montre que l'erreur.
+     * Ce n'est pas un [executerLot] : rien n'est écrit sur le serveur ni
+     * synchronisé, et le résultat n'est pas un résumé mais une liste de
+     * fichiers à joindre. Un fichier illisible hors connexion est retiré du
+     * lot — les autres partent, et l'avertissement porté par l'événement le
+     * signale. Si aucun n'a pu être lu, on ne montre que l'erreur.
      */
     fun partagerLot() {
         val cibles = _uiState.value.selection.toList()
         if (cibles.isEmpty()) return
         viewModelScope.launch {
-            val fichiers = mutableListOf<FichierPartage>()
+            val dossier = preparerDossierPartage(dossierPartage)
+            val nomsPris = mutableSetOf<String>()
+            val fichiers = mutableListOf<File>()
             val echecs = mutableListOf<OCnotesException>()
             for (chemin in cibles) {
                 val entree = _uiState.value.entrees.firstOrNull { it.path == chemin } ?: continue
                 try {
-                    fichiers += FichierPartage(entree.name, repository.readNote(chemin))
+                    val cible = cibleLibre(dossier, entree.name, nomsPris)
+                    repository.exportFile(chemin, cible)
+                    fichiers += cible
                 } catch (e: OCnotesException) {
                     echecs += e
                 }
@@ -664,6 +672,7 @@ class BrowserViewModel(
                     container.repository,
                     container.syncScheduler,
                     container.preferencesAffichage,
+                    container.dossierPartage,
                 )
             }
         }

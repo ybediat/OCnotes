@@ -1,6 +1,7 @@
 package mobile
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -231,4 +232,98 @@ func TestListFolderJSONMarqueLesDocumentsEnLectureSeule(t *testing.T) {
 	}
 	server.setOffline(true)
 	verifie(t, "hors connexion")
+}
+
+// ExportFile est la seule voie par laquelle un document quitte l'application :
+// la copie doit être celle du serveur à l'octet près, en ligne comme hors
+// connexion. Une conversion en chaîne glissée en chemin — un `string(…)` de
+// trop — ne casserait aucun autre test, et rendrait chaque .docx partagé
+// illisible par son destinataire.
+func TestExportFileRecopieLesOctetsExacts(t *testing.T) {
+	app, server, _ := prepare(t)
+	destination := t.TempDir()
+
+	fichiers := map[string][]byte{
+		// Une note porte aussi des octets que l'UTF-8 ne sait pas écrire : la
+		// copie ne doit pas davantage les « réparer ».
+		"journal.md": []byte("# Journal\n\nété 😀 \xff\xfe fin\n"),
+	}
+	for _, nom := range []string{"exemple.docx", "exemple.odt"} {
+		document, err := os.ReadFile(filepath.Join("..", "internal", "documents", "testdata", nom))
+		if err != nil {
+			t.Fatalf("lecture de la fixture %s: %v", nom, err)
+		}
+		fichiers[nom] = document
+	}
+
+	server.mu.Lock()
+	for nom, contenu := range fichiers {
+		server.files["Notes/"+nom] = contenu
+		server.etags["Notes/"+nom] = server.nextETag()
+	}
+	server.mu.Unlock()
+
+	verifie := func(t *testing.T, cas string) {
+		t.Helper()
+		for nom, attendu := range fichiers {
+			cible := filepath.Join(destination, cas+"-"+nom)
+			if err := app.ExportFile(nom, cible); err != nil {
+				t.Fatalf("%s: ExportFile(%s): %v", cas, nom, err)
+			}
+			obtenu, err := os.ReadFile(cible)
+			if err != nil {
+				t.Fatalf("%s: relecture de %s: %v", cas, cible, err)
+			}
+			if !bytes.Equal(obtenu, attendu) {
+				t.Errorf("%s: %s recopié sur %d octets, attendu %d, contenu différent", cas, nom, len(obtenu), len(attendu))
+			}
+		}
+	}
+
+	verifie(t, "en-ligne")
+	server.setOffline(true)
+	verifie(t, "hors-connexion")
+}
+
+// Hors connexion, un fichier jamais téléchargé ne laisse aucune copie derrière
+// lui : un fichier vide joint à un courriel passerait pour le vrai.
+func TestExportFileHorsConnexionSansCacheNEcritRien(t *testing.T) {
+	app, server, _ := prepare(t)
+
+	server.mu.Lock()
+	server.files["Notes/rapport.docx"] = []byte("PK jamais téléchargé")
+	server.etags["Notes/rapport.docx"] = server.nextETag()
+	server.mu.Unlock()
+	server.setOffline(true)
+
+	cible := filepath.Join(t.TempDir(), "rapport.docx")
+	err := app.ExportFile("rapport.docx", cible)
+	if code := ErrorCode(errString(err)); code != "CONTENT_NOT_CACHED" {
+		t.Errorf("code %q, attendu CONTENT_NOT_CACHED: %v", code, err)
+	}
+	if _, err := os.Stat(cible); !os.IsNotExist(err) {
+		t.Errorf("une copie a été laissée sur le disque: %v", err)
+	}
+}
+
+func TestExportFileSignaleUnEchecDEcriture(t *testing.T) {
+	app, server, _ := prepare(t)
+
+	server.mu.Lock()
+	server.files["Notes/journal.md"] = []byte("# Journal\n")
+	server.etags["Notes/journal.md"] = server.nextETag()
+	server.mu.Unlock()
+
+	cible := filepath.Join(t.TempDir(), "dossier-absent", "journal.md")
+	err := app.ExportFile("journal.md", cible)
+	if code := ErrorCode(errString(err)); code != "STORAGE_IO" {
+		t.Errorf("code %q, attendu STORAGE_IO: %v", code, err)
+	}
+}
+
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
