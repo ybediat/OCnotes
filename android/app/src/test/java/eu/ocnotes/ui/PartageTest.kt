@@ -46,12 +46,15 @@ class PartageTest {
     fun leTypeSuitLeFormatEtRetombeSurLePlusGeneral() {
         assertEquals("text/markdown", typeCommun(listOf("a.md", "b.md")))
         assertEquals("text/plain", typeCommun(listOf("a.txt")))
+        assertEquals("text/plain", typeCommun(listOf("config.yaml", "export.csv")))
+        assertEquals("text/markdown", typeCommun(listOf("a.markdown", "b.MD")))
         assertEquals(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             typeCommun(listOf("rapport.DOCX")),
         )
         assertEquals("application/vnd.oasis.opendocument.text", typeCommun(listOf("rapport.odt")))
         assertEquals("text/" + "*", typeCommun(listOf("a.md", "b.txt")))
+        assertEquals("text/" + "*", typeCommun(listOf("a.md", "config.yaml")))
         assertEquals("*/" + "*", typeCommun(listOf("a.md", "rapport.odt")))
     }
 }

@@ -73,8 +73,9 @@
     <string name="err_cible_existe">Un élément porte déjà ce nom à cet endroit.</string>
     <string name="err_chemin_vide">Aucun élément désigné.</string>
     <string name="err_dossier_hors_ligne">Un dossier ne peut pas être renommé, déplacé ou supprimé hors connexion. Reconnectez-vous d\'abord.</string>
-    <string name="err_lecture_seule">Ce document ne peut pas être modifié ici.</string>
+    <string name="err_lecture_seule">Ce fichier ne peut pas être modifié ici.</string>
     <string name="err_format_non_pris_en_charge">Cette opération ne convient pas à ce format de fichier.</string>
+    <string name="err_encodage">Ce fichier n\'est pas encodé en UTF-8 : il ne peut être ouvert qu\'en lecture.</string>
     <string name="err_document_invalide">Ce document est invalide ou incomplet.</string>
     <string name="err_document_trop_volumineux">Le contenu de ce document est trop volumineux à afficher.</string>
     <string name="err_fichier_trop_volumineux">Ce document est trop volumineux à ouvrir.</string>
@@ -215,7 +216,7 @@
     <string name="browser_nouveau_dossier">Nouveau dossier</string>
     <string name="browser_type_dossier">Dossier</string>
     <string name="browser_type_note">Note</string>
-    <string name="browser_type_document">Document en lecture seule</string>
+    <string name="browser_type_document">Fichier en lecture seule</string>
     <string name="browser_actions">Actions sur « %1$s »</string>
     <!-- Titre du sélecteur d'application ouvert par « Partager » : mail,
          messagerie, stockage… Android moderne l'ignore souvent, mais un
@@ -517,6 +518,8 @@
     -->
     <string name="apercu_lecture_seule">Cette note contient un élément trop long pour être modifié ici. Elle est ouverte en lecture seule.</string>
     <string name="apercu_document_lecture_seule">Ce document est ouvert en lecture seule.</string>
+    <string name="apercu_texte_lecture_seule">Ce type de fichier s\'ouvre en lecture seule.</string>
+    <string name="apercu_encodage_lecture_seule">Ce fichier n\'est pas encodé en UTF-8. Il est ouvert en lecture seule pour ne pas l\'abîmer.</string>
     <string name="sync_conflits_suppression">\n• suppression annulée : %1$s a changé à distance</string>
     <string name="sync_conflits_deplacement">\n• déplacement annulé ; copie conservée : %1$s</string>
     <string name="reglages_conflits_suppression">• Suppression annulée : %1$s a changé à distance</string>

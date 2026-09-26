@@ -417,6 +417,11 @@ func (l *Library) Delete(ctx context.Context, itemPath string) error {
 // Le format décide de la lecture, d'où le besoin de Note.Name : dans un .txt
 // il n'y a pas de « # » à retirer, seulement une première ligne.
 func TitleOf(note Note, content []byte) string {
+	// Un fichier de configuration n'a pas de titre : sa première ligne est une
+	// clé, un commentaire ou un en-tête de colonnes. Son nom est plus parlant.
+	if IsReadOnlyText(note.Name) {
+		return note.DisplayName
+	}
 	title := markdown.Title(string(content))
 	if IsPlainText(note.Name) {
 		title = markdown.PlainTitle(string(content))

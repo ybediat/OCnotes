@@ -192,6 +192,8 @@ func TestListFolderJSONMarqueLesDocumentsEnLectureSeule(t *testing.T) {
 	server.etags["Notes/rapport.docx"] = server.nextETag()
 	server.files["Notes/carnet.md"] = []byte("# Carnet")
 	server.etags["Notes/carnet.md"] = server.nextETag()
+	server.files["Notes/config.yaml"] = []byte("port: 80\n")
+	server.etags["Notes/config.yaml"] = server.nextETag()
 	server.mu.Unlock()
 
 	verifie := func(t *testing.T, contexte string) {
@@ -209,12 +211,12 @@ func TestListFolderJSONMarqueLesDocumentsEnLectureSeule(t *testing.T) {
 		vus := map[string]bool{}
 		for _, e := range listing.Entries {
 			vus[e.Name] = true
-			attendu := e.Name == "rapport.docx"
+			attendu := e.Name == "rapport.docx" || e.Name == "config.yaml"
 			if e.ReadOnly != attendu {
 				t.Errorf("%s: readOnly de %q = %v, attendu %v", contexte, e.Name, e.ReadOnly, attendu)
 			}
 		}
-		for _, nom := range []string{"rapport.docx", "carnet.md"} {
+		for _, nom := range []string{"rapport.docx", "carnet.md", "config.yaml"} {
 			if !vus[nom] {
 				t.Errorf("%s: %q absent du listing", contexte, nom)
 			}
@@ -224,8 +226,10 @@ func TestListFolderJSONMarqueLesDocumentsEnLectureSeule(t *testing.T) {
 	verifie(t, "en ligne")
 
 	// Le repli hors connexion ne connaît que ce que le cache a vu passer.
-	if _, err := app.RenderFileJSON("rapport.docx"); err != nil {
-		t.Fatalf("RenderFileJSON: %v", err)
+	for _, nom := range []string{"rapport.docx", "config.yaml"} {
+		if _, err := app.RenderFileJSON(nom); err != nil {
+			t.Fatalf("RenderFileJSON(%s): %v", nom, err)
+		}
 	}
 	if _, err := app.ReadNote("carnet.md"); err != nil {
 		t.Fatalf("ReadNote: %v", err)

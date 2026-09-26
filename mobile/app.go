@@ -33,6 +33,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ybediat/OpenNote/internal/config"
 	"github.com/ybediat/OpenNote/internal/markdown"
@@ -1039,7 +1040,7 @@ func (a *App) ListFolderJSON(dir string) (string, error) {
 			Size:     n.Size,
 			ModTime:  n.ModTime.UTC().Format(time.RFC3339),
 			Pending:  cached && entry.Dirty,
-			ReadOnly: notes.IsDocument(n.Name),
+			ReadOnly: notes.IsReadOnly(n.Name),
 		})
 	}
 	return toJSON(out)
@@ -1113,7 +1114,7 @@ func (a *App) listFromCache(dir string, repli bool) folderListing {
 			Size:     entry.Size,
 			ModTime:  entry.LocalMod.UTC().Format(time.RFC3339),
 			Pending:  entry.Dirty,
-			ReadOnly: notes.IsDocument(rest),
+			ReadOnly: notes.IsReadOnly(rest),
 		})
 	}
 
@@ -1142,10 +1143,19 @@ func indexByte(s string, b byte) int {
 //
 // Une note portant des modifications locales n'est jamais rafraîchie : sa
 // version en cache fait foi jusqu'à la synchronisation, qui tranchera.
+//
+// Un contenu qui n'est pas de l'UTF-8 valide est refusé (NOT_UTF8) : gomobile
+// en remplacerait les octets invalides par des « � » en passant à Java, et le
+// premier enregistrement écrirait ces remplacements sur le serveur, à la place
+// des accents d'un fichier Latin-1. L'interface l'ouvre alors en aperçu par
+// RenderFileJSON, qui lit les octets côté Go.
 func (a *App) ReadNote(notePath string) (string, error) {
 	content, err := a.readBytes(notePath)
 	if err != nil {
 		return "", err
+	}
+	if !utf8.Valid(content) {
+		return "", fmt.Errorf("mobile: [%s] %s n'est pas encodé en UTF-8 : il ne s'ouvre qu'en lecture", CodeNotUTF8, notePath)
 	}
 	return string(content), nil
 }
@@ -1547,7 +1557,7 @@ func (a *App) CopyJSON(itemPath, targetDir string) (string, error) {
 	if itemPath == "" {
 		return "", fmt.Errorf("notes: [%s] aucun élément à copier", notes.CodePathEmpty)
 	}
-	if notes.IsDocument(itemPath) {
+	if notes.IsReadOnly(itemPath) {
 		return "", fmt.Errorf("mobile: [%s] un fichier %s ne peut pas être copié", CodeUnsupported, path.Ext(itemPath))
 	}
 	if !notes.IsNote(itemPath) {
@@ -2126,6 +2136,15 @@ func MaxEditableWord() int { return markdown.MaxEditableWord() }
 // gomobile dans une chaîne.
 const CodeUnsupported = "UNSUPPORTED"
 
+// CodeNotUTF8 signale un fichier texte dont le contenu n'est pas de l'UTF-8
+// valide — typiquement un fichier Latin-1 ou UTF-16 venu de Windows.
+//
+// Né dans mobile/ comme UNSUPPORTED : c'est la traversée de gomobile, qui
+// convertit en String Java, qui rend ce contenu dangereux. Le fichier reste
+// lisible en aperçu ; il ne passe simplement jamais par une chaîne qu'on
+// pourrait réécrire.
+const CodeNotUTF8 = "NOT_UTF8"
+
 // CodeLocalMode signale un geste qui n'a de sens qu'avec un serveur, demandé
 // à une application qui n'en a pas.
 //
@@ -2254,11 +2273,18 @@ func IsPlainText(name string) bool {
 	return notes.IsPlainText(name)
 }
 
-// IsDocument indique qu'un nom désigne un fichier lisible mais jamais
-// modifiable. Fonction de paquet pour que Kotlin n'ait pas à recopier les
+// IsDocument indique qu'un nom désigne un document bureautique, lu et analysé
+// côté Go. Fonction de paquet pour que Kotlin n'ait pas à recopier les
 // extensions reconnues par le cœur.
 func IsDocument(name string) bool {
 	return notes.IsDocument(name)
+}
+
+// IsReadOnly indique qu'un nom désigne un fichier lisible mais jamais
+// modifiable : un document, ou un fichier texte de configuration ou de
+// données. Il s'ouvre par RenderFileJSON, jamais par ReadNote.
+func IsReadOnly(name string) bool {
+	return notes.IsReadOnly(name)
 }
 
 func errNotConnected() error {

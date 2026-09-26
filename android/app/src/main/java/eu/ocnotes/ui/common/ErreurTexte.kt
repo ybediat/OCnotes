@@ -61,6 +61,7 @@ private fun texteLocal(code: String): Texte? = when (code) {
     "PATH_EMPTY" -> Texte.de(R.string.err_chemin_vide)
     "READONLY" -> Texte.de(R.string.err_lecture_seule)
     "UNSUPPORTED" -> Texte.de(R.string.err_format_non_pris_en_charge)
+    "NOT_UTF8" -> Texte.de(R.string.err_encodage)
     "DOC_INVALID" -> Texte.de(R.string.err_document_invalide)
     "DOC_TOO_LARGE" -> Texte.de(R.string.err_document_trop_volumineux)
     "FILE_TOO_LARGE" -> Texte.de(R.string.err_fichier_trop_volumineux)

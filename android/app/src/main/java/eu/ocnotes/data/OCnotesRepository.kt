@@ -758,6 +758,13 @@ class OCnotesRepository(
     fun isDocument(name: String): Boolean = Mobile.isDocument(name)
 
     /**
+     * Vrai pour tout fichier lisible mais jamais modifiable : un document, ou
+     * un fichier texte de configuration ou de données. Il s'ouvre par
+     * [renderFile], jamais par [readNote].
+     */
+    fun isReadOnly(name: String): Boolean = Mobile.isReadOnly(name)
+
+    /**
      * Allège une note avant de l'ouvrir dans un champ de saisie.
      *
      * Une image insérée depuis l'interface web d'OpenCloud est un

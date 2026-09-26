@@ -62,8 +62,9 @@
     <string name="err_cible_existe">Hier gibt es bereits ein Element mit diesem Namen.</string>
     <string name="err_chemin_vide">Kein Element ausgewählt.</string>
     <string name="err_dossier_hors_ligne">Ein Ordner kann offline nicht umbenannt, verschoben oder gelöscht werden. Stellen Sie zuerst eine Verbindung her.</string>
-    <string name="err_lecture_seule">Dieses Dokument kann hier nicht geändert werden.</string>
+    <string name="err_lecture_seule">Diese Datei kann hier nicht geändert werden.</string>
     <string name="err_format_non_pris_en_charge">Diese Operation ist für dieses Dateiformat nicht geeignet.</string>
+    <string name="err_encodage">Diese Datei ist nicht UTF-8-kodiert: Sie kann nur zum Lesen geöffnet werden.</string>
     <string name="err_document_invalide">Dieses Dokument ist ungültig oder unvollständig.</string>
     <string name="err_document_trop_volumineux">Der Inhalt dieses Dokuments ist zu groß, um angezeigt zu werden.</string>
     <string name="err_fichier_trop_volumineux">Dieses Dokument ist zu groß, um geöffnet zu werden.</string>
@@ -199,7 +200,7 @@
     <string name="browser_nouveau_dossier">Neuer Ordner</string>
     <string name="browser_type_dossier">Ordner</string>
     <string name="browser_type_note">Notiz</string>
-    <string name="browser_type_document">Schreibgeschütztes Dokument</string>
+    <string name="browser_type_document">Schreibgeschützte Datei</string>
     <string name="browser_actions">Aktionen für „%1$s“</string>
     <!-- Titel der von „Teilen“ geöffneten App-Auswahl: E-Mail, Messenger,
          Speicher … Modernes Android blendet ihn oft aus, aber eine fest
@@ -486,6 +487,8 @@
     -->
     <string name="apercu_lecture_seule">Diese Notiz enthält ein Element, das zu lang ist, um hier bearbeitet zu werden. Sie wird schreibgeschützt geöffnet.</string>
     <string name="apercu_document_lecture_seule">Dieses Dokument wird schreibgeschützt geöffnet.</string>
+    <string name="apercu_texte_lecture_seule">Dieser Dateityp wird schreibgeschützt geöffnet.</string>
+    <string name="apercu_encodage_lecture_seule">Diese Datei ist nicht UTF-8-kodiert. Sie wird schreibgeschützt geöffnet, damit sie nicht beschädigt wird.</string>
     <string name="sync_conflits_suppression">\n• Löschung abgebrochen: %1$s wurde remote geändert</string>
     <string name="sync_conflits_deplacement">\n• Verschiebung abgebrochen; Kopie beibehalten: %1$s</string>
     <string name="reglages_conflits_suppression">• Löschung abgebrochen: %1$s wurde remote geändert</string>

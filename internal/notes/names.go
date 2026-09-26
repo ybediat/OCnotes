@@ -25,6 +25,21 @@ var markdownExtensions = []string{".md", ".markdown", ".mdown", ".mkd"}
 // pas un titre.
 var plainExtensions = []string{".txt"}
 
+// readOnlyTextExtensions liste des fichiers texte que l'application affiche
+// tels quels, sans jamais les modifier.
+//
+// Ce sont des fichiers de configuration et de données : un « # » y est un
+// commentaire, une indentation y a un sens. Les ouvrir en saisie serait les
+// livrer au clavier du téléphone, qui capitalise « port: » en « Port: » et
+// corrige les clés comme des mots. La lecture est un service ; la
+// modification viendra, si elle vient, avec ses propres garde-fous.
+//
+// Liste fermée, délibérément : « tout ce qui ressemble à du texte » se décide
+// sur le contenu, que le listing ne voit pas.
+var readOnlyTextExtensions = []string{
+	".conf", ".cfg", ".ini", ".yaml", ".yml", ".toml", ".json", ".xml", ".csv", ".log",
+}
+
 // documentExtensions liste ce que l'application sait lire et ne saura jamais
 // écrire.
 //
@@ -222,14 +237,15 @@ func WithExtension(name string) string {
 // renommé en « carnet » donne « carnet.txt », et non « carnet.md » — un
 // changement de format silencieux, que l'utilisateur n'a pas demandé.
 //
-// Un document est traité à part, et plus strictement : son extension d'origine
-// est la seule qui vaille. Renommer « rapport.docx » en « bilan » donne
+// Un fichier en lecture seule — document ou texte, voir IsReadOnly — est
+// traité à part, et plus strictement : son extension d'origine est la seule
+// qui vaille. Renommer « rapport.docx » en « bilan » donne
 // « bilan.docx » ; le renommer en « bilan.odt » donnerait « bilan.odt.docx »,
 // laid mais honnête — le fichier reste un .docx, et l'application ne sait pas
 // convertir. Entre deux formats modifiables, en revanche, saisir l'autre
 // extension la change délibérément : c'est le contrat annoncé.
 func WithExtensionOf(ref, name string) string {
-	if IsDocument(ref) {
+	if IsReadOnly(ref) {
 		if strings.EqualFold(path.Ext(name), path.Ext(ref)) {
 			return name
 		}
@@ -251,9 +267,9 @@ func IsMarkdown(name string) bool {
 }
 
 // IsPlainText indique si un nom de fichier désigne du texte brut, affiché tel
-// quel et jamais interprété.
+// quel et jamais interprété — modifiable (.txt) ou non (voir IsReadOnlyText).
 func IsPlainText(name string) bool {
-	return hasExtension(name, plainExtensions)
+	return hasExtension(name, plainExtensions) || IsReadOnlyText(name)
 }
 
 // IsDocument indique un fichier bureautique : lisible, jamais modifiable.
@@ -261,9 +277,24 @@ func IsDocument(name string) bool {
 	return hasExtension(name, documentExtensions)
 }
 
+// IsReadOnlyText indique un fichier texte affiché tel quel mais jamais
+// modifiable : configuration, données, journal.
+func IsReadOnlyText(name string) bool {
+	return hasExtension(name, readOnlyTextExtensions)
+}
+
+// IsReadOnly indique un format que l'application sait lire mais jamais écrire,
+// qu'il soit binaire (IsDocument) ou texte (IsReadOnlyText).
+func IsReadOnly(name string) bool {
+	return IsDocument(name) || IsReadOnlyText(name)
+}
+
 // IsEditable indique un format que l'application sait écrire.
+//
+// Ce n'est pas IsMarkdown || IsPlainText : un .yaml est du texte brut, mais
+// l'application ne l'écrit pas.
 func IsEditable(name string) bool {
-	return IsMarkdown(name) || IsPlainText(name)
+	return IsMarkdown(name) || hasExtension(name, plainExtensions)
 }
 
 // IsNote indique si l'application sait ouvrir ce fichier, quel que soit son
@@ -275,11 +306,13 @@ func IsEditable(name string) bool {
 //
 //   - IsNote       : « faut-il l'afficher dans la liste ? » — oui au .docx ;
 //   - IsMarkdown   : « faut-il l'interpréter ? » — non au .txt ;
-//   - IsDocument   : « faut-il l'analyser, et interdire la saisie ? » ;
+//   - IsDocument   : « faut-il l'analyser côté Go ? » ;
+//   - IsReadOnly   : « faut-il interdire la saisie ? » — oui au .docx et au
+//     .yaml ;
 //   - IsEditable   : « l'application sait-elle écrire ce format ? » — c'est la
 //     condition de WithExtension, et elle ne peut pas être IsNote.
 func IsNote(name string) bool {
-	return IsEditable(name) || IsDocument(name)
+	return IsEditable(name) || IsReadOnly(name)
 }
 
 // EnsureWritable refuse un chemin que l'application ne sait que lire.
@@ -290,7 +323,7 @@ func IsNote(name string) bool {
 // dans le cœur plutôt que de faire confiance à l'interface, c'est le même
 // principe que « ne jamais écrire sans restituer ».
 func EnsureWritable(itemPath string) error {
-	if IsDocument(itemPath) {
+	if IsReadOnly(itemPath) {
 		return fmt.Errorf("notes: [%s] un fichier %s s'ouvre en lecture seule", CodeReadOnly, path.Ext(itemPath))
 	}
 	return nil

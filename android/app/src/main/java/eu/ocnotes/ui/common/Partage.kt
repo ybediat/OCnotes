@@ -102,13 +102,19 @@ internal fun typeCommun(noms: List<String>): String {
     return if (types.all { it.startsWith(PREFIXE_TEXTE) }) TYPE_TEXTE_GENERIQUE else TYPE_QUELCONQUE
 }
 
+/**
+ * Les extensions viennent de Go (`internal/notes`), qui décide de ce qu'est
+ * une note. Ici ne se choisit qu'une étiquette MIME, et le repli est le plus
+ * inoffensif : un fichier inconnu part en texte brut, que tout destinataire
+ * sait ouvrir.
+ */
 private fun typeDe(nom: String): String {
     val extension = nom.substringAfterLast('.', "").lowercase()
     return when (extension) {
-        "txt" -> TYPE_TEXTE_BRUT
+        "md", "markdown", "mdown", "mkd" -> TYPE_MARKDOWN
         "docx" -> TYPE_DOCX
         "odt" -> TYPE_ODT
-        else -> TYPE_MARKDOWN
+        else -> TYPE_TEXTE_BRUT
     }
 }
 

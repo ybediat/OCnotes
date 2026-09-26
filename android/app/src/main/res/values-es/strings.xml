@@ -60,8 +60,9 @@
     <string name="err_cible_existe">Ya existe un elemento con este nombre aquí.</string>
     <string name="err_chemin_vide">No se ha seleccionado ningún elemento.</string>
     <string name="err_dossier_hors_ligne">No se puede cambiar el nombre, mover ni eliminar una carpeta sin conexión. Vuelve a conectarte primero.</string>
-    <string name="err_lecture_seule">Este documento no se puede editar aquí.</string>
+    <string name="err_lecture_seule">Este archivo no se puede editar aquí.</string>
     <string name="err_format_non_pris_en_charge">Esta operación no es compatible con este formato de archivo.</string>
+    <string name="err_encodage">Este archivo no está codificado en UTF-8: solo se puede abrir en modo de lectura.</string>
     <string name="err_document_invalide">Este documento no es válido o está incompleto.</string>
     <string name="err_document_trop_volumineux">El contenido de este documento es demasiado grande para mostrarlo.</string>
     <string name="err_fichier_trop_volumineux">Este documento es demasiado grande para abrirlo.</string>
@@ -219,7 +220,7 @@
     <string name="browser_nouveau_dossier">Nueva carpeta</string>
     <string name="browser_type_dossier">Carpeta</string>
     <string name="browser_type_note">Nota</string>
-    <string name="browser_type_document">Documento de solo lectura</string>
+    <string name="browser_type_document">Archivo de solo lectura</string>
     <string name="browser_actions">Acciones para «%1$s»</string>
     <!-- Titre du sélecteur d'application ouvert par « Partager » : mail,
          messagerie, stockage… Android moderne l'ignore souvent, mais un
@@ -492,6 +493,8 @@
     -->
     <string name="apercu_lecture_seule">Esta nota contiene un elemento demasiado largo para editarlo aquí. Se ha abierto en modo de solo lectura.</string>
     <string name="apercu_document_lecture_seule">Este documento se abre en modo de solo lectura.</string>
+    <string name="apercu_texte_lecture_seule">Este tipo de archivo se abre en modo de solo lectura.</string>
+    <string name="apercu_encodage_lecture_seule">Este archivo no está codificado en UTF-8. Se ha abierto en modo de solo lectura para no dañarlo.</string>
     <string name="sync_conflits_suppression">\n• eliminación cancelada: %1$s cambió de forma remota</string>
     <string name="sync_conflits_deplacement">\n• traslado cancelado; copia conservada: %1$s</string>
     <string name="reglages_conflits_suppression">• Eliminación cancelada: %1$s cambió de forma remota</string>

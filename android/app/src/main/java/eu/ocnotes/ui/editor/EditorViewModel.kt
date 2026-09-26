@@ -81,15 +81,15 @@ data class EditorUiState(
      */
     val texteBrut: Boolean = false,
 
-    /** Document Office lu par Go et toujours ouvert en lecture seule. */
-    val documentBureautique: Boolean = false,
-
     /**
-     * Faux quand la note porte un mot si long qu'un champ de saisie ne
-     * survivrait pas à sa mise en page. Elle s'ouvre alors en aperçu, sans
-     * retour possible vers la saisie.
+     * Faux quand le fichier ne peut pas passer par un champ de saisie. Il
+     * s'ouvre alors en aperçu, sans retour possible vers la saisie ;
+     * [raisonLectureSeule] dit pourquoi.
      */
     val modifiable: Boolean = true,
+
+    /** Pourquoi [modifiable] est faux ; sans objet sinon. */
+    val raisonLectureSeule: RaisonLectureSeule = RaisonLectureSeule.MOT_TROP_LONG,
 
     /**
      * Vrai quand les notes ne vivent que sur cet appareil.
@@ -118,6 +118,27 @@ data class EditorUiState(
      * n'est pas reproductible à la main.
      */
     val enregistrable: Boolean get() = charge && modifiable
+}
+
+/**
+ * Ce qui tient un fichier hors du champ de saisie. Le bandeau de l'aperçu dit
+ * la cause plutôt que la mécanique.
+ */
+enum class RaisonLectureSeule {
+    /** Un mot si long qu'un champ de saisie ne survivrait pas à sa mise en page. */
+    MOT_TROP_LONG,
+
+    /** Un document Office, lu et analysé par Go. */
+    DOCUMENT,
+
+    /** Un fichier texte de configuration ou de données, que l'application n'écrit pas. */
+    FORMAT_TEXTE,
+
+    /**
+     * Un contenu qui n'est pas de l'UTF-8 valide. Passé par une chaîne, il
+     * perdrait ses accents au premier enregistrement.
+     */
+    ENCODAGE,
 }
 
 /** Garde pure du chemin natif : aucune ouverture ou révision périmée n'écrit. */
@@ -154,8 +175,12 @@ class EditorViewModel(
 
     // La frontière de formats vit dans Go. La poser avant le chargement évite
     // qu'un .docx passe par ReadNote, où sa chaîne binaire serait abîmée avant
-    // d'atteindre RenderFileJSON.
-    private val documentBureautique = repository.isDocument(nom)
+    // d'atteindre RenderFileJSON — et qu'un .yaml atteigne un champ de saisie.
+    private val lectureSeule: RaisonLectureSeule? = when {
+        repository.isDocument(nom) -> RaisonLectureSeule.DOCUMENT
+        repository.isReadOnly(nom) -> RaisonLectureSeule.FORMAT_TEXTE
+        else -> null
+    }
 
     // Le format se demande à Go, et dès la construction : la question se pose
     // avant qu'il y ait le moindre bloc à regarder, ne serait-ce que pour un
@@ -164,12 +189,11 @@ class EditorViewModel(
     private val _uiState = MutableStateFlow(
         EditorUiState(
             chemin = chemin,
-            texteBrut = !documentBureautique && repository.isPlainText(nom),
-            documentBureautique = documentBureautique,
+            texteBrut = lectureSeule != RaisonLectureSeule.DOCUMENT && repository.isPlainText(nom),
             garderEcranAllumeLecture = garderEcranAllumeLecture,
             garderEcranAllumeEdition = garderEcranAllumeEdition,
             saisieAutomatique = saisieAutomatique,
-            // Lu une fois à l'ouverture, comme documentBureautique : le mode
+            // Lu une fois à l'ouverture, comme le format : le mode
             // ne change pas pendant qu'une note est en train de s'éditer.
             modeLocal = repository.mode.value == AppMode.LOCAL,
         ),
@@ -205,23 +229,21 @@ class EditorViewModel(
     init {
         viewModelScope.launch {
             try {
-                if (documentBureautique) {
-                    // Le ZIP est lu et analysé côté Go : ni le binaire ni un
-                    // champ de saisie ne traversent cette branche.
-                    val blocs = repository.renderFile(chemin)
-                    val titre = repository.titleOf(nom, "")
-                    _uiState.update {
-                        it.copy(
-                            chargement = false,
-                            charge = true,
-                            titre = titre,
-                            modifiable = false,
-                            apercu = true,
-                            blocs = blocs,
-                        )
-                    }
+                if (lectureSeule != null) {
+                    ouvrirEnApercu(lectureSeule)
                 } else {
-                    val contenu = repository.readNote(chemin)
+                    val contenu = try {
+                        repository.readNote(chemin)
+                    } catch (e: OCnotesException) {
+                        // Go refuse de livrer en chaîne un contenu qui n'est
+                        // pas de l'UTF-8 : ses accents deviendraient des « � »,
+                        // et le premier enregistrement les écrirait sur le
+                        // serveur. L'aperçu, lu en octets côté Go, n'a pas ce
+                        // risque.
+                        if (e.code != CODE_NON_UTF8) throw e
+                        ouvrirEnApercu(RaisonLectureSeule.ENCODAGE)
+                        return@launch
+                    }
 
                     // Les images en ligne sortent du texte avant qu'il n'atteigne
                     // le champ de saisie, et n'y reviennent qu'à l'écriture. Sans
@@ -246,6 +268,7 @@ class EditorViewModel(
                             document = prepare.text,
                             titre = titre,
                             modifiable = prepare.editable,
+                            raisonLectureSeule = RaisonLectureSeule.MOT_TROP_LONG,
                             // Une note inaffichable en saisie s'ouvre directement
                             // en lecture : c'est le seul mode qui tienne.
                             apercu = !prepare.editable,
@@ -263,6 +286,30 @@ class EditorViewModel(
         viewModelScope.launch {
             val actions = runCatching { repository.formatActions() }.getOrDefault(emptyList())
             _uiState.update { it.copy(actions = actions) }
+        }
+    }
+
+    /**
+     * Ouvre le fichier en aperçu seul, lu et rendu côté Go.
+     *
+     * Ni le contenu ni un champ de saisie ne traversent cette branche : seuls
+     * les blocs d'affichage passent la frontière. [charge] reste vrai pour que
+     * l'écran s'affiche, et [modifiable] faux ferme toute écriture — voir
+     * [EditorUiState.enregistrable].
+     */
+    private suspend fun ouvrirEnApercu(raison: RaisonLectureSeule) {
+        val blocs = repository.renderFile(chemin)
+        val titre = repository.titleOf(nom, "")
+        _uiState.update {
+            it.copy(
+                chargement = false,
+                charge = true,
+                titre = titre,
+                modifiable = false,
+                raisonLectureSeule = raison,
+                apercu = true,
+                blocs = blocs,
+            )
         }
     }
 
@@ -488,6 +535,9 @@ class EditorViewModel(
     }
 
     companion object {
+        /** Code Go d'un contenu qui n'est pas de l'UTF-8 (`mobile.CodeNotUTF8`). */
+        private const val CODE_NON_UTF8 = "NOT_UTF8"
+
         fun factory(container: AppContainer, chemin: String): ViewModelProvider.Factory =
             viewModelFactory {
                 initializer {

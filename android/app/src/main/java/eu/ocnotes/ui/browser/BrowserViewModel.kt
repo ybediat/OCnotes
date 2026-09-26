@@ -89,8 +89,8 @@ data class BrowserUiState(
         get() = entrees.any { it.isDir && it.path in selection }
 
     /**
-     * La sélection contient au moins un document en lecture seule (`.docx`,
-     * `.odt`). La façade refuse d'en copier les octets — un PUT les
+     * La sélection contient au moins un fichier en lecture seule (`.docx`,
+     * `.odt`, `.yaml`…). La façade refuse d'en copier les octets — un PUT les
      * corromprait — d'où le retrait de « Copier ». Un déplacement, lui, ne
      * touche pas au contenu et reste permis.
      */

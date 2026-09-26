@@ -98,7 +98,7 @@ func (a *App) listingDepuisIndex(fromCache bool) folderListing {
 			Size:     k.Size,
 			ModTime:  k.ModTime.UTC().Format(time.RFC3339),
 			Pending:  cached && entry.Dirty,
-			ReadOnly: notes.IsDocument(nom),
+			ReadOnly: notes.IsReadOnly(nom),
 		})
 	}
 	return out

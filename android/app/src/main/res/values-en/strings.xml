@@ -79,8 +79,9 @@
     <string name="err_cible_existe">An item with this name already exists here.</string>
     <string name="err_chemin_vide">No item specified.</string>
     <string name="err_dossier_hors_ligne">A folder cannot be renamed, moved, or deleted while offline. Reconnect first.</string>
-    <string name="err_lecture_seule">This document cannot be edited here.</string>
+    <string name="err_lecture_seule">This file cannot be edited here.</string>
     <string name="err_format_non_pris_en_charge">This operation does not support this file format.</string>
+    <string name="err_encodage">This file is not UTF-8 encoded: it can only be opened for reading.</string>
     <string name="err_document_invalide">This document is invalid or incomplete.</string>
     <string name="err_document_trop_volumineux">This document’s contents are too large to display.</string>
     <string name="err_fichier_trop_volumineux">This document is too large to open.</string>
@@ -238,7 +239,7 @@
     <string name="browser_nouveau_dossier">New folder</string>
     <string name="browser_type_dossier">Folder</string>
     <string name="browser_type_note">Note</string>
-    <string name="browser_type_document">Read-only document</string>
+    <string name="browser_type_document">Read-only file</string>
     <string name="browser_actions">Actions for “%1$s”</string>
     <!-- Titre du sélecteur d'application ouvert par « Partager » : mail,
          messagerie, stockage… Android moderne l'ignore souvent, mais un
@@ -509,6 +510,8 @@
     -->
     <string name="apercu_lecture_seule">This note contains an element that is too long to edit here. It is open in read-only mode.</string>
     <string name="apercu_document_lecture_seule">This document is open in read-only mode.</string>
+    <string name="apercu_texte_lecture_seule">This type of file opens in read-only mode.</string>
+    <string name="apercu_encodage_lecture_seule">This file is not UTF-8 encoded. It is open in read-only mode so that it is not damaged.</string>
     <string name="sync_conflits_suppression">\n• deletion cancelled: %1$s changed remotely</string>
     <string name="sync_conflits_deplacement">\n• move cancelled; copy kept: %1$s</string>
     <string name="reglages_conflits_suppression">• Deletion cancelled: %1$s changed remotely</string>

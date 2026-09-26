@@ -147,6 +147,8 @@ func TestListAllJSONMarqueLesDocumentsEnLectureSeule(t *testing.T) {
 	serveur.etags["Notes/carnet.odt"] = serveur.nextETag()
 	serveur.files["Notes/note.md"] = []byte("# Note")
 	serveur.etags["Notes/note.md"] = serveur.nextETag()
+	serveur.files["Notes/config.yaml"] = []byte("port: 80")
+	serveur.etags["Notes/config.yaml"] = serveur.nextETag()
 	serveur.mu.Unlock()
 
 	verifie := func(t *testing.T, contexte string) {
@@ -162,6 +164,7 @@ func TestListAllJSONMarqueLesDocumentsEnLectureSeule(t *testing.T) {
 		attendus := map[string]bool{
 			"rapport.docx": true,
 			"carnet.odt":   true,
+			"config.yaml":  true,
 			"note.md":      false,
 		}
 		for _, entree := range listing.Entries {

@@ -272,7 +272,7 @@ fun EditorScreen(
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.surface),
                 ) {
-                    if (!etat.modifiable) BandeauLectureSeule(etat.documentBureautique)
+                    if (!etat.modifiable) BandeauLectureSeule(etat.raisonLectureSeule)
                     VueMarkdown(blocs = etat.blocs, modifier = Modifier.weight(1f))
                 }
             }
@@ -377,11 +377,12 @@ private fun ZoneSaisie(
  * Explique pourquoi la note ne s'ouvre pas en saisie.
  *
  * Sans ce bandeau, l'absence de champ de texte passerait pour une panne. Le
- * message dit la cause — document Office ou suite de caractères démesurée —
- * plutôt que la mécanique, dont l'utilisateur n'a rien à faire.
+ * message dit la cause — document Office, format que l'application n'écrit
+ * pas, encodage, suite de caractères démesurée — plutôt que la mécanique,
+ * dont l'utilisateur n'a rien à faire.
  */
 @Composable
-private fun BandeauLectureSeule(documentBureautique: Boolean) {
+private fun BandeauLectureSeule(raison: RaisonLectureSeule) {
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
         modifier = Modifier.fillMaxWidth(),
@@ -398,10 +399,11 @@ private fun BandeauLectureSeule(documentBureautique: Boolean) {
             )
             Text(
                 text = stringResource(
-                    if (documentBureautique) {
-                        R.string.apercu_document_lecture_seule
-                    } else {
-                        R.string.apercu_lecture_seule
+                    when (raison) {
+                        RaisonLectureSeule.MOT_TROP_LONG -> R.string.apercu_lecture_seule
+                        RaisonLectureSeule.DOCUMENT -> R.string.apercu_document_lecture_seule
+                        RaisonLectureSeule.FORMAT_TEXTE -> R.string.apercu_texte_lecture_seule
+                        RaisonLectureSeule.ENCODAGE -> R.string.apercu_encodage_lecture_seule
                     },
                 ),
                 style = MaterialTheme.typography.bodyMedium,
