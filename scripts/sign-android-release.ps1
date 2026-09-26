@@ -91,28 +91,39 @@ function Get-CiUnsignedApk {
 
     Write-Host "Commit         : $commit"
 
-    $json = & gh run list --commit $commit --status success --json databaseId,workflowName --limit 10
-    if ($LASTEXITCODE -ne 0) {
-        throw "gh run list a échoué. Le commit est-il poussé sur GitHub ?"
-    }
+    # `gh` n'a pas d'équivalent du `-C` de git : il déduit le dépôt de son
+    # répertoire de travail *réel*, qui peut être C:\Windows\System32 même si
+    # l'invite affiche la racine du dépôt (le même piège que documenté plus
+    # haut pour Resolve-ReleasePath). Pousser la localisation le temps des deux
+    # appels est plus sûr qu'un --repo en dur, qui divergerait si le dépôt est
+    # un jour déplacé ou forké.
+    Push-Location $repoDirectory
+    try {
+        $json = & gh run list --commit $commit --status success --json databaseId,workflowName --limit 10
+        if ($LASTEXITCODE -ne 0) {
+            throw "gh run list a échoué. Le commit est-il poussé sur GitHub ?"
+        }
 
-    $runs = @($json | ConvertFrom-Json)
-    if ($runs.Count -eq 0) {
-        throw "Aucune exécution de CI réussie pour $commit.`nPoussez le commit et attendez la fin du workflow. Ou passez -Local, en sachant que l'APK produit ne sera pas reproductible par F-Droid."
-    }
+        $runs = @($json | ConvertFrom-Json)
+        if ($runs.Count -eq 0) {
+            throw "Aucune exécution de CI réussie pour $commit.`nPoussez le commit et attendez la fin du workflow. Ou passez -Local, en sachant que l'APK produit ne sera pas reproductible par F-Droid."
+        }
 
-    $run = $runs[0]
-    Write-Host "Artefact de CI : run $($run.databaseId) — $($run.workflowName)"
+        $run = $runs[0]
+        Write-Host "Artefact de CI : run $($run.databaseId) — $($run.workflowName)"
 
-    $dossier = Join-Path $repoDirectory ('dist\ci-' + $commit.Substring(0, 12))
-    if (Test-Path -LiteralPath $dossier) {
-        Remove-Item -Recurse -Force -LiteralPath $dossier
-    }
-    New-Item -ItemType Directory -Force -Path $dossier | Out-Null
+        $dossier = Join-Path $repoDirectory ('dist\ci-' + $commit.Substring(0, 12))
+        if (Test-Path -LiteralPath $dossier) {
+            Remove-Item -Recurse -Force -LiteralPath $dossier
+        }
+        New-Item -ItemType Directory -Force -Path $dossier | Out-Null
 
-    & gh run download $run.databaseId -D $dossier
-    if ($LASTEXITCODE -ne 0) {
-        throw "Le téléchargement de l'artefact a échoué."
+        & gh run download $run.databaseId -D $dossier
+        if ($LASTEXITCODE -ne 0) {
+            throw "Le téléchargement de l'artefact a échoué."
+        }
+    } finally {
+        Pop-Location
     }
 
     $trouves = @(Get-ChildItem -Path $dossier -Recurse -Filter 'app-release-unsigned.apk')

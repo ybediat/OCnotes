@@ -14,6 +14,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import mobile.Mobile
 import mobile.App as GoApp
+import java.io.File
 
 /**
  * Issue d'une tentative de remontée de session hors ligne.
@@ -730,6 +731,18 @@ class OCnotesRepository(
      */
     suspend fun renderFile(filePath: String): List<NoteBlockDto> =
         authenticatedCallJson { it.renderFileJSON(filePath) }
+
+    /**
+     * Recopie une note ou un document vers `destination`, pour le joindre à
+     * un partage.
+     *
+     * Le contenu ne traverse pas la frontière : Go lit et écrit lui-même, et
+     * les octets sont exactement ceux du cache. Même repli hors connexion que
+     * [readNote] — `CONTENT_NOT_CACHED` pour un fichier jamais téléchargé.
+     */
+    suspend fun exportFile(filePath: String, destination: File) {
+        authenticatedCall { it.exportFile(filePath, destination.absolutePath) }
+    }
 
     /**
      * Vrai pour un fichier affiché tel quel, sans interprétation.

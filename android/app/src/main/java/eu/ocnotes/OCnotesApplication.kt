@@ -15,6 +15,7 @@ import eu.ocnotes.sync.SyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import java.io.File
 
 /**
  * Conteneur de dépendances, construit à la main.
@@ -44,6 +45,12 @@ class AppContainer(
         oidcManager = oidcManager,
         preferences = preferencesAffichage,
     )
+
+    /**
+     * Où « Partager » dépose ses copies au vrai nom, le temps de l'envoi. Seul
+     * dossier exposé par le `FileProvider` (`res/xml/chemins_partage.xml`).
+     */
+    val dossierPartage = File(context.cacheDir, "partage")
 
     val syncScheduler = SyncScheduler(context)
 
