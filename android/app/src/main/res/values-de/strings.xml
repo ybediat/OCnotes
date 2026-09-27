@@ -66,7 +66,9 @@
     <string name="err_dossier_hors_ligne">Ein Ordner kann offline nicht umbenannt, verschoben oder gelöscht werden. Stellen Sie zuerst eine Verbindung her.</string>
     <string name="err_lecture_seule">Diese Datei kann hier nicht geändert werden.</string>
     <string name="err_format_non_pris_en_charge">Diese Operation ist für dieses Dateiformat nicht geeignet.</string>
-    <string name="err_encodage">Diese Datei ist nicht UTF-8-kodiert: Sie kann nur zum Lesen geöffnet werden.</string>
+    <string name="err_encodage">Die Kodierung dieser Datei lässt sich nicht sicher bestimmen: Sie kann nur zum Lesen geöffnet werden.</string>
+    <string name="err_encodage_non_representable">Der Text enthält ein Zeichen, das die Kodierung dieser Datei nicht speichern kann. Entfernen Sie es, um speichern zu können.</string>
+    <string name="err_caractere_non_representable">„%1$s“ gibt es in der Kodierung dieser Datei (%2$s) nicht. Entfernen Sie es, um speichern zu können.</string>
     <string name="err_document_invalide">Dieses Dokument ist ungültig oder unvollständig.</string>
     <string name="err_document_trop_volumineux">Der Inhalt dieses Dokuments ist zu groß, um angezeigt zu werden.</string>
     <string name="err_fichier_trop_volumineux">Dieses Dokument ist zu groß, um geöffnet zu werden.</string>
@@ -437,6 +439,7 @@
     <!-- Ein Zustand, keine Warnung: Beschreibt, was passiert, ohne den Eindruck zu erwecken,
          dass etwas verloren geht. -->
     <string name="editeur_brouillon">Lokaler Entwurf, Senden geplant</string>
+    <string name="editeur_encodage">Kodierung %1$s</string>
     <string name="editeur_saisie_vide">Hier schreiben…</string>
     <string name="editeur_illisible_titre">Notiz nicht geladen</string>
     <string name="editeur_illisible_detail">Ihr Inhalt konnte nicht gelesen werden. Nichts wurde geändert: Öffnen Sie sie erneut, sobald die Verbindung wiederhergestellt ist.</string>
@@ -502,7 +505,7 @@
     <string name="apercu_document_lecture_seule">Dieses Dokument wird schreibgeschützt geöffnet.</string>
     <string name="apercu_texte_lecture_seule">Dieser Dateityp wird schreibgeschützt geöffnet.</string>
     <string name="apercu_autorisation_lecture_seule">Sie können diese Notiz anzeigen, sind aber nicht berechtigt, sie zu bearbeiten.</string>
-    <string name="apercu_encodage_lecture_seule">Diese Datei ist nicht UTF-8-kodiert. Sie wird schreibgeschützt geöffnet, damit sie nicht beschädigt wird.</string>
+    <string name="apercu_encodage_lecture_seule">Die Kodierung dieser Datei lässt sich nicht sicher bestimmen. Sie wird schreibgeschützt geöffnet, damit sie nicht beschädigt wird.</string>
     <string name="sync_conflits_suppression">\n• Löschung abgebrochen: %1$s wurde remote geändert</string>
     <string name="sync_conflits_deplacement">\n• Verschiebung abgebrochen; Kopie beibehalten: %1$s</string>
     <string name="reglages_conflits_suppression">• Löschung abgebrochen: %1$s wurde remote geändert</string>

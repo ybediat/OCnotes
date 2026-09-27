@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import eu.ocnotes.AppContainer
+import eu.ocnotes.R
 import eu.ocnotes.data.AppMode
 import eu.ocnotes.data.FormatAction
 import eu.ocnotes.data.NoteBlockDto
@@ -90,6 +91,16 @@ data class EditorUiState(
 
     /** Pourquoi [modifiable] est faux ; sans objet sinon. */
     val raisonLectureSeule: RaisonLectureSeule = RaisonLectureSeule.MOT_TROP_LONG,
+
+    /**
+     * Encodage du fichier quand ce n'est pas de l'UTF-8 — « windows-1252 »,
+     * « UTF-16LE »… — et `null` sinon.
+     *
+     * Affiché sous le titre : c'est ce qui explique d'avance qu'un emoji soit
+     * refusé dans un fichier Windows-1252. Décide aussi du contrôle fait avant
+     * de quitter, inutile en UTF-8, qui écrit tout.
+     */
+    val encodage: String? = null,
 
     /**
      * Vrai quand les notes ne vivent que sur cet appareil.
@@ -258,6 +269,7 @@ class EditorViewModel(
                     // Les images restent côté Go, sous `sessionEdition`.
                     val prepare = repository.openEdit(nom, contenu)
                     sessionEdition = prepare.session
+                    val encodage = repository.noteEncoding(chemin).takeUnless { it == ENCODAGE_UTF8 }
 
                     // `update` prend une lambda non suspendue : tout appel à la
                     // façade se fait avant, jamais dedans.
@@ -275,6 +287,7 @@ class EditorViewModel(
                             titre = titre,
                             modifiable = prepare.editable,
                             raisonLectureSeule = RaisonLectureSeule.MOT_TROP_LONG,
+                            encodage = encodage,
                             // Une note inaffichable en saisie s'ouvre directement
                             // en lecture : c'est le seul mode qui tienne.
                             apercu = !prepare.editable,
@@ -506,9 +519,69 @@ class EditorViewModel(
                 }
             } catch (e: OCnotesException) {
                 // Le réseau n'entre pas en jeu ici. Ce qui reste — un cache
-                // illisible, un disque plein — mérite d'être dit.
-                _uiState.update { it.copy(erreur = e.texte()) }
+                // illisible, un disque plein, un caractère que l'encodage du
+                // fichier ne sait pas écrire — mérite d'être dit. La note reste
+                // « modifiée » : rien n'est perdu, rien n'est écrit.
+                val texte = if (e.code == CODE_NON_REPRESENTABLE) {
+                    texteCaractereRefuse(contenu) ?: e.texte()
+                } else {
+                    e.texte()
+                }
+                _uiState.update { it.copy(erreur = texte) }
             }
+        }
+    }
+
+    /**
+     * Le message qui nomme le caractère que l'encodage du fichier refuse, ou
+     * `null` si le texte n'en porte aucun.
+     *
+     * Go ne met pas ce caractère dans son code d'erreur, qui ne porte aucun
+     * paramètre : on le lui redemande, et seulement après un refus.
+     */
+    private suspend fun texteCaractereRefuse(contenu: String): Texte? {
+        val encodage = _uiState.value.encodage ?: return null
+        val caractere = try {
+            repository.unrepresentable(chemin, contenu)
+        } catch (_: OCnotesException) {
+            null
+        } ?: return null
+        return Texte.de(R.string.err_caractere_non_representable, caractere, encodage)
+    }
+
+    /** Vrai une fois la sortie accordée : un second appui ne la relance pas. */
+    private var sortieAccordee = false
+
+    /**
+     * Enregistre puis quitte — sauf si le texte porte un caractère que
+     * l'encodage du fichier ne sait pas écrire.
+     *
+     * La sortie n'attend pas son écriture, qui part dans `applicationScope` :
+     * en UTF-8, elle ne peut pas échouer. Dans un fichier Windows-1252, un
+     * emoji la ferait échouer **après** la fermeture de l'écran, et les
+     * modifications non encore enregistrées seraient perdues sans un mot. Le
+     * texte est donc vérifié d'abord, et l'utilisateur reste dans l'éditeur,
+     * avec le message qui nomme le caractère.
+     */
+    fun quitter(instantane: InstantaneEditeurNatif?, sortir: () -> Unit) {
+        if (sortieAccordee) return
+        val etat = _uiState.value
+        if (instantane == null || etat.encodage == null || !etat.modifie || !etat.enregistrable) {
+            sortieAccordee = true
+            instantane?.let { enregistrerInstantaneNatif(it, survivreEcran = true) }
+            sortir()
+            return
+        }
+        viewModelScope.launch {
+            val refus = texteCaractereRefuse(instantane.texte)
+            if (refus != null) {
+                _uiState.update { it.copy(erreur = refus) }
+                return@launch
+            }
+            if (sortieAccordee) return@launch
+            sortieAccordee = true
+            enregistrerInstantaneNatif(instantane, survivreEcran = true)
+            sortir()
         }
     }
 
@@ -543,6 +616,12 @@ class EditorViewModel(
     companion object {
         /** Code Go d'un contenu qui n'est pas de l'UTF-8 (`mobile.CodeNotUTF8`). */
         private const val CODE_NON_UTF8 = "NOT_UTF8"
+
+        /** Code Go d'un caractère que l'encodage du fichier ne sait pas écrire. */
+        private const val CODE_NON_REPRESENTABLE = "ENCODING_UNREPRESENTABLE"
+
+        /** Nom Go de l'UTF-8 (`charset.UTF8`), le seul à ne rien refuser. */
+        private const val ENCODAGE_UTF8 = "UTF-8"
 
         fun factory(container: AppContainer, chemin: String): ViewModelProvider.Factory =
             viewModelFactory {

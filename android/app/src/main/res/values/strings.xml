@@ -77,7 +77,9 @@
     <string name="err_dossier_hors_ligne">Un dossier ne peut pas être renommé, déplacé ou supprimé hors connexion. Reconnectez-vous d\'abord.</string>
     <string name="err_lecture_seule">Ce fichier ne peut pas être modifié ici.</string>
     <string name="err_format_non_pris_en_charge">Cette opération ne convient pas à ce format de fichier.</string>
-    <string name="err_encodage">Ce fichier n\'est pas encodé en UTF-8 : il ne peut être ouvert qu\'en lecture.</string>
+    <string name="err_encodage">L\'encodage de ce fichier n\'est pas reconnu avec certitude : il ne peut être ouvert qu\'en lecture.</string>
+    <string name="err_encodage_non_representable">Le texte contient un caractère que l\'encodage de ce fichier ne sait pas écrire. Retirez-le pour pouvoir enregistrer.</string>
+    <string name="err_caractere_non_representable">« %1$s » n\'existe pas dans l\'encodage de ce fichier (%2$s). Retirez-le pour pouvoir enregistrer.</string>
     <string name="err_document_invalide">Ce document est invalide ou incomplet.</string>
     <string name="err_document_trop_volumineux">Le contenu de ce document est trop volumineux à afficher.</string>
     <string name="err_fichier_trop_volumineux">Ce document est trop volumineux à ouvrir.</string>
@@ -461,6 +463,8 @@
     <!-- Un état, pas une alerte : dit ce qui se passe sans laisser croire
          à une perte. -->
     <string name="editeur_brouillon">Brouillon local, envoi programmé</string>
+    <string name="editeur_encodage">Encodage %1$s</string>
+    <string name="separateur_sous_titre" translatable="false">" · "</string>
     <string name="editeur_saisie_vide">Écrivez ici…</string>
     <string name="editeur_illisible_titre">Note non chargée</string>
     <string name="editeur_illisible_detail">Son contenu n\'a pas pu être lu. Rien n\'a été modifié : rouvrez-la une fois la connexion revenue.</string>
@@ -533,7 +537,7 @@
     <string name="apercu_document_lecture_seule">Ce document est ouvert en lecture seule.</string>
     <string name="apercu_texte_lecture_seule">Ce type de fichier s\'ouvre en lecture seule.</string>
     <string name="apercu_autorisation_lecture_seule">Vous pouvez consulter cette note, mais vous n’avez pas l’autorisation de la modifier.</string>
-    <string name="apercu_encodage_lecture_seule">Ce fichier n\'est pas encodé en UTF-8. Il est ouvert en lecture seule pour ne pas l\'abîmer.</string>
+    <string name="apercu_encodage_lecture_seule">L\'encodage de ce fichier n\'est pas reconnu avec certitude. Il est ouvert en lecture seule pour ne pas l\'abîmer.</string>
     <string name="sync_conflits_suppression">\n• suppression annulée : %1$s a changé à distance</string>
     <string name="sync_conflits_deplacement">\n• déplacement annulé ; copie conservée : %1$s</string>
     <string name="reglages_conflits_suppression">• Suppression annulée : %1$s a changé à distance</string>

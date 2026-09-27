@@ -148,12 +148,10 @@ fun EditorScreen(
 
     // Le retour arrière enregistre avant de quitter. `WriteNote` écrit dans le
     // cache local : l'opération est immédiate et ne peut pas échouer faute de
-    // réseau, il n'y a donc rien à attendre ni à confirmer.
+    // réseau. Elle peut en revanche refuser un caractère que l'encodage du
+    // fichier ne sait pas écrire : le ViewModel vérifie alors avant de sortir.
     val quitter = {
-        (sessionNative.instantane() ?: dernierInstantaneNatif)?.let { instantane ->
-            viewModel.enregistrerInstantaneNatif(instantane, survivreEcran = true)
-        }
-        onRetour()
+        viewModel.quitter(sessionNative.instantane() ?: dernierInstantaneNatif, onRetour)
     }
     BackHandler(onBack = quitter)
 
@@ -171,11 +169,20 @@ fun EditorScreen(
                         )
                         // Un état, pas une alerte : « brouillon local » dit ce
                         // qui se passe sans laisser croire à une perte.
-                        if (etat.modifie) {
+                        // L'encodage d'un fichier qui n'est pas en UTF-8 le
+                        // rejoint sur la même ligne : il explique d'avance
+                        // qu'un emoji y soit refusé.
+                        val sousTitre = listOfNotNull(
+                            stringResource(R.string.editeur_brouillon).takeIf { etat.modifie },
+                            etat.encodage?.let { stringResource(R.string.editeur_encodage, it) },
+                        )
+                        if (sousTitre.isNotEmpty()) {
                             Text(
-                                text = stringResource(R.string.editeur_brouillon),
+                                text = sousTitre.joinToString(stringResource(R.string.separateur_sous_titre)),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }

@@ -83,7 +83,9 @@
     <string name="err_dossier_hors_ligne">A folder cannot be renamed, moved, or deleted while offline. Reconnect first.</string>
     <string name="err_lecture_seule">This file cannot be edited here.</string>
     <string name="err_format_non_pris_en_charge">This operation does not support this file format.</string>
-    <string name="err_encodage">This file is not UTF-8 encoded: it can only be opened for reading.</string>
+    <string name="err_encodage">This file\'s encoding cannot be identified with certainty: it can only be opened for reading.</string>
+    <string name="err_encodage_non_representable">The text contains a character that this file\'s encoding cannot store. Remove it to be able to save.</string>
+    <string name="err_caractere_non_representable">“%1$s” does not exist in this file\'s encoding (%2$s). Remove it to be able to save.</string>
     <string name="err_document_invalide">This document is invalid or incomplete.</string>
     <string name="err_document_trop_volumineux">This document’s contents are too large to display.</string>
     <string name="err_fichier_trop_volumineux">This document is too large to open.</string>
@@ -458,6 +460,7 @@
     <!-- Un état, pas une alerte : dit ce qui se passe sans laisser croire
          à une perte. -->
     <string name="editeur_brouillon">Local draft, upload scheduled</string>
+    <string name="editeur_encodage">Encoding %1$s</string>
     <string name="editeur_saisie_vide">Write here…</string>
     <string name="editeur_illisible_titre">Note not loaded</string>
     <string name="editeur_illisible_detail">Its contents could not be read. Nothing was changed: reopen it once the connection is back.</string>
@@ -525,7 +528,7 @@
     <string name="apercu_document_lecture_seule">This document is open in read-only mode.</string>
     <string name="apercu_texte_lecture_seule">This type of file opens in read-only mode.</string>
     <string name="apercu_autorisation_lecture_seule">You can view this note, but you do not have permission to edit it.</string>
-    <string name="apercu_encodage_lecture_seule">This file is not UTF-8 encoded. It is open in read-only mode so that it is not damaged.</string>
+    <string name="apercu_encodage_lecture_seule">This file\'s encoding cannot be identified with certainty. It is open in read-only mode so that it is not damaged.</string>
     <string name="sync_conflits_suppression">\n• deletion cancelled: %1$s changed remotely</string>
     <string name="sync_conflits_deplacement">\n• move cancelled; copy kept: %1$s</string>
     <string name="reglages_conflits_suppression">• Deletion cancelled: %1$s changed remotely</string>

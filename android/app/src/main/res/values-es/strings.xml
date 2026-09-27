@@ -64,7 +64,9 @@
     <string name="err_dossier_hors_ligne">No se puede cambiar el nombre, mover ni eliminar una carpeta sin conexión. Vuelve a conectarte primero.</string>
     <string name="err_lecture_seule">Este archivo no se puede editar aquí.</string>
     <string name="err_format_non_pris_en_charge">Esta operación no es compatible con este formato de archivo.</string>
-    <string name="err_encodage">Este archivo no está codificado en UTF-8: solo se puede abrir en modo de lectura.</string>
+    <string name="err_encodage">La codificación de este archivo no se puede identificar con certeza: solo se puede abrir en modo de lectura.</string>
+    <string name="err_encodage_non_representable">El texto contiene un carácter que la codificación de este archivo no puede guardar. Elimínelo para poder guardar.</string>
+    <string name="err_caractere_non_representable">«%1$s» no existe en la codificación de este archivo (%2$s). Elimínelo para poder guardar.</string>
     <string name="err_document_invalide">Este documento no es válido o está incompleto.</string>
     <string name="err_document_trop_volumineux">El contenido de este documento es demasiado grande para mostrarlo.</string>
     <string name="err_fichier_trop_volumineux">Este documento es demasiado grande para abrirlo.</string>
@@ -443,6 +445,7 @@
     <!-- Un état, pas une alerte : dit ce qui se passe sans laisser croire
          à une perte. -->
     <string name="editeur_brouillon">Borrador local, envío programado</string>
+    <string name="editeur_encodage">Codificación %1$s</string>
     <string name="editeur_saisie_vide">Escriba aquí…</string>
     <string name="editeur_illisible_titre">Nota no cargada</string>
     <string name="editeur_illisible_detail">No se ha podido leer su contenido. No se ha modificado nada: vuelva a abrirla cuando se restablezca la conexión.</string>
@@ -508,7 +511,7 @@
     <string name="apercu_document_lecture_seule">Este documento se abre en modo de solo lectura.</string>
     <string name="apercu_texte_lecture_seule">Este tipo de archivo se abre en modo de solo lectura.</string>
     <string name="apercu_autorisation_lecture_seule">Puede consultar esta nota, pero no tiene permiso para modificarla.</string>
-    <string name="apercu_encodage_lecture_seule">Este archivo no está codificado en UTF-8. Se ha abierto en modo de solo lectura para no dañarlo.</string>
+    <string name="apercu_encodage_lecture_seule">La codificación de este archivo no se puede identificar con certeza. Se ha abierto en modo de solo lectura para no dañarlo.</string>
     <string name="sync_conflits_suppression">\n• eliminación cancelada: %1$s cambió de forma remota</string>
     <string name="sync_conflits_deplacement">\n• traslado cancelado; copia conservada: %1$s</string>
     <string name="reglages_conflits_suppression">• Eliminación cancelada: %1$s cambió de forma remota</string>

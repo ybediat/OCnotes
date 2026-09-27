@@ -849,6 +849,20 @@ class OCnotesRepository(
         refreshPending()
     }
 
+    /**
+     * Encodage dans lequel la note sera écrite — « UTF-8 », « windows-1252 »,
+     * « UTF-16LE » ou « UTF-16BE ». Sans réseau ; à demander après [readNote],
+     * qui le retient.
+     */
+    suspend fun noteEncoding(notePath: String): String = call { it.noteEncoding(notePath) }
+
+    /**
+     * Premier caractère de [text] que l'encodage de la note ne sait pas écrire,
+     * ou `null` s'il n'y en a aucun. Sans réseau, sans rien écrire.
+     */
+    suspend fun unrepresentable(notePath: String, text: String): String? =
+        call { it.unrepresentable(notePath, text) }.ifEmpty { null }
+
     /** Libère les images d'une session, **après** sa dernière écriture. */
     suspend fun closeEdit(session: String) {
         if (session.isNotEmpty()) call { it.closeEdit(session) }
