@@ -77,6 +77,8 @@ private fun texteLocal(code: String): Texte? = when (code) {
     "QUOTA_TOO_LOW" -> Texte.de(R.string.err_quota_local)
     "QUOTA_PROTECTED" -> Texte.de(R.string.err_quota_protege)
     "PENDING_CHANGES" -> Texte.de(R.string.err_modifications_attente)
+    "ACCOUNT_MISMATCH" -> Texte.de(R.string.err_compte_different)
+    "SESSION_CHANGED" -> Texte.de(R.string.err_session_changee)
     else -> null
 }
 

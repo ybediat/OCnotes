@@ -91,12 +91,13 @@
     <string name="err_quota_local">La limite de stockage est trop basse pour conserver toutes les notes sur cet appareil.</string>
     <string name="err_quota_protege">Limite enregistrée. Vos modifications non synchronisées et vos copies de conflit la dépassent déjà : elles sont conservées.</string>
     <string name="err_modifications_attente">Des modifications doivent encore être synchronisées avant de déconnecter le serveur.</string>
+    <string name="err_compte_different">Ce compte n\'est pas celui dont les notes sont sur cet appareil. Connectez-vous avec ce compte-là, ou déconnectez-vous depuis les réglages pour en changer.</string>
+    <string name="err_session_changee">La session a changé pendant la connexion. Réessayez.</string>
 
     <!-- ================================================================
          Démarrage
          ================================================================ -->
     <string name="demarrage_token_refuse">Votre App Token n\'est plus accepté par le serveur. Il a sans doute expiré : créez-en un nouveau et saisissez-le.</string>
-    <string name="demarrage_migration_reconnexion">Le stockage des comptes a été mis à jour. Vos notes locales sont conservées ; reconnectez-vous pour reprendre la synchronisation.</string>
     <string name="demarrage_espace_hors_ligne">Il reste un espace de notes à choisir, et cette étape demande une connexion au serveur. Réessayez une fois le réseau revenu.</string>
 
     <!-- ================================================================

@@ -78,12 +78,13 @@
     <string name="err_quota_local">El límite de almacenamiento es demasiado bajo para guardar todas las notas en este dispositivo.</string>
     <string name="err_quota_protege">Límite guardado. Sus cambios sin sincronizar y sus copias de conflicto ya lo superan: se conservan.</string>
     <string name="err_modifications_attente">Aún deben sincronizarse algunos cambios antes de desconectar el servidor.</string>
+    <string name="err_compte_different">Esta cuenta no es la de las notas guardadas en este dispositivo. Inicie sesión con esa cuenta o cierre la sesión desde los ajustes para cambiar de cuenta.</string>
+    <string name="err_session_changee">La sesión cambió durante la conexión. Vuelva a intentarlo.</string>
 
     <!-- ================================================================
          Démarrage
          ================================================================ -->
     <string name="demarrage_token_refuse">El servidor ya no acepta su App Token. Probablemente ha caducado: cree uno nuevo e introdúzcalo.</string>
-    <string name="demarrage_migration_reconnexion">Se actualizó el almacenamiento de las cuentas. Sus notas locales se conservan; vuelva a iniciar sesión para reanudar la sincronización.</string>
     <string name="demarrage_espace_hors_ligne">Todavía hay que elegir un espacio para las notas y este paso requiere una conexión al servidor. Vuelva a intentarlo cuando se restablezca la conexión.</string>
 
     <!-- ================================================================

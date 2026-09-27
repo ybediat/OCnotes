@@ -51,6 +51,14 @@ type fakeServer struct {
 	// ensuite suspendu jusqu'à ce que le client abandonne : de quoi saisir
 	// une passe en plein échange avec le serveur.
 	putRetenu chan struct{}
+
+	// ownerID est l'identifiant LibreGraph du propriétaire de l'espace
+	// personnel. Le changer simule un autre compte sur le même serveur.
+	ownerID string
+
+	// surDAV, s'il est posé, est appelé avant chaque requête WebDAV : de quoi
+	// agir sur l'application pendant qu'un appel réseau est en vol.
+	surDAV func()
 }
 
 // setOffline simule la perte du réseau, de façon réversible.
@@ -71,6 +79,8 @@ func (f *fakeServer) isOffline() bool {
 
 const fakeSpaceID = "11111111-1111-4111-8111-111111111111$22222222-2222-4222-8222-222222222222"
 
+const fakeOwnerID = "44444444-4444-4444-8444-444444444444"
+
 const fakeUser = "testuser"
 const fakeToken = "test-app-token"
 
@@ -82,6 +92,7 @@ func newFakeServer(t *testing.T) *fakeServer {
 		etags:       map[string]string{},
 		folders:     map[string]bool{"": true},
 		permissions: map[string]string{},
+		ownerID:     fakeOwnerID,
 	}
 	f.Server = httptest.NewTLSServer(http.HandlerFunc(f.handle))
 
@@ -139,6 +150,13 @@ func (f *fakeServer) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	f.mu.Lock()
+	surDAV := f.surDAV
+	f.mu.Unlock()
+	if surDAV != nil {
+		surDAV()
+	}
+
 	p, ok := rel(r.URL.Path)
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
@@ -183,7 +201,16 @@ func (f *fakeServer) handle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (f *fakeServer) setOwner(id string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.ownerID = id
+}
+
 func (f *fakeServer) writeDrives(w http.ResponseWriter) {
+	f.mu.Lock()
+	owner := f.ownerID
+	f.mu.Unlock()
 	base := f.Server.URL
 	body, _ := json.Marshal(map[string]any{"value": []any{
 		map[string]any{
@@ -192,7 +219,7 @@ func (f *fakeServer) writeDrives(w http.ResponseWriter) {
 		},
 		map[string]any{
 			"id": fakeSpaceID, "name": "Admin", "driveType": "personal",
-			"owner": map[string]any{"user": map[string]any{"id": "44444444-4444-4444-8444-444444444444"}},
+			"owner": map[string]any{"user": map[string]any{"id": owner}},
 			"root":  map[string]any{"webDavUrl": base + davPrefix()},
 		},
 	}})

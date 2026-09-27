@@ -80,12 +80,13 @@
     <string name="err_quota_local">Das Speicherlimit ist zu niedrig, um alle Notizen auf diesem Gerät zu behalten.</string>
     <string name="err_quota_protege">Limit gespeichert. Ihre nicht synchronisierten Änderungen und Konfliktkopien überschreiten es bereits: Sie bleiben erhalten.</string>
     <string name="err_modifications_attente">Vor dem Trennen des Servers müssen noch Änderungen synchronisiert werden.</string>
+    <string name="err_compte_different">Dieses Konto gehört nicht zu den Notizen auf diesem Gerät. Melden Sie sich mit jenem Konto an oder melden Sie sich in den Einstellungen ab, um das Konto zu wechseln.</string>
+    <string name="err_session_changee">Die Sitzung hat sich während der Verbindung geändert. Versuchen Sie es erneut.</string>
 
     <!-- ================================================================
          Start
          ================================================================ -->
     <string name="demarrage_token_refuse">Ihr App-Token wird vom Server nicht mehr akzeptiert. Es ist wahrscheinlich abgelaufen: Erstellen Sie ein neues und geben Sie es ein.</string>
-    <string name="demarrage_migration_reconnexion">Der Kontospeicher wurde aktualisiert. Ihre lokalen Notizen bleiben erhalten; melden Sie sich erneut an, um die Synchronisierung fortzusetzen.</string>
     <string name="demarrage_espace_hors_ligne">Es muss noch ein Notizspeicherort ausgewählt werden, und dieser Schritt erfordert eine Verbindung zum Server. Versuchen Sie es erneut, sobald die Netzwerkverbindung wiederhergestellt ist.</string>
 
     <!-- ================================================================

@@ -58,7 +58,9 @@ class AppContainer(
      */
     val dossierPartage = File(context.cacheDir, "partage")
 
-    val syncScheduler = SyncScheduler(context, activeAccount.id)
+    val syncScheduler = SyncScheduler(context, activeAccount.id).also {
+        if (accountRegistry.vientDeMigrer) it.annulerTravauxSansProfil()
+    }
 
     val syncNotifier = SyncNotifier(context)
 
