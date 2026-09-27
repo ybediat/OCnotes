@@ -27,6 +27,12 @@ data class AccountProfile(
     val username: String = "",
     val authMode: String = "",
     val identityKey: String = "",
+    /**
+     * Nom lisible du compte. `username` ne convient pas à l'affichage : en
+     * OIDC, c'est le subject, un identifiant opaque. Vide tant qu'aucune
+     * connexion ne l'a fourni.
+     */
+    val displayName: String = "",
 )
 
 data class AccountRegistryState(
@@ -91,6 +97,7 @@ class AccountRegistry(private val filesDir: File) {
         username: String,
         authMode: String,
         identityKey: String,
+        displayName: String? = null,
     ) =
         withContext(Dispatchers.IO) {
             updateAccount(accountId) {
@@ -100,6 +107,7 @@ class AccountRegistry(private val filesDir: File) {
                     username = username,
                     authMode = authMode,
                     identityKey = identityKey,
+                    displayName = displayName ?: it.displayName,
                 )
             }
         }
@@ -112,6 +120,7 @@ class AccountRegistry(private val filesDir: File) {
                 username = "",
                 authMode = "",
                 identityKey = "",
+                displayName = "",
             )
         }
     }
@@ -124,6 +133,7 @@ class AccountRegistry(private val filesDir: File) {
                 username = "",
                 authMode = "",
                 identityKey = "",
+                displayName = "",
             )
         }
     }
@@ -153,6 +163,8 @@ class AccountRegistry(private val filesDir: File) {
             ?: throw IllegalArgumentException("Profil inconnu") // i18n-ok
         val updated = transform(current)
         check(updated.id == id) { "L'identifiant du profil ne peut pas changer" } // i18n-ok
+        // Rien à écrire : la revalidation de chaque démarrage repasse ici.
+        if (updated == current) return
         val updatedAccounts = accounts.map { if (it.id == id) updated else it }
         writeRegistry(active.id, updatedAccounts)
         accounts = updatedAccounts

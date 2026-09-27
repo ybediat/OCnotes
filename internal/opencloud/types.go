@@ -36,6 +36,25 @@ type Drive struct {
 	OwnerID string
 }
 
+// User décrit l'utilisateur connecté, tel que LibreGraph le renvoie.
+type User struct {
+	DisplayName string
+	Login       string
+	Mail        string
+}
+
+// Name est le nom à montrer : le nom complet, sinon le login, sinon
+// l'adresse. Ni l'identifiant LibreGraph ni le subject OIDC ne disent à
+// l'utilisateur quel compte il regarde.
+func (u User) Name() string {
+	for _, nom := range []string{u.DisplayName, u.Login, u.Mail} {
+		if nom = strings.TrimSpace(nom); nom != "" {
+			return nom
+		}
+	}
+	return ""
+}
+
 // IsStorage indique si l'espace peut héberger des notes.
 //
 // L'espace virtuel « Shares » est un agrégat de partages, pas un stockage : on

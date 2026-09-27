@@ -215,6 +215,7 @@ type appState struct {
 	ServerURL    string `json:"serverUrl"`
 	Username     string `json:"username"`
 	IdentityKey  string `json:"identityKey"`
+	DisplayName  string `json:"displayName"`
 	DriveID      string `json:"driveId"`
 	DriveName    string `json:"driveName"`
 	Root         string `json:"root"`
@@ -251,6 +252,7 @@ func (a *App) StateJSON() (string, error) {
 		ServerURL:    a.cfg.ServerURL,
 		Username:     a.cfg.Username,
 		IdentityKey:  a.cfg.IdentityKey,
+		DisplayName:  a.cfg.DisplayName,
 		DriveID:      a.cfg.DriveID,
 		DriveName:    a.cfg.DriveName,
 		Root:         a.cfg.Root,
@@ -379,6 +381,12 @@ func (a *App) connectClient(serverURL, username, authMode string, client *opencl
 	if err != nil {
 		return err
 	}
+	// Le nom n'est qu'un libellé : un serveur qui ne répond pas à /me ne
+	// doit pas empêcher la connexion, et le nom déjà connu reste alors.
+	var nom string
+	if me, err := client.Me(ctx); err == nil {
+		nom = me.Name()
+	}
 
 	a.mu.Lock()
 	ancienne := a.cfg
@@ -403,6 +411,9 @@ func (a *App) connectClient(serverURL, username, authMode string, client *opencl
 	// une identité stable déjà connue au lieu de la remplacer par du vide.
 	if identityKey != "" {
 		nouvelle.IdentityKey = identityKey
+	}
+	if nom != "" {
+		nouvelle.DisplayName = nom
 	}
 
 	// Branchement en cours depuis le mode local : rien n'est écrit tant que

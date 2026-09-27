@@ -252,6 +252,23 @@ func (c *Client) ListDrives(ctx context.Context) ([]Drive, error) {
 	return drives, nil
 }
 
+// Me renvoie l'utilisateur connecté.
+func (c *Client) Me(ctx context.Context) (User, error) {
+	data, _, err := c.do(ctx, http.MethodGet, c.resolve("/graph/v1.0/me"), nil, nil)
+	if err != nil {
+		return User{}, err
+	}
+	var parsed struct {
+		DisplayName string `json:"displayName"`
+		Login       string `json:"onPremisesSamAccountName"`
+		Mail        string `json:"mail"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return User{}, fmt.Errorf("opencloud: utilisateur illisible: %w", err)
+	}
+	return User{DisplayName: parsed.DisplayName, Login: parsed.Login, Mail: parsed.Mail}, nil
+}
+
 // PersonalDrive choisit l'espace où créer les notes.
 //
 // L'espace personnel est préféré ; à défaut, le premier espace de stockage.

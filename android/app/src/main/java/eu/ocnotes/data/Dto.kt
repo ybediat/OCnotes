@@ -23,6 +23,7 @@ data class AppStateDto(
     val serverUrl: String = "",
     val username: String = "",
     val identityKey: String = "",
+    val displayName: String = "",
     val driveId: String = "",
     val driveName: String = "",
     val root: String = "",

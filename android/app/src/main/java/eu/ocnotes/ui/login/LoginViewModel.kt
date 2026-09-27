@@ -233,7 +233,7 @@ class LoginViewModel(
                 val connexion = oidcManager.finishAuthorization(data)
                 repository.connectOidc(
                     serverUrl = server,
-                    accountId = connexion.accountId,
+                    subject = connexion.accountId,
                     accessToken = connexion.accessToken,
                     serializedState = connexion.serializedState,
                 )

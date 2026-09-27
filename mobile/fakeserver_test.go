@@ -56,6 +56,11 @@ type fakeServer struct {
 	// personnel. Le changer simule un autre compte sur le même serveur.
 	ownerID string
 
+	// nomAffiche est le displayName que renvoie /graph/v1.0/me ; sansMe fait
+	// répondre 404, comme un serveur qui n'expose pas cet appel.
+	nomAffiche string
+	sansMe     bool
+
 	// surDAV, s'il est posé, est appelé avant chaque requête WebDAV : de quoi
 	// agir sur l'application pendant qu'un appel réseau est en vol.
 	surDAV func()
@@ -81,6 +86,8 @@ const fakeSpaceID = "11111111-1111-4111-8111-111111111111$22222222-2222-4222-822
 
 const fakeOwnerID = "44444444-4444-4444-8444-444444444444"
 
+const fakeDisplayName = "Alice Martin"
+
 const fakeUser = "testuser"
 const fakeToken = "test-app-token"
 
@@ -93,6 +100,7 @@ func newFakeServer(t *testing.T) *fakeServer {
 		folders:     map[string]bool{"": true},
 		permissions: map[string]string{},
 		ownerID:     fakeOwnerID,
+		nomAffiche:  fakeDisplayName,
 	}
 	f.Server = httptest.NewTLSServer(http.HandlerFunc(f.handle))
 
@@ -149,6 +157,10 @@ func (f *fakeServer) handle(w http.ResponseWriter, r *http.Request) {
 		f.writeDrives(w)
 		return
 	}
+	if r.Method == http.MethodGet && r.URL.Path == "/graph/v1.0/me" {
+		f.writeMe(w)
+		return
+	}
 
 	f.mu.Lock()
 	surDAV := f.surDAV
@@ -199,6 +211,21 @@ func (f *fakeServer) handle(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+func (f *fakeServer) writeMe(w http.ResponseWriter) {
+	f.mu.Lock()
+	nom, sansMe, owner := f.nomAffiche, f.sansMe, f.ownerID
+	f.mu.Unlock()
+	if sansMe {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	body, _ := json.Marshal(map[string]any{
+		"id": owner, "displayName": nom, "onPremisesSamAccountName": fakeUser,
+	})
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(body)
 }
 
 func (f *fakeServer) setOwner(id string) {

@@ -17,6 +17,7 @@
          unterschiedlich übersetzt werden – eine Übersetzung fehlt, und es gibt keine Warnung.
          ================================================================ -->
     <string name="action_annuler">Abbrechen</string>
+    <string name="action_fermer">Schließen</string>
     <string name="action_supprimer">Löschen</string>
     <string name="action_deplacer">Verschieben</string>
     <string name="action_copier">Kopieren</string>
@@ -271,6 +272,7 @@
     <string name="compte_local">Lokale Notizen</string>
     <string name="compte_nouveau">Neues Konto</string>
     <string name="compte_ajouter">Konto hinzufügen</string>
+    <string name="compte_geste_echec">Der Vorgang für das Konto ist fehlgeschlagen. Versuchen Sie es erneut.</string>
     <string name="compte_supprimer">Konto entfernen</string>
     <string name="compte_supprimer_titre">Dieses Konto entfernen?</string>
     <string name="compte_supprimer_message">Das Konto %1$s, sein Cache und alle nicht synchronisierten lokalen Änderungen werden von diesem Gerät gelöscht. Dies kann nicht rückgängig gemacht werden.</string>

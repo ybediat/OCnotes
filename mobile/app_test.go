@@ -285,6 +285,41 @@ func TestIdentiteStablePrimeSurLeLibelleDeConnexion(t *testing.T) {
 
 // Sans clé exploitable des deux côtés, la comparaison retombe sur l'URL, le
 // login et la méthode. Une clé d'un autre format compte comme absente.
+// Le login App Token et, pire, le subject OIDC ne disent pas qui est le
+// compte : l'interface affiche le nom que LibreGraph donne à l'utilisateur.
+func TestConnexionRetientLeNomDuCompte(t *testing.T) {
+	app, server, dataDir := prepare(t)
+	if app.cfg.DisplayName != fakeDisplayName {
+		t.Fatalf("DisplayName = %q, %q attendu", app.cfg.DisplayName, fakeDisplayName)
+	}
+
+	raw, err := app.StateJSON()
+	if err != nil {
+		t.Fatalf("StateJSON: %v", err)
+	}
+	var state appState
+	decodeJSON(t, raw, &state)
+	if state.DisplayName != fakeDisplayName {
+		t.Fatalf("state.displayName = %q", state.DisplayName)
+	}
+
+	// Un serveur qui ne répond pas à /me ne bloque pas la connexion, et le
+	// nom déjà connu reste.
+	server.mu.Lock()
+	server.sansMe = true
+	server.mu.Unlock()
+	if err := app.ConnectOIDC(server.URL, "sub-oidc", fakeToken); err != nil {
+		t.Fatalf("connexion sans /me: %v", err)
+	}
+	persistee, err := config.Load(dataDir)
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	if persistee.DisplayName != fakeDisplayName {
+		t.Fatalf("nom perdu faute de /me: %q", persistee.DisplayName)
+	}
+}
+
 func TestSansCleComparableLeReplieCompareLeLogin(t *testing.T) {
 	current := config.Config{
 		Mode:        config.ModeServer,
