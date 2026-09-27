@@ -96,6 +96,7 @@
          Démarrage
          ================================================================ -->
     <string name="demarrage_token_refuse">Votre App Token n\'est plus accepté par le serveur. Il a sans doute expiré : créez-en un nouveau et saisissez-le.</string>
+    <string name="demarrage_migration_reconnexion">Le stockage des comptes a été mis à jour. Vos notes locales sont conservées ; reconnectez-vous pour reprendre la synchronisation.</string>
     <string name="demarrage_espace_hors_ligne">Il reste un espace de notes à choisir, et cette étape demande une connexion au serveur. Réessayez une fois le réseau revenu.</string>
 
     <!-- ================================================================

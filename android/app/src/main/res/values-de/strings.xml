@@ -85,6 +85,7 @@
          Start
          ================================================================ -->
     <string name="demarrage_token_refuse">Ihr App-Token wird vom Server nicht mehr akzeptiert. Es ist wahrscheinlich abgelaufen: Erstellen Sie ein neues und geben Sie es ein.</string>
+    <string name="demarrage_migration_reconnexion">Der Kontospeicher wurde aktualisiert. Ihre lokalen Notizen bleiben erhalten; melden Sie sich erneut an, um die Synchronisierung fortzusetzen.</string>
     <string name="demarrage_espace_hors_ligne">Es muss noch ein Notizspeicherort ausgewählt werden, und dieser Schritt erfordert eine Verbindung zum Server. Versuchen Sie es erneut, sobald die Netzwerkverbindung wiederhergestellt ist.</string>
 
     <!-- ================================================================

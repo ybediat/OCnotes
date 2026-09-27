@@ -219,6 +219,11 @@ type driveListResponse struct {
 		Root      struct {
 			WebDavURL string `json:"webDavUrl"`
 		} `json:"root"`
+		Owner struct {
+			User struct {
+				ID string `json:"id"`
+			} `json:"user"`
+		} `json:"owner"`
 	} `json:"value"`
 }
 
@@ -241,6 +246,7 @@ func (c *Client) ListDrives(ctx context.Context) ([]Drive, error) {
 			Name:      d.Name,
 			Type:      d.DriveType,
 			WebDavURL: d.Root.WebDavURL,
+			OwnerID:   d.Owner.User.ID,
 		})
 	}
 	return drives, nil

@@ -18,21 +18,33 @@ import javax.crypto.spec.GCMParameterSpec
 /**
  * Stockage du token d'application chiffré par une clé Android Keystore.
  *
- * Aucune migration depuis l'ancien format n'est réalisée : une réinstallation
- * est requise lors du passage à ce schéma.
+ * Chaque profil possède ses préférences, sa clé et son AAD. L'ancien secret
+ * global n'est volontairement pas migré : les données locales sont conservées,
+ * mais une mise à jour vers ce schéma demande une nouvelle authentification.
  *
  * Les préférences ne contiennent que le nonce et le texte chiffré AES-GCM. La
  * clé AES reste non exportable dans Android Keystore. Le chiffrement est aussi
  * lié à ce format de donnée par une donnée authentifiée additionnelle stable.
  */
-class TokenStore(private val context: Context) {
+class TokenStore(
+    private val context: Context,
+    private val accountId: String,
+) {
+
+    init {
+        // Le passage au stockage par profil force volontairement une nouvelle
+        // authentification. Une fois le profil créé, l'ancien secret global ne
+        // doit pas rester orphelin sur l'appareil.
+        context.deleteSharedPreferences(FILE_NAME)
+        runCatching { keyStore().deleteEntry(KEY_ALIAS) }
+    }
 
     @Volatile
     private var cached: SharedPreferences? = null
 
     private fun prefs(): SharedPreferences =
         cached ?: synchronized(this) {
-            cached ?: context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
+            cached ?: context.getSharedPreferences("${FILE_NAME}_$accountId", Context.MODE_PRIVATE)
                 .also { cached = it }
         }
 
@@ -94,13 +106,13 @@ class TokenStore(private val context: Context) {
         check(prefs().edit().clear().commit()) {
             "effacement du token chiffré impossible" // i18n-ok: exception technique, non affichée
         }
-        keyStore().deleteEntry(KEY_ALIAS)
+        keyStore().deleteEntry(keyAlias)
     }
 
     private fun encrypt(token: String): String {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, encryptionKey())
-        cipher.updateAAD(AAD)
+        cipher.updateAAD(aad)
         val encrypted = cipher.doFinal(token.toByteArray(Charsets.UTF_8))
         return listOf(
             Base64.encodeToString(cipher.iv, Base64.NO_WRAP),
@@ -119,7 +131,7 @@ class TokenStore(private val context: Context) {
             key,
             GCMParameterSpec(GCM_TAG_LENGTH_BITS, Base64.decode(ivEncoded, Base64.NO_WRAP)),
         )
-        cipher.updateAAD(AAD)
+        cipher.updateAAD(aad)
         return cipher.doFinal(Base64.decode(ciphertextEncoded, Base64.NO_WRAP))
             .toString(Charsets.UTF_8)
     }
@@ -134,7 +146,7 @@ class TokenStore(private val context: Context) {
         )
         generator.init(
             KeyGenParameterSpec.Builder(
-                KEY_ALIAS,
+                keyAlias,
                 KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
             )
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
@@ -146,7 +158,7 @@ class TokenStore(private val context: Context) {
     }
 
     private fun decryptionKey(): SecretKey? =
-        keyStore().getKey(KEY_ALIAS, null) as? SecretKey
+        keyStore().getKey(keyAlias, null) as? SecretKey
 
     private fun keyStore(): KeyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply {
         load(null)
@@ -157,8 +169,12 @@ class TokenStore(private val context: Context) {
     @SuppressLint("ApplySharedPref")
     private fun discardUnreadableToken() {
         prefs().edit().remove(KEY_APP_TOKEN).remove(KEY_OIDC_STATE).commit()
-        runCatching { keyStore().deleteEntry(KEY_ALIAS) }
+        runCatching { keyStore().deleteEntry(keyAlias) }
     }
+
+    private val keyAlias: String get() = "${KEY_ALIAS}_$accountId"
+    private val aad: ByteArray get() =
+        "eu.ocnotes.account-secret.v3:$accountId".toByteArray(Charsets.UTF_8)
 
     private companion object {
         const val FILE_NAME = "ocnotes_secrets_v2"
@@ -169,6 +185,5 @@ class TokenStore(private val context: Context) {
         const val TRANSFORMATION = "AES/GCM/NoPadding"
         const val AES_KEY_SIZE_BITS = 256
         const val GCM_TAG_LENGTH_BITS = 128
-        val AAD = "eu.ocnotes.app-token.v2".toByteArray(Charsets.UTF_8)
     }
 }

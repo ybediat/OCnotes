@@ -192,7 +192,8 @@ func (f *fakeServer) writeDrives(w http.ResponseWriter) {
 		},
 		map[string]any{
 			"id": fakeSpaceID, "name": "Admin", "driveType": "personal",
-			"root": map[string]any{"webDavUrl": base + davPrefix()},
+			"owner": map[string]any{"user": map[string]any{"id": "44444444-4444-4444-8444-444444444444"}},
+			"root":  map[string]any{"webDavUrl": base + davPrefix()},
 		},
 	}})
 	w.Header().Set("Content-Type", "application/json")

@@ -82,6 +82,11 @@ type Config struct {
 	// d'identité est en mode autoprovisioning.
 	Username string `json:"username"`
 
+	// IdentityKey reconnaît le compte indépendamment de son login. Les
+	// anciennes configurations laissent ce champ vide jusqu'à leur première
+	// reconnexion réussie.
+	IdentityKey string `json:"identityKey,omitempty"`
+
 	// DriveID a la forme {storageID}${spaceID}.
 	DriveID   string `json:"driveId,omitempty"`
 	DriveName string `json:"driveName,omitempty"`

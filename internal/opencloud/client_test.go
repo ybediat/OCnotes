@@ -167,6 +167,9 @@ func TestListDrives(t *testing.T) {
 	if personal.WebDavURL == "" {
 		t.Error("drives[1].WebDavURL est vide")
 	}
+	if personal.OwnerID != "44444444-4444-4444-8444-444444444444" {
+		t.Errorf("drives[1].OwnerID = %q", personal.OwnerID)
+	}
 }
 
 // PersonalDrive doit écarter l'espace virtuel « Shares », qui n'est pas un

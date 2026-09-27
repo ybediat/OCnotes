@@ -22,6 +22,7 @@ import kotlin.coroutines.resumeWithException
 
 data class OidcConnexion(
     val accountId: String,
+    val issuer: String,
     val accessToken: String,
     val serializedState: String,
 )
@@ -102,7 +103,10 @@ class OidcManager(private val context: Context) {
         state.update(tokenResponse, null)
         val accessToken = requireNotNull(state.accessToken) { "Access token OIDC absent" } // i18n-ok
         val accountId = subject(state.idToken)
-        return OidcConnexion(accountId, accessToken, state.jsonSerializeString())
+        val issuer = requireNotNull(response.request.configuration.discoveryDoc?.issuer) {
+            "Issuer OIDC absent" // i18n-ok
+        }
+        return OidcConnexion(accountId, issuer, accessToken, state.jsonSerializeString())
     }
 
     suspend fun freshToken(serializedState: String): JetonOidc {

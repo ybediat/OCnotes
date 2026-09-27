@@ -26,6 +26,12 @@ class SyncWorker(
     override suspend fun doWork(): Result {
         val container = (applicationContext as OCnotesApplication).container
 
+        // Un ancien travail ou le travail d'un autre profil ne doit jamais
+        // ouvrir le cache du compte actuellement actif.
+        if (inputData.getString(SyncScheduler.KEY_ACCOUNT_ID) != container.activeAccount.id) {
+            return Result.success()
+        }
+
         // Pas de session récupérable : rien à synchroniser, et surtout rien à
         // signaler. L'utilisateur se reconnectera, ce n'est pas un échec.
         if (!container.repository.ensureSession()) return Result.success()

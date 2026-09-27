@@ -64,6 +64,7 @@ enum class ValidationSession {
  */
 class OCnotesRepository(
     private val dataDir: String,
+    private val accountRegistry: AccountRegistry,
     private val tokenStore: TokenStore,
     private val oidcManager: OidcManager,
     private val preferences: PreferencesAffichage,
@@ -140,6 +141,10 @@ class OCnotesRepository(
      * connexion : un token expiré ne se répare pas en réessayant.
      */
     val sessionExpired: StateFlow<Boolean> = _sessionExpired.asStateFlow()
+
+    /** Une migration a conservé le cache mais volontairement écarté l'ancien secret global. */
+    val migrationRequiresReauthentication: Boolean
+        get() = accountRegistry.active.needsReauthentication
 
     /** Marque la session comme perdue. Ne touche pas au token enregistré :
      * l'écran de connexion le repropose, le nom d'utilisateur et l'URL avec. */
@@ -256,6 +261,7 @@ class OCnotesRepository(
         call { it.startLocal() }
         retainCoreQuota()
         tokenStore.clear()
+        accountRegistry.recordLocal()
         sessionOpen = true
         _sessionValidee.value = false
         _sessionExpired.value = false
@@ -274,6 +280,10 @@ class OCnotesRepository(
         val token = appToken.trim()
         call { it.connect(serverUrl.trim(), username.trim(), token) }
         tokenStore.saveAppToken(token)
+        val current = state()
+        if (current.mode == AppMode.SERVER) {
+            accountRegistry.recordAuthenticated(current.serverUrl, current.username, current.authMode, current.identityKey)
+        }
         sessionOpen = true
         _sessionValidee.value = true
         _sessionExpired.value = false
@@ -283,12 +293,17 @@ class OCnotesRepository(
     /** Termine le parcours navigateur et ouvre le même espace qu'une session classique. */
     suspend fun connectOidc(
         serverUrl: String,
+        issuer: String,
         accountId: String,
         accessToken: String,
         serializedState: String,
     ) {
-        call { it.connectOIDC(serverUrl.trim(), accountId, accessToken) }
+        call { it.connectOIDC(serverUrl.trim(), issuer, accountId, accessToken) }
         tokenStore.saveOidcState(serializedState)
+        val current = state()
+        if (current.mode == AppMode.SERVER) {
+            accountRegistry.recordAuthenticated(current.serverUrl, current.username, current.authMode, current.identityKey)
+        }
         sessionOpen = true
         _sessionValidee.value = true
         _sessionExpired.value = false
@@ -372,7 +387,13 @@ class OCnotesRepository(
             if (current.authMode == AuthMode.OIDC) {
                 val token = refreshOidcToken(allowStaleOnFailure = false, force = true)
                     ?: return ValidationSession.TOKEN_REFUSE
-                call { it.connectOIDC(current.serverUrl, current.username, token) }
+                // RestoreOIDC a déjà remonté la bibliothèque hors ligne.
+                // Remplacer le jeton puis interroger LibreGraph valide la
+                // session sans redemander l'issuer au parcours de connexion.
+                call {
+                    it.updateOIDCAccessToken(token)
+                    it.listDrivesJSON()
+                }
             } else {
                 val token = tokenStore.appToken() ?: return ValidationSession.TOKEN_REFUSE
                 call { it.connect(current.serverUrl, current.username, token) }
@@ -420,6 +441,7 @@ class OCnotesRepository(
         operationMutex.withLock {
             call { it.disconnect() }
             tokenStore.clear()
+            accountRegistry.recordDisconnected()
             sessionOpen = false
             oidcTokenPousseAuCoeur = null
             _sessionValidee.value = false
@@ -443,6 +465,8 @@ class OCnotesRepository(
         return operationMutex.withLock {
             val request = encoder(AttachRequestDto(driveId, root, adopt))
             val result: AttachResultDto = authenticatedCallJson { it.attachJSON(request) }
+            val current = state()
+            accountRegistry.recordAuthenticated(current.serverUrl, current.username, current.authMode, current.identityKey)
             sessionOpen = true
             _sessionValidee.value = true
             _sessionExpired.value = false
@@ -466,6 +490,7 @@ class OCnotesRepository(
             val result: DetachResultDto = authenticatedCallJson { it.detachJSON() }
             retainCoreQuota()
             tokenStore.clear()
+            accountRegistry.recordLocal()
             sessionOpen = true
             oidcTokenPousseAuCoeur = null
             _sessionValidee.value = false

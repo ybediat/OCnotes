@@ -83,6 +83,7 @@
          Démarrage
          ================================================================ -->
     <string name="demarrage_token_refuse">El servidor ya no acepta su App Token. Probablemente ha caducado: cree uno nuevo e introdúzcalo.</string>
+    <string name="demarrage_migration_reconnexion">Se actualizó el almacenamiento de las cuentas. Sus notas locales se conservan; vuelva a iniciar sesión para reanudar la sincronización.</string>
     <string name="demarrage_espace_hors_ligne">Todavía hay que elegir un espacio para las notas y este paso requiere una conexión al servidor. Vuelva a intentarlo cuando se restablezca la conexión.</string>
 
     <!-- ================================================================

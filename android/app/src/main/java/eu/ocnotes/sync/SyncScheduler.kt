@@ -9,6 +9,7 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.workDataOf
 import java.util.concurrent.TimeUnit
 
 /**
@@ -25,9 +26,20 @@ import java.util.concurrent.TimeUnit
  *  - [syncNow] — retour au premier plan, ou geste explicite de l'utilisateur ;
  *  - [syncAfterLocalChange] — après une modification locale, **avec anti-rebond**.
  */
-class SyncScheduler(context: Context) {
+class SyncScheduler(
+    context: Context,
+    private val accountId: String,
+) {
 
     private val workManager = WorkManager.getInstance(context.applicationContext)
+
+    init {
+        // Les travaux créés avant l'isolation par profil n'ont pas d'UUID et
+        // ne doivent pas rester planifiés indéfiniment après la migration.
+        workManager.cancelUniqueWork(WORK_PERIODIC)
+        workManager.cancelUniqueWork(WORK_NOW)
+        workManager.cancelUniqueWork(WORK_DEBOUNCED)
+    }
 
     @Volatile
     private var localOnly = false
@@ -47,11 +59,12 @@ class SyncScheduler(context: Context) {
         if (localOnly) return
         val request = PeriodicWorkRequestBuilder<SyncWorker>(PERIOD_HOURS, TimeUnit.HOURS)
             .setConstraints(networkRequired)
+            .setInputData(workDataOf(KEY_ACCOUNT_ID to accountId))
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 5, TimeUnit.MINUTES)
             .build()
 
         workManager.enqueueUniquePeriodicWork(
-            WORK_PERIODIC,
+            workName(WORK_PERIODIC),
             ExistingPeriodicWorkPolicy.KEEP,
             request,
         )
@@ -67,10 +80,11 @@ class SyncScheduler(context: Context) {
         if (localOnly) return
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(networkRequired)
+            .setInputData(workDataOf(KEY_ACCOUNT_ID to accountId))
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
 
-        workManager.enqueueUniqueWork(WORK_NOW, ExistingWorkPolicy.KEEP, request)
+        workManager.enqueueUniqueWork(workName(WORK_NOW), ExistingWorkPolicy.KEEP, request)
     }
 
     /**
@@ -86,18 +100,19 @@ class SyncScheduler(context: Context) {
         if (localOnly) return
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(networkRequired)
+            .setInputData(workDataOf(KEY_ACCOUNT_ID to accountId))
             .setInitialDelay(DEBOUNCE_SECONDS, TimeUnit.SECONDS)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
 
-        workManager.enqueueUniqueWork(WORK_DEBOUNCED, ExistingWorkPolicy.REPLACE, request)
+        workManager.enqueueUniqueWork(workName(WORK_DEBOUNCED), ExistingWorkPolicy.REPLACE, request)
     }
 
     /** Annule tout travail en cours ou programmé. Appelé à la déconnexion. */
     fun cancelAll() {
-        workManager.cancelUniqueWork(WORK_PERIODIC)
-        workManager.cancelUniqueWork(WORK_NOW)
-        workManager.cancelUniqueWork(WORK_DEBOUNCED)
+        workManager.cancelUniqueWork(workName(WORK_PERIODIC))
+        workManager.cancelUniqueWork(workName(WORK_NOW))
+        workManager.cancelUniqueWork(workName(WORK_DEBOUNCED))
     }
 
     /** Désactive tout travail serveur tant que les notes vivent sur l'appareil seul. */
@@ -106,12 +121,15 @@ class SyncScheduler(context: Context) {
         if (local) cancelAll() else schedulePeriodic()
     }
 
-    private companion object {
+    private fun workName(base: String): String = "$base-$accountId"
+
+    internal companion object {
         const val WORK_PERIODIC = "ocnotes-sync-periodique"
         const val WORK_NOW = "ocnotes-sync-immediate"
         const val WORK_DEBOUNCED = "ocnotes-sync-apres-ecriture"
 
         const val PERIOD_HOURS = 1L
         const val DEBOUNCE_SECONDS = 20L
+        const val KEY_ACCOUNT_ID = "account_id"
     }
 }

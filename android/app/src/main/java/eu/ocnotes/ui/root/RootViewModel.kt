@@ -77,7 +77,14 @@ class RootViewModel(
                     _etat.value = DemarrageState.Pret(Depart.NAVIGATEUR)
 
                 RestoreOutcome.AUCUNE_SESSION ->
-                    _etat.value = DemarrageState.Pret(Depart.CONNEXION)
+                    _etat.value = DemarrageState.Pret(
+                        Depart.CONNEXION,
+                        if (repository.migrationRequiresReauthentication) {
+                            Texte.de(R.string.demarrage_migration_reconnexion)
+                        } else {
+                            null
+                        },
+                    )
 
                 // Un compte est enregistré mais aucun espace n'a été choisi :
                 // ce cas-là exige vraiment le réseau, on ne peut pas le

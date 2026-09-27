@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ybediat/OpenNote/internal/config"
 )
 
 // prepare monte une application connectée à un serveur factice, avec un espace
@@ -124,7 +126,7 @@ func TestOIDCConnexionRenouvellementEtRestauration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewApp: %v", err)
 	}
-	if err := app.ConnectOIDC(server.URL, "compte-oidc", fakeToken); err != nil {
+	if err := app.ConnectOIDC(server.URL, "https://issuer.example.test", "compte-oidc", fakeToken); err != nil {
 		t.Fatalf("ConnectOIDC: %v", err)
 	}
 	if err := app.SelectWorkspace(fakeSpaceID, "Notes"); err != nil {
@@ -143,6 +145,9 @@ func TestOIDCConnexionRenouvellementEtRestauration(t *testing.T) {
 	if state.AuthMode != "oidc" || state.Username != "compte-oidc" {
 		t.Fatalf("état OIDC = %+v", state)
 	}
+	if state.IdentityKey == "" {
+		t.Fatal("la clé d'identité OIDC est vide")
+	}
 
 	restored, err := NewApp(dataDir)
 	if err != nil {
@@ -153,6 +158,64 @@ func TestOIDCConnexionRenouvellementEtRestauration(t *testing.T) {
 	}
 	if _, err := restored.ListFolderJSON(""); err != nil {
 		t.Fatalf("ListFolderJSON après RestoreOIDC: %v", err)
+	}
+}
+
+// Tant que chaque profil possède son propre cache, une reconnexion ne peut pas
+// transformer silencieusement le profil courant en celui d'un autre compte.
+func TestConnexionRefuseUneAutreIdentiteSansMuterLaSession(t *testing.T) {
+	app, _, _ := prepare(t)
+	ancienneLib := app.lib
+
+	err := app.ConnectOIDC(app.cfg.ServerURL, "https://issuer.example.test", "autre-compte", fakeToken)
+	if err == nil || ErrorCode(err.Error()) != CodeAccountMismatch {
+		t.Fatalf("ConnectOIDC autre compte = %v, ACCOUNT_MISMATCH attendu", err)
+	}
+	if app.lib != ancienneLib {
+		t.Fatal("la bibliothèque active a changé malgré le refus")
+	}
+	if app.cfg.Username != fakeUser || app.cfg.EffectiveAuthMode() != "app_token" {
+		t.Fatalf("configuration mutée après refus: %+v", app.cfg)
+	}
+}
+
+func TestIdentiteStablePrimeSurLeLibelleDeConnexion(t *testing.T) {
+	current := config.Config{
+		Mode:        config.ModeServer,
+		ServerURL:   "https://cloud.example.test",
+		Username:    "ancien-login",
+		IdentityKey: "v1:identite-stable",
+	}
+
+	if err := requireSameAccount(
+		current,
+		"https://cloud.example.test",
+		"nouveau-login",
+		config.AuthAppToken,
+		"v1:identite-stable",
+	); err != nil {
+		t.Fatalf("le même compte avec un nouveau login a été refusé: %v", err)
+	}
+	if err := requireSameAccount(
+		current,
+		"https://cloud.example.test",
+		"ancien-login",
+		config.AuthAppToken,
+		"v1:autre-identite",
+	); err == nil || ErrorCode(err.Error()) != CodeAccountMismatch {
+		t.Fatalf("autre identité = %v, ACCOUNT_MISMATCH attendu", err)
+	}
+}
+
+func TestCleOIDCDistingueIssuerEtSubject(t *testing.T) {
+	base, err := oidcIdentityKey("https://cloud.example.test", "https://idp.example.test", "alice")
+	if err != nil {
+		t.Fatalf("oidcIdentityKey: %v", err)
+	}
+	autreIssuer, _ := oidcIdentityKey("https://cloud.example.test", "https://other-idp.example.test", "alice")
+	autreSubject, _ := oidcIdentityKey("https://cloud.example.test", "https://idp.example.test", "bob")
+	if base == autreIssuer || base == autreSubject {
+		t.Fatal("la clé OIDC ne distingue pas l'issuer et le subject")
 	}
 }
 
@@ -341,7 +404,9 @@ func TestConnectHTTPEstCategorise(t *testing.T) {
 
 	for nom, connecter := range map[string]func() error{
 		"App Token": func() error { return app.Connect("http://cloud.exemple.fr", "alice", "un-token") },
-		"OIDC":      func() error { return app.ConnectOIDC("http://cloud.exemple.fr", "alice", "un-jeton") },
+		"OIDC": func() error {
+			return app.ConnectOIDC("http://cloud.exemple.fr", "https://issuer.exemple.fr", "alice", "un-jeton")
+		},
 	} {
 		err := connecter()
 		if err == nil {

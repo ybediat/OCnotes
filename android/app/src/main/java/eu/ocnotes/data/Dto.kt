@@ -22,6 +22,7 @@ data class AppStateDto(
     val hasWorkspace: Boolean = false,
     val serverUrl: String = "",
     val username: String = "",
+    val identityKey: String = "",
     val driveId: String = "",
     val driveName: String = "",
     val root: String = "",

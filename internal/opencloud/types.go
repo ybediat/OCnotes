@@ -31,6 +31,9 @@ type Drive struct {
 	// WebDavURL est l'URL absolue de la racine de l'espace, telle que
 	// renvoyée par le serveur dans root.webDavUrl.
 	WebDavURL string
+
+	// OwnerID est l'identifiant LibreGraph stable du propriétaire.
+	OwnerID string
 }
 
 // IsStorage indique si l'espace peut héberger des notes.

@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import eu.ocnotes.data.AccountRegistry
 import eu.ocnotes.data.OCnotesRepository
 import eu.ocnotes.data.PreferencesAffichage
 import eu.ocnotes.data.TokenStore
@@ -30,19 +31,22 @@ class AppContainer(
     val crashReporter: CrashReporter,
 ) {
 
-    val tokenStore = TokenStore(context)
+    val accountRegistry = AccountRegistry(context.filesDir)
+    val activeAccount = accountRegistry.active
+    val tokenStore = TokenStore(context, activeAccount.id)
     val oidcManager = OidcManager(context)
 
     /** Réglages d'affichage : l'ordre de tri de la liste de notes. */
     val preferencesAffichage = PreferencesAffichage(context)
 
     /**
-     * `filesDir` est le stockage privé de l'application : c'est là que le cœur
-     * Go pose son cache et sa configuration. La configuration ne contient
-     * aucun secret — un test Go le vérifie.
+     * Chaque profil possède un sous-dossier privé de `filesDir` : le cœur Go
+     * n'ouvre que le cache et la configuration du profil actif. La
+     * configuration ne contient aucun secret — un test Go le vérifie.
      */
     val repository = OCnotesRepository(
-        dataDir = context.filesDir.absolutePath,
+        dataDir = accountRegistry.profileDir().absolutePath,
+        accountRegistry = accountRegistry,
         tokenStore = tokenStore,
         oidcManager = oidcManager,
         preferences = preferencesAffichage,
@@ -54,7 +58,7 @@ class AppContainer(
      */
     val dossierPartage = File(context.cacheDir, "partage")
 
-    val syncScheduler = SyncScheduler(context)
+    val syncScheduler = SyncScheduler(context, activeAccount.id)
 
     val syncNotifier = SyncNotifier(context)
 

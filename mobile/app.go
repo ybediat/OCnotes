@@ -25,9 +25,11 @@ package mobile
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -213,6 +215,7 @@ type appState struct {
 	HasWorkspace bool   `json:"hasWorkspace"`
 	ServerURL    string `json:"serverUrl"`
 	Username     string `json:"username"`
+	IdentityKey  string `json:"identityKey"`
 	DriveID      string `json:"driveId"`
 	DriveName    string `json:"driveName"`
 	Root         string `json:"root"`
@@ -248,6 +251,7 @@ func (a *App) StateJSON() (string, error) {
 		HasWorkspace: a.lib != nil,
 		ServerURL:    a.cfg.ServerURL,
 		Username:     a.cfg.Username,
+		IdentityKey:  a.cfg.IdentityKey,
 		DriveID:      a.cfg.DriveID,
 		DriveName:    a.cfg.DriveName,
 		Root:         a.cfg.Root,
@@ -342,7 +346,6 @@ func (a *App) raiseLocalQuota() error {
 // de sélection.
 func (a *App) Connect(serverURL, username, appToken string) error {
 	serverURL = config.NormalizeServerURL(serverURL)
-
 	client, err := opencloud.New(serverURL, opencloud.AppTokenAuth{
 		Username: username,
 		Token:    appToken,
@@ -351,23 +354,27 @@ func (a *App) Connect(serverURL, username, appToken string) error {
 		return err
 	}
 
-	return a.connectClient(serverURL, username, config.AuthAppToken, client, nil)
+	return a.connectClient(serverURL, username, config.AuthAppToken, "", client, nil)
 }
 
 // ConnectOIDC ouvre et valide une session obtenue par Authorization Code +
 // PKCE côté Android. Le refresh token ne traverse jamais la frontière : seul
 // l'access token, court, vit en mémoire dans le client Go.
-func (a *App) ConnectOIDC(serverURL, accountID, accessToken string) error {
+func (a *App) ConnectOIDC(serverURL, issuer, accountID, accessToken string) error {
 	serverURL = config.NormalizeServerURL(serverURL)
+	identityKey, err := oidcIdentityKey(serverURL, issuer, accountID)
+	if err != nil {
+		return err
+	}
 	auth := opencloud.NewBearerAuth(accessToken)
 	client, err := opencloud.New(serverURL, auth)
 	if err != nil {
 		return err
 	}
-	return a.connectClient(serverURL, accountID, config.AuthOIDC, client, auth)
+	return a.connectClient(serverURL, accountID, config.AuthOIDC, identityKey, client, auth)
 }
 
-func (a *App) connectClient(serverURL, username, authMode string, client *opencloud.Client, oidcAuth *opencloud.BearerAuth) error {
+func (a *App) connectClient(serverURL, username, authMode, identityKey string, client *opencloud.Client, oidcAuth *opencloud.BearerAuth) error {
 	ctx, cancel := a.ctx()
 	defer cancel()
 
@@ -379,19 +386,30 @@ func (a *App) connectClient(serverURL, username, authMode string, client *opencl
 	}
 
 	a.mu.Lock()
-	defer a.mu.Unlock()
+	ancienne := a.cfg
+	a.mu.Unlock()
+	if authMode == config.AuthAppToken {
+		identityKey = appTokenIdentityKey(serverURL, drives)
+	}
+	if err := requireSameAccount(ancienne, serverURL, username, authMode, identityKey); err != nil {
+		return err
+	}
 
-	a.client = client
-	a.oidcAuth = oidcAuth
-	a.cfg.ServerURL = serverURL
-	a.cfg.Username = username
+	nouvelle := ancienne
+	nouvelle.ServerURL = serverURL
+	nouvelle.Username = username
 	// La valeur vide reste la représentation persistée de l'App Token : les
 	// installations existantes n'ont ainsi aucune migration à subir et le mot
 	// "token" n'apparaît pas inutilement dans la configuration non secrète.
 	if authMode == config.AuthOIDC {
-		a.cfg.AuthMode = config.AuthOIDC
+		nouvelle.AuthMode = config.AuthOIDC
 	} else {
-		a.cfg.AuthMode = ""
+		nouvelle.AuthMode = ""
+	}
+	// Un serveur ancien peut ne pas exposer owner.user.id. Dans ce cas on garde
+	// une identité stable déjà connue au lieu de la remplacer par du vide.
+	if identityKey != "" {
+		nouvelle.IdentityKey = identityKey
 	}
 
 	// Branchement en cours depuis le mode local : rien n'est écrit tant que
@@ -399,22 +417,105 @@ func (a *App) connectClient(serverURL, username, authMode string, client *opencl
 	// AttachJSON est le seul point de bascule. Tué ici, l'appareil redémarre
 	// en mode local, avec ses notes — au lieu de se retrouver en mode serveur
 	// sans espace, où plus aucun geste ne les atteindrait.
-	if a.cfg.IsLocal() {
+	if ancienne.IsLocal() {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if a.cfg != ancienne {
+			return errors.New("mobile: la session a changé pendant la connexion")
+		}
+		a.client, a.oidcAuth, a.lib, a.cfg = client, oidcAuth, nil, nouvelle
 		return nil
 	}
-	a.cfg.Mode = config.ModeServer
+	nouvelle.Mode = config.ModeServer
 
-	if a.cfg.DriveID != "" {
+	var nouvelleBibliotheque *notes.Library
+	if nouvelle.DriveID != "" {
 		for _, d := range drives {
-			if d.ID == a.cfg.DriveID {
-				if err := a.openWorkspaceLocked(ctx, d, a.cfg.Root); err != nil {
+			if d.ID == nouvelle.DriveID {
+				space, err := client.Space(d)
+				if err != nil {
 					return err
 				}
+				lib, err := notes.NewLibrary(space, nouvelle.Root)
+				if err != nil {
+					return err
+				}
+				if err := lib.Bootstrap(ctx); err != nil {
+					return err
+				}
+				nouvelleBibliotheque = lib
+				nouvelle.DriveName = d.Name
+				nouvelle.DriveWebDavURL = d.WebDavURL
+				nouvelle.Root = lib.Root()
 				break
 			}
 		}
+		if nouvelleBibliotheque == nil {
+			// L'espace de l'ancien profil n'est pas accessible avec ces
+			// identifiants. Ne jamais laisser l'ancienne bibliothèque en mémoire.
+			nouvelle.DriveID, nouvelle.DriveName = "", ""
+			nouvelle.DriveWebDavURL, nouvelle.Root = "", ""
+		}
 	}
-	return config.Save(a.dataDir, a.cfg)
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cfg != ancienne {
+		return errors.New("mobile: la session a changé pendant la connexion")
+	}
+	if err := config.Save(a.dataDir, nouvelle); err != nil {
+		return err
+	}
+	a.client, a.oidcAuth, a.lib, a.cfg = client, oidcAuth, nouvelleBibliotheque, nouvelle
+	return nil
+}
+
+// requireSameAccount interdit, tant que le sélecteur multi-compte n'existe
+// pas, de rattacher le cache courant à une autre identité. Les anciens
+// profils sans clé stable restent protégés par l'URL, le login et le mode.
+func requireSameAccount(current config.Config, serverURL, username, authMode, identityKey string) error {
+	if !current.IsConnected() {
+		return nil
+	}
+	if current.IdentityKey != "" && identityKey != "" {
+		if current.IdentityKey != identityKey {
+			return fmt.Errorf("mobile: [%s] cette identité ne correspond pas au profil local", CodeAccountMismatch)
+		}
+		return nil
+	}
+	if current.ServerURL != serverURL || current.Username != username || current.EffectiveAuthMode() != authMode {
+		return fmt.Errorf("mobile: [%s] cette identité ne correspond pas au profil local", CodeAccountMismatch)
+	}
+	return nil
+}
+
+// stableIdentityKey ne persiste jamais l'identifiant distant en clair. Le
+// préfixage en longueur évite toute ambiguïté entre les composantes.
+func stableIdentityKey(parts ...string) string {
+	h := sha256.New()
+	for _, part := range parts {
+		_, _ = fmt.Fprintf(h, "%d:%s", len(part), part)
+	}
+	return fmt.Sprintf("v1:%x", h.Sum(nil))
+}
+
+func appTokenIdentityKey(serverURL string, drives []opencloud.Drive) string {
+	for _, drive := range drives {
+		if drive.Type == opencloud.DrivePersonal && drive.OwnerID != "" {
+			return stableIdentityKey(config.AuthAppToken, serverURL, drive.OwnerID)
+		}
+	}
+	return ""
+}
+
+func oidcIdentityKey(serverURL, issuer, subject string) (string, error) {
+	issuer = strings.TrimRight(strings.TrimSpace(issuer), "/")
+	subject = strings.TrimSpace(subject)
+	u, err := url.Parse(issuer)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.Fragment != "" || subject == "" {
+		return "", fmt.Errorf("mobile: [%s] identité OIDC invalide", config.CodeServerURLInvalid)
+	}
+	return stableIdentityKey(config.AuthOIDC, serverURL, issuer, subject), nil
 }
 
 // Disconnect efface la session, la configuration et le cache.
@@ -2272,6 +2373,10 @@ const CodeQuotaTooLow = "QUOTA_TOO_LOW"
 // serveur alors qu'on s'apprête à vider la file. Une passe de synchronisation
 // les fait partir.
 const CodePendingChanges = "PENDING_CHANGES"
+
+// CodeAccountMismatch protège le cache mono-compte jusqu'à l'arrivée du
+// sélecteur de profils : une autre identité doit créer un autre dossier.
+const CodeAccountMismatch = "ACCOUNT_MISMATCH"
 
 // ErrorCode extrait l'étiquette de catégorie d'un message d'erreur.
 //
