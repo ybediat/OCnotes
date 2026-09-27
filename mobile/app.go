@@ -90,6 +90,11 @@ type App struct {
 	editsMu  sync.Mutex
 	edits    map[string][]string
 	nextEdit uint64
+
+	// endings retient la fin de ligne de chaque note lue par ReadNote, pour
+	// que WriteNote la remette (voir notes.LineEnding). Sous editsMu, pour la
+	// même raison que edits.
+	endings map[string]notes.LineEnding
 }
 
 // NewApp ouvre l'application dans un dossier de données.
@@ -1314,6 +1319,9 @@ func indexByte(s string, b byte) int {
 // La question posée est « est-ce de l'UTF-8 ? » au sens de charset.Detect, et
 // non utf8.Valid : « ok » en UTF-16 sans BOM s'écrit « o\x00k\x00 », UTF-8
 // valide, et s'ouvrirait en saisie avec ses octets nuls.
+//
+// Le texte rendu n'a que des « \n » : la fin de ligne du fichier est retenue
+// ici et remise par WriteNote (voir notes.LineEnding).
 func (a *App) ReadNote(notePath string) (string, error) {
 	content, err := a.readBytes(notePath)
 	if err != nil {
@@ -1322,7 +1330,39 @@ func (a *App) ReadNote(notePath string) (string, error) {
 	if charset.Detect(content).Name != charset.UTF8 {
 		return "", fmt.Errorf("mobile: [%s] %s n'est pas encodé en UTF-8 : il ne s'ouvre qu'en lecture", CodeNotUTF8, notePath)
 	}
-	return string(content), nil
+	text := string(content)
+	a.rememberLineEnding(notePath, notes.DetectLineEnding(text))
+	return notes.NormalizeLineEndings(text), nil
+}
+
+// rememberLineEnding note la fin de ligne d'un fichier au moment où il est lu.
+//
+// La relire dans le cache à l'écriture ne suffirait pas : une note Windows dont
+// on efface tous les sauts de ligne est enregistrée sans aucun, et la détection
+// suivante, n'y trouvant rien, conclurait à « \n ». Les lignes retapées
+// ensuite changeraient la convention du fichier sans que personne l'ait voulu.
+func (a *App) rememberLineEnding(notePath string, ending notes.LineEnding) {
+	a.editsMu.Lock()
+	defer a.editsMu.Unlock()
+	if a.endings == nil {
+		a.endings = make(map[string]notes.LineEnding)
+	}
+	a.endings[notePath] = ending
+}
+
+// lineEndingFor renvoie la fin de ligne à écrire pour une note : celle retenue
+// à sa lecture, sinon celle de sa version en cache, sinon « \n ».
+func (a *App) lineEndingFor(notePath string) notes.LineEnding {
+	a.editsMu.Lock()
+	ending, ok := a.endings[notePath]
+	a.editsMu.Unlock()
+	if ok {
+		return ending
+	}
+	if content, _, cached := a.cache.Get(notePath); cached {
+		return notes.DetectLineEnding(string(content))
+	}
+	return notes.LF
 }
 
 // readBytes lit un fichier depuis le cache ou le serveur.
@@ -1415,6 +1455,10 @@ func (a *App) recentlyOffline() bool {
 // L'écriture n'atteint que le cache : elle est donc immédiate et ne peut pas
 // échouer faute de réseau. La propagation vers le serveur a lieu au prochain
 // Sync.
+//
+// Le texte reçu est en « \n », comme celui que rend ReadNote : les fins de
+// ligne du fichier — « \r\n » pour une note venue de Windows — lui sont
+// remises ici, et uniformément, y compris sur un texte collé.
 func (a *App) WriteNote(notePath, content string) error {
 	if err := a.requirePermission(notePath, "modifier", func(c opencloud.Capabilities) bool { return c.CanWrite }); err != nil {
 		return err
@@ -1426,6 +1470,7 @@ func (a *App) WriteNote(notePath, content string) error {
 	if err := notes.EnsureWritable(notePath); err != nil {
 		return err
 	}
+	content = notes.ApplyLineEnding(content, a.lineEndingFor(notePath))
 	return a.cache.Put(notePath, []byte(content))
 }
 
