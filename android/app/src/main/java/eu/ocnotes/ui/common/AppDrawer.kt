@@ -3,10 +3,13 @@ package eu.ocnotes.ui.common
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -74,12 +77,16 @@ fun TiroirApplication(
     etatTiroir: DrawerState,
     gestesActifs: Boolean,
     onReglages: () -> Unit,
+    onCompte: (String) -> Unit,
+    onAjouterCompte: () -> Unit,
     content: @Composable () -> Unit,
 ) {
     val portee = rememberCoroutineScope()
     val fermer: () -> Unit = { portee.launch { etatTiroir.close() } }
     var aProposOuvert by rememberSaveable { mutableStateOf(false) }
     val couleurTitre = if (isSystemInDarkTheme()) CouleurSignatureSombre else CouleurSignatureClaire
+    val container = LocalContext.current.appContainer
+    val comptes by container.accountRegistry.state.collectAsStateWithLifecycle()
 
     ModalNavigationDrawer(
         drawerState = etatTiroir,
@@ -94,7 +101,57 @@ fun TiroirApplication(
                 )
                 HorizontalDivider()
 
-                val preferences = LocalContext.current.appContainer.preferencesAffichage
+                Text(
+                    text = stringResource(R.string.menu_comptes),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 12.dp),
+                )
+
+                comptes.accounts.forEach { compte ->
+                    val nom = when {
+                        compte.kind == "local" -> stringResource(R.string.compte_local)
+                        compte.username.isNotBlank() -> compte.username
+                        compte.serverUrl.isNotBlank() -> compte.serverUrl
+                        else -> stringResource(R.string.compte_nouveau)
+                    }
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Default.AccountCircle, contentDescription = null) },
+                        label = {
+                            Column {
+                                Text(nom)
+                                if (compte.username.isNotBlank() && compte.serverUrl.isNotBlank()) {
+                                    Text(
+                                        compte.serverUrl,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        },
+                        selected = compte.id == comptes.active.id,
+                        onClick = {
+                            fermer()
+                            onCompte(compte.id)
+                        },
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                    )
+                }
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    label = { Text(stringResource(R.string.compte_ajouter)) },
+                    selected = false,
+                    onClick = {
+                        fermer()
+                        onAjouterCompte()
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                val preferences = container.preferencesAffichage
                 val mode by preferences.mode.collectAsStateWithLifecycle()
                 val modeCourant = ModeAffichage.depuis(mode)
 

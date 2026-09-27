@@ -64,6 +64,7 @@ enum class ValidationSession {
  */
 class OCnotesRepository(
     private val dataDir: String,
+    private val accountId: String,
     private val accountRegistry: AccountRegistry,
     private val tokenStore: TokenStore,
     private val oidcManager: OidcManager,
@@ -257,7 +258,7 @@ class OCnotesRepository(
         call { it.startLocal() }
         retainCoreQuota()
         tokenStore.clear()
-        accountRegistry.recordLocal()
+        accountRegistry.recordLocal(accountId)
         sessionOpen = true
         _sessionValidee.value = false
         _sessionExpired.value = false
@@ -278,7 +279,9 @@ class OCnotesRepository(
         tokenStore.saveAppToken(token)
         val current = state()
         if (current.mode == AppMode.SERVER) {
-            accountRegistry.recordAuthenticated(current.serverUrl, current.username, current.authMode, current.identityKey)
+            accountRegistry.recordAuthenticated(
+                accountId, current.serverUrl, current.username, current.authMode, current.identityKey,
+            )
         }
         sessionOpen = true
         _sessionValidee.value = true
@@ -297,7 +300,9 @@ class OCnotesRepository(
         tokenStore.saveOidcState(serializedState)
         val current = state()
         if (current.mode == AppMode.SERVER) {
-            accountRegistry.recordAuthenticated(current.serverUrl, current.username, current.authMode, current.identityKey)
+            accountRegistry.recordAuthenticated(
+                accountId, current.serverUrl, current.username, current.authMode, current.identityKey,
+            )
         }
         sessionOpen = true
         _sessionValidee.value = true
@@ -430,7 +435,7 @@ class OCnotesRepository(
         operationMutex.withLock {
             call { it.disconnect() }
             tokenStore.clear()
-            accountRegistry.recordDisconnected()
+            accountRegistry.recordDisconnected(accountId)
             sessionOpen = false
             oidcTokenPousseAuCoeur = null
             _sessionValidee.value = false
@@ -455,7 +460,9 @@ class OCnotesRepository(
             val request = encoder(AttachRequestDto(driveId, root, adopt))
             val result: AttachResultDto = authenticatedCallJson { it.attachJSON(request) }
             val current = state()
-            accountRegistry.recordAuthenticated(current.serverUrl, current.username, current.authMode, current.identityKey)
+            accountRegistry.recordAuthenticated(
+                accountId, current.serverUrl, current.username, current.authMode, current.identityKey,
+            )
             sessionOpen = true
             _sessionValidee.value = true
             _sessionExpired.value = false
@@ -479,7 +486,7 @@ class OCnotesRepository(
             val result: DetachResultDto = authenticatedCallJson { it.detachJSON() }
             retainCoreQuota()
             tokenStore.clear()
-            accountRegistry.recordLocal()
+            accountRegistry.recordLocal(accountId)
             sessionOpen = true
             oidcTokenPousseAuCoeur = null
             _sessionValidee.value = false

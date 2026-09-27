@@ -80,7 +80,7 @@
     <string name="err_quota_local">Das Speicherlimit ist zu niedrig, um alle Notizen auf diesem Gerät zu behalten.</string>
     <string name="err_quota_protege">Limit gespeichert. Ihre nicht synchronisierten Änderungen und Konfliktkopien überschreiten es bereits: Sie bleiben erhalten.</string>
     <string name="err_modifications_attente">Vor dem Trennen des Servers müssen noch Änderungen synchronisiert werden.</string>
-    <string name="err_compte_different">Dieses Konto gehört nicht zu den Notizen auf diesem Gerät. Melden Sie sich mit jenem Konto an oder melden Sie sich in den Einstellungen ab, um das Konto zu wechseln.</string>
+    <string name="err_compte_different">Dieses Konto entspricht nicht dem ausgewählten Profil. Wählen Sie das andere Konto im Menü aus oder fügen Sie es hinzu.</string>
     <string name="err_session_changee">Die Sitzung hat sich während der Verbindung geändert. Versuchen Sie es erneut.</string>
 
     <!-- ================================================================
@@ -266,6 +266,11 @@
 
     <!-- Auswahl der Startseitenansicht im Menü. -->
     <string name="menu_affichage">Anzeige</string>
+    <string name="menu_comptes">Konten</string>
+    <string name="menu_ouvrir_comptes">Kontomenü öffnen</string>
+    <string name="compte_local">Lokale Notizen</string>
+    <string name="compte_nouveau">Neues Konto</string>
+    <string name="compte_ajouter">Konto hinzufügen</string>
     <string name="menu_mode_arborescence">Nach Ordnern</string>
     <string name="menu_mode_liste">Alle Notizen</string>
 

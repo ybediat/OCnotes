@@ -97,7 +97,7 @@
     <string name="err_quota_local">The storage limit is too low to keep all notes on this device.</string>
     <string name="err_quota_protege">Limit saved. Your unsynced changes and conflict copies already exceed it: they are kept.</string>
     <string name="err_modifications_attente">Some changes still need to be synchronized before disconnecting the server.</string>
-    <string name="err_compte_different">This account is not the one whose notes are on this device. Sign in with that account, or sign out from the settings to switch accounts.</string>
+    <string name="err_compte_different">This account does not match the selected profile. Select the other account from the menu or add it.</string>
     <string name="err_session_changee">The session changed while connecting. Please try again.</string>
 
     <!-- ================================================================
@@ -305,6 +305,11 @@
 
     <!-- Choix de la forme de la page d\'accueil, dans le tiroir. -->
     <string name="menu_affichage">View</string>
+    <string name="menu_comptes">Accounts</string>
+    <string name="menu_ouvrir_comptes">Open account menu</string>
+    <string name="compte_local">Local notes</string>
+    <string name="compte_nouveau">New account</string>
+    <string name="compte_ajouter">Add account</string>
     <string name="menu_mode_arborescence">By folder</string>
     <string name="menu_mode_liste">All notes</string>
 

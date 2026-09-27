@@ -70,7 +70,9 @@ class AccountRegistryTest {
         val root = Files.createTempDirectory("ocnotes-identity").toFile()
         try {
             val registry = AccountRegistry(root)
-            registry.recordAuthenticated("https://cloud.test", "subject-1", "oidc", "identity-key")
+            registry.recordAuthenticated(
+                registry.active.id, "https://cloud.test", "subject-1", "oidc", "identity-key",
+            )
 
             val reopened = AccountRegistry(root)
             assertEquals(registry.active.id, reopened.active.id)
@@ -78,6 +80,93 @@ class AccountRegistryTest {
             assertEquals("subject-1", reopened.active.username)
             assertEquals("oidc", reopened.active.authMode)
             assertEquals("identity-key", reopened.active.identityKey)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `plusieurs profils sont conservés et peuvent etre actives`() = runBlocking {
+        val root = Files.createTempDirectory("ocnotes-multi").toFile()
+        try {
+            val registry = AccountRegistry(root)
+            val first = registry.active
+            registry.recordAuthenticated(
+                first.id,
+                "https://premier.test",
+                "alice",
+                "app_token",
+                "identity-alice",
+            )
+
+            val second = registry.createAndActivate()
+            registry.recordAuthenticated(
+                second.id,
+                "https://second.test",
+                "bob",
+                "oidc",
+                "identity-bob",
+            )
+            registry.recordAuthenticated(
+                first.id,
+                "https://premier.test",
+                "alice-modifiee",
+                "app_token",
+                "identity-alice",
+            )
+
+            assertEquals(2, registry.accounts.size)
+            assertEquals(second.id, registry.active.id)
+            assertEquals("alice-modifiee", registry.accounts.first { it.id == first.id }.username)
+            assertTrue(registry.profileDir(first.id).isDirectory)
+            assertTrue(registry.profileDir(second.id).isDirectory)
+
+            registry.activate(first.id)
+            assertEquals("alice-modifiee", registry.active.username)
+            assertEquals("bob", registry.accounts.first { it.id == second.id }.username)
+
+            val reopened = AccountRegistry(root)
+            assertEquals(first.id, reopened.active.id)
+            assertEquals(2, reopened.accounts.size)
+            assertEquals(
+                setOf("identity-alice", "identity-bob"),
+                reopened.accounts.map { it.identityKey }.toSet(),
+            )
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `un profil inconnu ne peut pas devenir actif`() = runBlocking {
+        val root = Files.createTempDirectory("ocnotes-inconnu").toFile()
+        try {
+            AccountRegistry(root).activate("0f8fad5b-d9cb-469f-a165-70867728950e")
+            Unit
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `la reconstruction retrouve tous les dossiers de profils`() = runBlocking {
+        val root = Files.createTempDirectory("ocnotes-rebuild-multi").toFile()
+        try {
+            val registry = AccountRegistry(root)
+            val first = registry.active
+            val second = registry.createAndActivate()
+            registry.profileDir(first.id).resolve("config.json").writeText(
+                """{"version":2,"mode":"server","serverUrl":"https://one.test","username":"alice"}""",
+            )
+            registry.profileDir(second.id).resolve("config.json").writeText(
+                """{"version":2,"mode":"server","serverUrl":"https://two.test","username":"bob"}""",
+            )
+            root.resolve("accounts.json").writeText("{illisible")
+
+            val rebuilt = AccountRegistry(root)
+
+            assertEquals(setOf(first.id, second.id), rebuilt.accounts.map { it.id }.toSet())
+            assertEquals(setOf("alice", "bob"), rebuilt.accounts.map { it.username }.toSet())
         } finally {
             root.deleteRecursively()
         }

@@ -6,6 +6,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import eu.ocnotes.data.AccountRegistry
+import eu.ocnotes.data.AccountProfile
 import eu.ocnotes.data.OCnotesRepository
 import eu.ocnotes.data.PreferencesAffichage
 import eu.ocnotes.data.TokenStore
@@ -17,7 +18,13 @@ import eu.ocnotes.ui.common.nettoyerPartagesExpires
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 
 /**
@@ -31,26 +38,88 @@ class AppContainer(
     val crashReporter: CrashReporter,
 ) {
 
-    val accountRegistry = AccountRegistry(context.filesDir)
-    val activeAccount = accountRegistry.active
-    val tokenStore = TokenStore(context, activeAccount.id)
+    private val context = context.applicationContext
+    val accountRegistry = AccountRegistry(this.context.filesDir)
     val oidcManager = OidcManager(context)
 
     /** Réglages d'affichage : l'ordre de tri de la liste de notes. */
-    val preferencesAffichage = PreferencesAffichage(context)
+    val preferencesAffichage = PreferencesAffichage(this.context)
+
+    val syncNotifier = SyncNotifier(this.context)
+
+    private data class AccountRuntime(
+        val profile: AccountProfile,
+        val tokenStore: TokenStore,
+        val repository: OCnotesRepository,
+        val syncScheduler: SyncScheduler,
+    )
+
+    @Volatile
+    private var runtime = buildRuntime(accountRegistry.active)
+    private val switchMutex = Mutex()
+    data class ActiveSession(val profile: AccountProfile, val generation: Long)
+
+    private var generation = 0L
+    private val mutableActiveSession = MutableStateFlow(ActiveSession(runtime.profile, generation))
+    val activeSession: StateFlow<ActiveSession> = mutableActiveSession.asStateFlow()
+
+    val tokenStore: TokenStore get() = runtime.tokenStore
+    val repository: OCnotesRepository get() = runtime.repository
+    val syncScheduler: SyncScheduler get() = runtime.syncScheduler
+
+    /** Capture cohérente pour un Worker : aucun changement de compte ultérieur ne peut la remplacer. */
+    fun activeRepository(expectedAccountId: String): OCnotesRepository? {
+        val current = runtime
+        return current.repository.takeIf { current.profile.id == expectedAccountId }
+    }
 
     /**
      * Chaque profil possède un sous-dossier privé de `filesDir` : le cœur Go
      * n'ouvre que le cache et la configuration du profil actif. La
      * configuration ne contient aucun secret — un test Go le vérifie.
      */
-    val repository = OCnotesRepository(
-        dataDir = accountRegistry.profileDir().absolutePath,
-        accountRegistry = accountRegistry,
-        tokenStore = tokenStore,
-        oidcManager = oidcManager,
-        preferences = preferencesAffichage,
-    )
+    private fun buildRuntime(profile: AccountProfile): AccountRuntime {
+        val tokenStore = TokenStore(context, profile.id)
+        val scheduler = SyncScheduler(context, profile.id)
+        val repository = OCnotesRepository(
+            dataDir = accountRegistry.profileDir(profile.id).absolutePath,
+            accountId = profile.id,
+            accountRegistry = accountRegistry,
+            tokenStore = tokenStore,
+            oidcManager = oidcManager,
+            preferences = preferencesAffichage,
+        )
+        return AccountRuntime(profile, tokenStore, repository, scheduler)
+    }
+
+    /** Change de profil sans effacer la session, le cache ou le secret quittés. */
+    suspend fun activateAccount(id: String) = switchMutex.withLock {
+        if (id == runtime.profile.id) return@withLock
+        val profile = accountRegistry.accounts.firstOrNull { it.id == id }
+            ?: throw IllegalArgumentException("Profil inconnu") // i18n-ok
+        val next = withContext(Dispatchers.IO) { buildRuntime(profile) }
+        accountRegistry.activate(id)
+        runtime = next
+        next.syncScheduler.schedulePeriodic()
+        generation += 1
+        mutableActiveSession.value = ActiveSession(profile, generation)
+    }
+
+    /** Ajoute un emplacement de compte vierge et l'ouvre sur la connexion. */
+    suspend fun createAccount() = switchMutex.withLock {
+        val previousId = runtime.profile.id
+        val profile = accountRegistry.createAndActivate()
+        val next = try {
+            withContext(Dispatchers.IO) { buildRuntime(profile) }
+        } catch (error: Exception) {
+            accountRegistry.activate(previousId)
+            throw error
+        }
+        runtime = next
+        next.syncScheduler.schedulePeriodic()
+        generation += 1
+        mutableActiveSession.value = ActiveSession(profile, generation)
+    }
 
     /**
      * Où « Partager » dépose ses copies au vrai nom, le temps de l'envoi. Seul
@@ -58,11 +127,9 @@ class AppContainer(
      */
     val dossierPartage = File(context.cacheDir, "partage")
 
-    val syncScheduler = SyncScheduler(context, activeAccount.id).also {
-        if (accountRegistry.vientDeMigrer) it.annulerTravauxSansProfil()
+    init {
+        if (accountRegistry.vientDeMigrer) syncScheduler.annulerTravauxSansProfil()
     }
-
-    val syncNotifier = SyncNotifier(context)
 
     /**
      * Portée qui survit aux ViewModels.

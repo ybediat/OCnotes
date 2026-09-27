@@ -2,6 +2,7 @@ package eu.ocnotes.ui.login
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
@@ -60,6 +63,7 @@ import androidx.compose.ui.platform.LocalContext
 @Composable
 fun LoginScreen(
     onConnecte: (SuiteConnexion) -> Unit,
+    onOuvrirComptes: () -> Unit,
     modifier: Modifier = Modifier,
     /**
      * Message posé par le démarrage : token refusé, ou serveur injoignable au
@@ -110,10 +114,22 @@ fun LoginScreen(
     ) {
         Spacer(Modifier.height(24.dp))
 
-        Text(
-            text = stringResource(R.string.app_name),
-            style = MaterialTheme.typography.headlineMedium,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = stringResource(R.string.app_name),
+                style = MaterialTheme.typography.headlineMedium,
+            )
+            IconButton(onClick = onOuvrirComptes) {
+                Icon(
+                    Icons.Default.Menu,
+                    contentDescription = stringResource(R.string.menu_ouvrir_comptes),
+                )
+            }
+        }
         Text(
             text = stringResource(R.string.login_accroche),
             style = MaterialTheme.typography.bodyMedium,

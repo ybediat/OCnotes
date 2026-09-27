@@ -78,7 +78,7 @@
     <string name="err_quota_local">El límite de almacenamiento es demasiado bajo para guardar todas las notas en este dispositivo.</string>
     <string name="err_quota_protege">Límite guardado. Sus cambios sin sincronizar y sus copias de conflicto ya lo superan: se conservan.</string>
     <string name="err_modifications_attente">Aún deben sincronizarse algunos cambios antes de desconectar el servidor.</string>
-    <string name="err_compte_different">Esta cuenta no es la de las notas guardadas en este dispositivo. Inicie sesión con esa cuenta o cierre la sesión desde los ajustes para cambiar de cuenta.</string>
+    <string name="err_compte_different">Esta cuenta no corresponde al perfil seleccionado. Seleccione la otra cuenta en el menú o añádala.</string>
     <string name="err_session_changee">La sesión cambió durante la conexión. Vuelva a intentarlo.</string>
 
     <!-- ================================================================
@@ -286,6 +286,11 @@
 
     <!-- Choix de la forme de la page d\'accueil, dans le tiroir. -->
     <string name="menu_affichage">Vista</string>
+    <string name="menu_comptes">Cuentas</string>
+    <string name="menu_ouvrir_comptes">Abrir el menú de cuentas</string>
+    <string name="compte_local">Notas locales</string>
+    <string name="compte_nouveau">Nueva cuenta</string>
+    <string name="compte_ajouter">Añadir una cuenta</string>
     <string name="menu_mode_arborescence">Por carpetas</string>
     <string name="menu_mode_liste">Todas las notas</string>
 

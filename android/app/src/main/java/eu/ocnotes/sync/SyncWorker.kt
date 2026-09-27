@@ -28,16 +28,15 @@ class SyncWorker(
 
         // Un ancien travail ou le travail d'un autre profil ne doit jamais
         // ouvrir le cache du compte actuellement actif.
-        if (inputData.getString(SyncScheduler.KEY_ACCOUNT_ID) != container.activeAccount.id) {
-            return Result.success()
-        }
+        val accountId = inputData.getString(SyncScheduler.KEY_ACCOUNT_ID) ?: return Result.success()
+        val repository = container.activeRepository(accountId) ?: return Result.success()
 
         // Pas de session récupérable : rien à synchroniser, et surtout rien à
         // signaler. L'utilisateur se reconnectera, ce n'est pas un échec.
-        if (!container.repository.ensureSession()) return Result.success()
+        if (!repository.ensureSession()) return Result.success()
 
         return try {
-            val report = container.repository.sync()
+            val report = repository.sync()
 
             if (report.conflicts.isNotEmpty()) {
                 container.syncNotifier.notifyConflicts(report.conflicts)
@@ -48,7 +47,7 @@ class SyncWorker(
             // permet à la liste plate de s'ouvrir instantanément la prochaine
             // fois — y compris dans le métro. L'échec est sans conséquence :
             // l'inventaire précédent reste servi.
-            container.repository.refreshIndex()
+            repository.refreshIndex()
 
             // `SyncJSON` ne lève pas sur panne réseau : l'incident est dans le
             // champ `error`, à côté de ce qui a tout de même été poussé, et sa
@@ -62,7 +61,7 @@ class SyncWorker(
                     // Le message Go peut contenir une URL ou un chemin. Le
                     // code stable suffit au diagnostic et ne révèle rien.
                     Log.w(TAG, "token refusé pendant la synchronisation (${report.errorCode})")
-                    container.repository.invalidateSession()
+                    repository.invalidateSession()
                     Result.failure()
                 }
 
@@ -83,7 +82,7 @@ class SyncWorker(
             // un geste de l'utilisateur.
             Log.w(TAG, "synchronisation abandonnée (${e.category}/${e.code})")
             if (e.category == ErrorCategory.AUTH) {
-                container.repository.invalidateSession()
+                repository.invalidateSession()
             }
             Result.failure()
         }

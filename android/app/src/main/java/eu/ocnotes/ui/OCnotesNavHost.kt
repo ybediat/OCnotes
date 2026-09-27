@@ -48,6 +48,7 @@ fun OCnotesNavHost(
     navController: NavHostController,
     depart: Depart,
     messageDemarrage: Texte?,
+    onOuvrirComptes: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     NavHost(
@@ -58,6 +59,7 @@ fun OCnotesNavHost(
         composable(Routes.CONNEXION) {
             LoginScreen(
                 messageInitial = messageDemarrage,
+                onOuvrirComptes = onOuvrirComptes,
                 onConnecte = { suite ->
                     val cible = when (suite) {
                         SuiteConnexion.CHOIX_ESPACE -> Routes.ESPACE
@@ -76,6 +78,7 @@ fun OCnotesNavHost(
 
         composable(Routes.ESPACE) {
             WorkspaceScreen(
+                onOuvrirComptes = onOuvrirComptes,
                 onEspaceChoisi = {
                     navController.navigate(Routes.NAVIGATEUR) {
                         popUpTo(Routes.ESPACE) { inclusive = true }

@@ -12,11 +12,19 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -28,6 +36,7 @@ import eu.ocnotes.ui.common.TiroirApplication
 import eu.ocnotes.ui.root.DemarrageState
 import eu.ocnotes.ui.root.RootViewModel
 import eu.ocnotes.ui.theme.OCnotesTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -53,7 +62,13 @@ class MainActivity : ComponentActivity() {
             OCnotesTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     CrashReportGate(appContainer.crashReporter) {
-                        OCnotesApp()
+                        val container = LocalContext.current.appContainer
+                        val activeSession by container.activeSession.collectAsStateWithLifecycle()
+                        key(activeSession.generation) {
+                            SessionViewModelScope {
+                                OCnotesApp(activeSession.profile.id, activeSession.generation)
+                            }
+                        }
                     }
                 }
             }
@@ -63,7 +78,10 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun OCnotesApp(
+    accountId: String,
+    generation: Long,
     viewModel: RootViewModel = viewModel(
+        key = "root-$accountId-$generation",
         factory = RootViewModel.factory(LocalContext.current.appContainer),
     ),
 ) {
@@ -72,8 +90,9 @@ private fun OCnotesApp(
     val navController = rememberNavController()
     val etatTiroir = rememberDrawerState(DrawerValue.Closed)
     val container = LocalContext.current.appContainer
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(container) {
+    LaunchedEffect(container, accountId) {
         container.repository.mode.collect { mode ->
             container.syncScheduler.setLocalOnly(mode == AppMode.LOCAL)
         }
@@ -113,14 +132,35 @@ private fun OCnotesApp(
             onReglages = {
                 navController.navigate(Routes.REGLAGES) { launchSingleTop = true }
             },
+            onCompte = { id -> scope.launch { container.activateAccount(id) } },
+            onAjouterCompte = { scope.launch { container.createAccount() } },
         ) {
             OCnotesNavHost(
                 navController = navController,
                 depart = etat.depart,
                 messageDemarrage = etat.message,
+                onOuvrirComptes = { scope.launch { etatTiroir.open() } },
             )
         }
     }
+}
+
+/**
+ * Chaque activation de compte reçoit son propre ViewModelStore. Le vider au
+ * changement annule les coroutines et libère les anciens dépôts : revenir sur
+ * un compte reconstruit alors une session unique sur son dossier.
+ */
+@Composable
+private fun SessionViewModelScope(content: @Composable () -> Unit) {
+    val owner = remember {
+        object : ViewModelStoreOwner {
+            override val viewModelStore = ViewModelStore()
+        }
+    }
+    DisposableEffect(owner) {
+        onDispose { owner.viewModelStore.clear() }
+    }
+    CompositionLocalProvider(LocalViewModelStoreOwner provides owner, content = content)
 }
 
 /** Le tiroir gestuel ne concurrence jamais une surface de saisie. */

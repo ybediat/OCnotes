@@ -8,6 +8,9 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -26,11 +29,16 @@ data class AccountProfile(
     val identityKey: String = "",
 )
 
+data class AccountRegistryState(
+    val active: AccountProfile,
+    val accounts: List<AccountProfile>,
+)
+
 /**
  * Registre des profils de l'appareil.
  *
- * Cette première version n'en présente encore qu'un à l'interface, mais place
- * déjà sa configuration et son cache derrière une frontière par UUID.
+ * Chaque compte garde sa configuration et son cache derrière une frontière
+ * par UUID. Le registre retient tous les profils et lequel est actif.
  */
 class AccountRegistry(private val filesDir: File) {
 
@@ -44,6 +52,13 @@ class AccountRegistry(private val filesDir: File) {
     var active: AccountProfile
         private set
 
+    @Volatile
+    var accounts: List<AccountProfile>
+        private set
+
+    private lateinit var mutableState: MutableStateFlow<AccountRegistryState>
+    val state: StateFlow<AccountRegistryState> get() = mutableState.asStateFlow()
+
     /**
      * Vrai si ce processus a créé le registre : première installation, ou
      * passage depuis le schéma sans profils. C'est le seul lancement où les
@@ -55,8 +70,11 @@ class AccountRegistry(private val filesDir: File) {
 
     init {
         filesDir.mkdirs()
-        active = loadRegistry() ?: migrateOrCreate()
-        profileDir(active.id).mkdirs()
+        val registry = loadRegistry() ?: migrateOrCreate()
+        active = registry.active
+        accounts = registry.accounts
+        accounts.forEach { profileDir(it.id).mkdirs() }
+        mutableState = MutableStateFlow(AccountRegistryState(active, accounts))
     }
 
     fun profileDir(id: String = active.id): File {
@@ -68,13 +86,14 @@ class AccountRegistry(private val filesDir: File) {
     }
 
     suspend fun recordAuthenticated(
+        accountId: String,
         serverUrl: String,
         username: String,
         authMode: String,
         identityKey: String,
     ) =
         withContext(Dispatchers.IO) {
-            updateActive {
+            updateAccount(accountId) {
                 it.copy(
                     kind = KIND_SERVER,
                     serverUrl = serverUrl,
@@ -85,8 +104,8 @@ class AccountRegistry(private val filesDir: File) {
             }
         }
 
-    suspend fun recordLocal() = withContext(Dispatchers.IO) {
-        updateActive {
+    suspend fun recordLocal(accountId: String) = withContext(Dispatchers.IO) {
+        updateAccount(accountId) {
             it.copy(
                 kind = KIND_LOCAL,
                 serverUrl = "",
@@ -97,8 +116,8 @@ class AccountRegistry(private val filesDir: File) {
         }
     }
 
-    suspend fun recordDisconnected() = withContext(Dispatchers.IO) {
-        updateActive {
+    suspend fun recordDisconnected(accountId: String) = withContext(Dispatchers.IO) {
+        updateAccount(accountId) {
             it.copy(
                 kind = KIND_SERVER,
                 serverUrl = "",
@@ -109,11 +128,66 @@ class AccountRegistry(private val filesDir: File) {
         }
     }
 
+    /** Crée un profil vierge et le rend actif sans toucher aux profils existants. */
+    suspend fun createAndActivate(): AccountProfile = withContext(Dispatchers.IO) {
+        createAndActivateLocked()
+    }
+
+    /** Rend actif un profil existant. Ses fichiers et son secret restent intacts. */
+    suspend fun activate(id: String): AccountProfile = withContext(Dispatchers.IO) {
+        activateLocked(id)
+    }
+
     @Synchronized
-    private fun updateActive(transform: (AccountProfile) -> AccountProfile) {
-        val updated = transform(active)
-        writeRegistry(updated)
-        active = updated
+    private fun updateAccount(id: String, transform: (AccountProfile) -> AccountProfile) {
+        val current = accounts.firstOrNull { it.id == id }
+            ?: throw IllegalArgumentException("Profil inconnu") // i18n-ok
+        val updated = transform(current)
+        check(updated.id == id) { "L'identifiant du profil ne peut pas changer" } // i18n-ok
+        val updatedAccounts = accounts.map { if (it.id == id) updated else it }
+        writeRegistry(active.id, updatedAccounts)
+        accounts = updatedAccounts
+        if (active.id == id) active = updated
+        publishState()
+    }
+
+    @Synchronized
+    private fun createAndActivateLocked(): AccountProfile {
+        val profile = AccountProfile(id = UUID.randomUUID().toString(), kind = KIND_SERVER)
+        val directory = profileDir(profile.id)
+        check(directory.mkdirs()) { "Création du dossier de profil impossible" } // i18n-ok
+        val updatedAccounts = accounts + profile
+        try {
+            writeRegistry(profile.id, updatedAccounts)
+        } catch (error: Exception) {
+            // Le dossier est encore vide : ne pas laisser un faux profil que
+            // la reconstruction prendrait pour un compte réel.
+            directory.delete()
+            throw error
+        }
+        accounts = updatedAccounts
+        active = profile
+        publishState()
+        return profile
+    }
+
+    @Synchronized
+    private fun activateLocked(id: String): AccountProfile {
+        require(isProfileId(id)) { "Identifiant de profil invalide" } // i18n-ok
+        val profile = accounts.firstOrNull { it.id == id }
+            ?: throw IllegalArgumentException("Profil inconnu") // i18n-ok
+        if (profile.id == active.id) return profile
+        check(profileDir(profile.id).isDirectory) { "Dossier de profil absent" } // i18n-ok
+        writeRegistry(profile.id, accounts)
+        active = profile
+        publishState()
+        return profile
+    }
+
+    private fun publishState() {
+        if (::mutableState.isInitialized) {
+            mutableState.value = AccountRegistryState(active, accounts)
+        }
     }
 
     /**
@@ -124,17 +198,23 @@ class AccountRegistry(private val filesDir: File) {
      * l'application, file d'attente hors ligne comprise. Un registre présent
      * mais illisible est donc reconstruit, jamais fatal.
      */
-    private fun loadRegistry(): AccountProfile? {
+    private fun loadRegistry(): LoadedRegistry? {
         val file = File(filesDir, REGISTRY_FILE)
         if (!file.isFile) return null
         return readRegistry(file) ?: rebuildRegistry(file)
     }
 
-    private fun readRegistry(file: File): AccountProfile? = runCatching {
+    private fun readRegistry(file: File): LoadedRegistry? = runCatching {
         val registry = json.decodeFromString<RegistryDocument>(file.readText(Charsets.UTF_8))
-        registry.accounts
-            .takeIf { registry.version == VERSION }
-            ?.firstOrNull { it.id == registry.activeAccountId && isProfileId(it.id) }
+        val ids = registry.accounts.map { it.id }
+        val valid = registry.version == VERSION &&
+            registry.accounts.isNotEmpty() &&
+            ids.distinct().size == ids.size &&
+            ids.all(::isProfileId)
+        if (!valid) return@runCatching null
+        val active = registry.accounts.firstOrNull { it.id == registry.activeAccountId }
+            ?: return@runCatching null
+        LoadedRegistry(active, registry.accounts)
     }.getOrNull()
 
     /**
@@ -145,27 +225,30 @@ class AccountRegistry(private val filesDir: File) {
      * côté plutôt qu'écrasé — un registre d'une version future reste ainsi
      * récupérable après un retour en arrière.
      */
-    private fun rebuildRegistry(file: File): AccountProfile {
+    private fun rebuildRegistry(file: File): LoadedRegistry {
         runCatching { file.copyTo(File(filesDir, "$REGISTRY_FILE$UNREADABLE_SUFFIX"), overwrite = true) }
-        val directory = File(filesDir, ACCOUNTS_DIR).listFiles()
+        val directories = File(filesDir, ACCOUNTS_DIR).listFiles()
             ?.filter { it.isDirectory && isProfileId(it.name) }
-            ?.maxByOrNull { File(it, CONFIG_FILE).lastModified() }
+            ?.takeIf { it.isNotEmpty() }
             ?: return migrateOrCreate()
-        val profile = profileFromConfig(directory.name, File(directory, CONFIG_FILE))
-        migrateLegacyFiles(profile)
+        val profiles = directories.map { profileFromConfig(it.name, File(it, CONFIG_FILE)) }
+        val activeDirectory = directories.maxByOrNull { File(it, CONFIG_FILE).lastModified() }
+            ?: return migrateOrCreate()
+        val active = profiles.first { it.id == activeDirectory.name }
+        migrateLegacyFiles(active)
         // Un échec d'écriture n'empêche pas de démarrer : le profil est connu,
         // et la reconstruction se refera au lancement suivant.
-        runCatching { writeRegistry(profile) }
-        return profile
+        runCatching { writeRegistry(active.id, profiles) }
+        return LoadedRegistry(active, profiles)
     }
 
-    private fun migrateOrCreate(): AccountProfile {
+    private fun migrateOrCreate(): LoadedRegistry {
         val profile = pendingMigration() ?: legacyProfile()
         migrateLegacyFiles(profile)
-        writeRegistry(profile)
+        writeRegistry(profile.id, listOf(profile))
         File(profileDir(profile.id), MIGRATION_MARKER).delete()
         vientDeMigrer = true
-        return profile
+        return LoadedRegistry(profile, listOf(profile))
     }
 
     /**
@@ -229,11 +312,11 @@ class AccountRegistry(private val filesDir: File) {
         }
     }
 
-    private fun writeRegistry(profile: AccountProfile) {
+    private fun writeRegistry(activeAccountId: String, accounts: List<AccountProfile>) {
         val registry = RegistryDocument(
             version = VERSION,
-            activeAccountId = profile.id,
-            accounts = listOf(profile),
+            activeAccountId = activeAccountId,
+            accounts = accounts,
         )
         writeAtomically(File(filesDir, REGISTRY_FILE), json.encodeToString(registry))
     }
@@ -259,6 +342,11 @@ class AccountRegistry(private val filesDir: File) {
     private data class RegistryDocument(
         val version: Int,
         val activeAccountId: String,
+        val accounts: List<AccountProfile>,
+    )
+
+    private data class LoadedRegistry(
+        val active: AccountProfile,
         val accounts: List<AccountProfile>,
     )
 
