@@ -434,6 +434,7 @@ func TitleOf(note Note, content []byte) string {
 		return note.DisplayName
 	}
 	text, _ := charset.Decode(content)
+	text = NormalizeLineEndings(text)
 	title := markdown.Title(text)
 	if IsPlainText(note.Name) {
 		title = markdown.PlainTitle(text)
@@ -456,12 +457,15 @@ func TitleOf(note Note, content []byte) string {
 // points d'entrée, donc deux endroits où l'on oublie d'ajouter un format.
 //
 // Un texte est décodé avant d'être lu : un fichier Latin-1 ou UTF-16 venu de
-// Windows s'affiche avec ses accents, et non en « � ».
+// Windows s'affiche avec ses accents, et non en « � ». Ses fins de ligne
+// sont ramenées à « \n » : un « \r » laissé dans un bloc de texte brut
+// n'est pas un caractère que Compose sait dessiner.
 func Render(name string, content []byte) ([]markdown.Block, error) {
 	if IsDocument(name) {
 		return renderDocument(name, content)
 	}
 	text, _ := charset.Decode(content)
+	text = NormalizeLineEndings(text)
 	if IsPlainText(name) {
 		return markdown.RenderPlain(text), nil
 	}
