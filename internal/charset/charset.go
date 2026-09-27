@@ -247,16 +247,40 @@ func decode1252(b []byte) string {
 func encode1252(s string) ([]byte, error) {
 	out := make([]byte, 0, len(s))
 	for _, r := range s {
-		switch {
-		case r < 0x80 || (r >= 0xA0 && r <= 0xFF):
-			out = append(out, byte(r))
-		default:
-			c, ok := inverse1252[r]
-			if !ok {
-				return nil, fmt.Errorf("charset: [%s] le caractère %q (U+%04X) n'existe pas en %s", CodeUnrepresentable, r, r, Windows1252)
-			}
-			out = append(out, c)
+		c, ok := byte1252(r)
+		if !ok {
+			return nil, fmt.Errorf("charset: [%s] le caractère %q (U+%04X) n'existe pas en %s", CodeUnrepresentable, r, r, Windows1252)
 		}
+		out = append(out, c)
 	}
 	return out, nil
+}
+
+// byte1252 est l'octet Windows-1252 d'un caractère, s'il en a un.
+func byte1252(r rune) (byte, bool) {
+	if r < 0x80 || (r >= 0xA0 && r <= 0xFF) {
+		return byte(r), true
+	}
+	c, ok := inverse1252[r]
+	return c, ok
+}
+
+// Unrepresentable renvoie le premier caractère de s que enc ne sait pas
+// écrire, et false s'il n'y en a aucun.
+//
+// C'est la question qu'Encode tranche par une erreur, posée sans écrire :
+// l'interface s'en sert pour nommer le caractère fautif, et pour refuser de
+// quitter l'éditeur plutôt que de perdre une modification qu'aucune écriture
+// n'aurait su enregistrer. Seul Windows-1252 peut répondre oui : l'UTF-8 et
+// l'UTF-16 écrivent tout Unicode.
+func Unrepresentable(s string, enc Encoding) (rune, bool) {
+	if enc.Name != Windows1252 {
+		return 0, false
+	}
+	for _, r := range s {
+		if _, ok := byte1252(r); !ok {
+			return r, true
+		}
+	}
+	return 0, false
 }

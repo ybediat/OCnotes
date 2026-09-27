@@ -66,6 +66,31 @@ func TestWindows1252RefuseUnCaractereQuIlNeSaitPasEcrire(t *testing.T) {
 	}
 }
 
+// Unrepresentable répond comme Encode, sur tout Unicode : un désaccord ferait
+// quitter l'éditeur sur un texte qu'Encode refuse, ou l'y retenir à tort.
+func TestUnrepresentableDitCommeEncode(t *testing.T) {
+	win := Encoding{Name: Windows1252}
+	for r := rune(0); r <= 0x2FFFF; r++ {
+		if r >= 0xD800 && r <= 0xDFFF {
+			continue // pas un caractère : Go ne le met pas dans une chaîne
+		}
+		_, errEncode := Encode(string(r), win)
+		_, refuse := Unrepresentable(string(r), win)
+		if refuse != (errEncode != nil) {
+			t.Fatalf("U+%04X : Unrepresentable %v, Encode %v", r, refuse, errEncode)
+		}
+	}
+
+	if r, ok := Unrepresentable("été 😀 puis Ω", win); !ok || r != '😀' {
+		t.Errorf("premier caractère refusé : %q, %v, attendu 😀", r, ok)
+	}
+	for _, enc := range []Encoding{{Name: UTF8}, {Name: UTF16LE, BOM: true}, {Name: UTF16BE}} {
+		if r, ok := Unrepresentable("😀 łódź Ω", enc); ok {
+			t.Errorf("%s refuse %q", enc.Name, r)
+		}
+	}
+}
+
 func TestUTF16AvecBOMDansLesDeuxSens(t *testing.T) {
 	cas := []struct {
 		nom     string

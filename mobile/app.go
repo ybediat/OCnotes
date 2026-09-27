@@ -91,10 +91,10 @@ type App struct {
 	edits    map[string][]string
 	nextEdit uint64
 
-	// endings retient la fin de ligne de chaque note lue par ReadNote, pour
-	// que WriteNote la remette (voir notes.LineEnding). Sous editsMu, pour la
-	// même raison que edits.
-	endings map[string]notes.LineEnding
+	// formats retient l'encodage et la fin de ligne de chaque note lue par
+	// ReadNote, pour que WriteNote les lui rende (voir rememberFormat). Sous
+	// editsMu, pour la même raison que edits.
+	formats map[string]noteFormat
 }
 
 // NewApp ouvre l'application dans un dossier de données.
@@ -1310,15 +1310,21 @@ func indexByte(s string, b byte) int {
 // Une note portant des modifications locales n'est jamais rafraîchie : sa
 // version en cache fait foi jusqu'à la synchronisation, qui tranchera.
 //
-// Un contenu qui n'est pas de l'UTF-8 valide est refusé (NOT_UTF8) : gomobile
+// Le contenu est décodé côté Go — UTF-8, Windows-1252 ou UTF-16 à BOM — et
+// son encodage retenu, avec sa fin de ligne, pour que WriteNote les lui rende.
+// Rien d'autre que de l'UTF-8 ne doit traverser gomobile en octets bruts : il
 // en remplacerait les octets invalides par des « � » en passant à Java, et le
 // premier enregistrement écrirait ces remplacements sur le serveur, à la place
-// des accents d'un fichier Latin-1. L'interface l'ouvre alors en aperçu par
-// RenderFileJSON, qui décode les octets côté Go.
+// des accents.
 //
-// La question posée est « est-ce de l'UTF-8 ? » au sens de charset.Detect, et
-// non utf8.Valid : « ok » en UTF-16 sans BOM s'écrit « o\x00k\x00 », UTF-8
-// valide, et s'ouvrirait en saisie avec ses octets nuls.
+// Deux cas restent refusés (NOT_UTF8), et s'ouvrent en aperçu par
+// RenderFileJSON :
+//
+//   - l'UTF-16 sans BOM, reconnu à ses octets nuls par une heuristique : on ne
+//     réécrit pas un fichier sur une supposition qui peut être fausse ;
+//   - un contenu que décoder puis réencoder ne rend pas à l'identique — un
+//     UTF-16 tronqué, par exemple. L'écrire, même sans rien y changer, en
+//     perdrait des octets.
 //
 // Le texte rendu n'a que des « \n » : la fin de ligne du fichier est retenue
 // ici et remise par WriteNote (voir notes.LineEnding).
@@ -1327,42 +1333,87 @@ func (a *App) ReadNote(notePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if charset.Detect(content).Name != charset.UTF8 {
-		return "", fmt.Errorf("mobile: [%s] %s n'est pas encodé en UTF-8 : il ne s'ouvre qu'en lecture", CodeNotUTF8, notePath)
+	text, enc := charset.Decode(content)
+	if !rewritable(enc) || !charset.RoundTrips(content) {
+		return "", fmt.Errorf("mobile: [%s] l'encodage de %s n'est pas reconnu avec certitude : il ne s'ouvre qu'en lecture", CodeNotUTF8, notePath)
 	}
-	text := string(content)
-	a.rememberLineEnding(notePath, notes.DetectLineEnding(text))
+	a.rememberFormat(notePath, noteFormat{encoding: enc, ending: notes.DetectLineEnding(text)})
 	return notes.NormalizeLineEndings(text), nil
 }
 
-// rememberLineEnding note la fin de ligne d'un fichier au moment où il est lu.
-//
-// La relire dans le cache à l'écriture ne suffirait pas : une note Windows dont
-// on efface tous les sauts de ligne est enregistrée sans aucun, et la détection
-// suivante, n'y trouvant rien, conclurait à « \n ». Les lignes retapées
-// ensuite changeraient la convention du fichier sans que personne l'ait voulu.
-func (a *App) rememberLineEnding(notePath string, ending notes.LineEnding) {
-	a.editsMu.Lock()
-	defer a.editsMu.Unlock()
-	if a.endings == nil {
-		a.endings = make(map[string]notes.LineEnding)
+// rewritable dit si un encodage détecté est assez sûr pour réécrire le
+// fichier. Seul l'UTF-16 sans BOM ne l'est pas : c'est une supposition.
+func rewritable(enc charset.Encoding) bool {
+	switch enc.Name {
+	case charset.UTF16LE, charset.UTF16BE:
+		return enc.BOM
+	default:
+		return true
 	}
-	a.endings[notePath] = ending
 }
 
-// lineEndingFor renvoie la fin de ligne à écrire pour une note : celle retenue
-// à sa lecture, sinon celle de sa version en cache, sinon « \n ».
-func (a *App) lineEndingFor(notePath string) notes.LineEnding {
+// noteFormat est ce qu'une note doit retrouver à l'écriture : son encodage et
+// sa fin de ligne.
+type noteFormat struct {
+	encoding charset.Encoding
+	ending   notes.LineEnding
+}
+
+// rememberFormat retient le format d'un fichier au moment où il est lu.
+//
+// Le relire dans le cache à l'écriture ne suffirait pas. Une note Windows dont
+// on efface tous les sauts de ligne est enregistrée sans aucun, et la détection
+// suivante, n'y trouvant rien, conclurait à « \n ». De même, une note
+// Windows-1252 dont on efface les accents devient du pur ASCII, que la
+// détection lit comme de l'UTF-8 : le premier « é » retapé partirait alors en
+// UTF-8, et le fichier changerait d'encodage sans que personne l'ait voulu.
+func (a *App) rememberFormat(notePath string, f noteFormat) {
 	a.editsMu.Lock()
-	ending, ok := a.endings[notePath]
+	defer a.editsMu.Unlock()
+	if a.formats == nil {
+		a.formats = make(map[string]noteFormat)
+	}
+	a.formats[notePath] = f
+}
+
+// formatFor renvoie le format à écrire pour une note : celui retenu à sa
+// lecture, sinon celui de sa version en cache, sinon de l'UTF-8 en « \n ».
+func (a *App) formatFor(notePath string) noteFormat {
+	a.editsMu.Lock()
+	f, ok := a.formats[notePath]
 	a.editsMu.Unlock()
 	if ok {
-		return ending
+		return f
 	}
 	if content, _, cached := a.cache.Get(notePath); cached {
-		return notes.DetectLineEnding(string(content))
+		text, enc := charset.Decode(content)
+		return noteFormat{encoding: enc, ending: notes.DetectLineEnding(text)}
 	}
-	return notes.LF
+	return noteFormat{encoding: charset.Encoding{Name: charset.UTF8}, ending: notes.LF}
+}
+
+// NoteEncoding renvoie le nom de l'encodage dans lequel une note sera écrite :
+// « UTF-8 », « windows-1252 », « UTF-16LE » ou « UTF-16BE ». Sans réseau.
+//
+// L'éditeur l'affiche quand ce n'est pas de l'UTF-8 : c'est ce qui explique
+// d'avance qu'un emoji y soit refusé.
+func (a *App) NoteEncoding(notePath string) string {
+	return string(a.formatFor(notePath).encoding.Name)
+}
+
+// Unrepresentable renvoie le premier caractère de text que l'encodage de la
+// note ne sait pas écrire, ou "" s'il n'y en a aucun. Sans réseau, sans rien
+// écrire.
+//
+// L'interface le demande pour nommer le caractère qu'un enregistrement a
+// refusé (ENCODING_UNREPRESENTABLE), et avant de quitter l'éditeur : quitter
+// après un refus perdrait les modifications qu'aucune écriture n'a su
+// enregistrer.
+func (a *App) Unrepresentable(notePath, text string) string {
+	if r, ok := charset.Unrepresentable(text, a.formatFor(notePath).encoding); ok {
+		return string(r)
+	}
+	return ""
 }
 
 // readBytes lit un fichier depuis le cache ou le serveur.
@@ -1459,6 +1510,10 @@ func (a *App) recentlyOffline() bool {
 // Le texte reçu est en « \n », comme celui que rend ReadNote : les fins de
 // ligne du fichier — « \r\n » pour une note venue de Windows — lui sont
 // remises ici, et uniformément, y compris sur un texte collé.
+//
+// Il est de même réencodé dans l'encodage du fichier. Un caractère que cet
+// encodage ne sait pas écrire — un emoji dans un fichier Windows-1252 — fait
+// refuser l'écriture entière (ENCODING_UNREPRESENTABLE), et rien n'est écrit.
 func (a *App) WriteNote(notePath, content string) error {
 	if err := a.requirePermission(notePath, "modifier", func(c opencloud.Capabilities) bool { return c.CanWrite }); err != nil {
 		return err
@@ -1470,8 +1525,14 @@ func (a *App) WriteNote(notePath, content string) error {
 	if err := notes.EnsureWritable(notePath); err != nil {
 		return err
 	}
-	content = notes.ApplyLineEnding(content, a.lineEndingFor(notePath))
-	return a.cache.Put(notePath, []byte(content))
+	f := a.formatFor(notePath)
+	encoded, err := charset.Encode(notes.ApplyLineEnding(content, f.ending), f.encoding)
+	if err != nil {
+		// Un caractère que l'encodage du fichier ne sait pas écrire : refuser
+		// plutôt que le remplacer par « ? », qui serait une perte sans message.
+		return fmt.Errorf("mobile: %s : %w", notePath, err)
+	}
+	return a.cache.Put(notePath, encoded)
 }
 
 // RefreshNote force la relecture d'une note depuis le serveur.
@@ -2403,8 +2464,11 @@ func (a *App) CapabilitiesJSON(itemPath string) (string, error) {
 	return toJSON(capabilityInfo(c))
 }
 
-// CodeNotUTF8 signale un fichier texte dont le contenu n'est pas de l'UTF-8
-// valide — typiquement un fichier Latin-1 ou UTF-16 venu de Windows.
+// CodeNotUTF8 signale un fichier texte dont l'encodage n'est pas reconnu avec
+// assez de certitude pour le réécrire : UTF-16 sans BOM, ou contenu que
+// l'aller-retour ne rend pas à l'identique (voir ReadNote). Son nom date du
+// temps où tout ce qui n'était pas de l'UTF-8 s'ouvrait en lecture seule ; il
+// reste pour ne pas changer le contrat.
 //
 // Né dans mobile/ comme UNSUPPORTED : c'est la traversée de gomobile, qui
 // convertit en String Java, qui rend ce contenu dangereux. Le fichier reste
