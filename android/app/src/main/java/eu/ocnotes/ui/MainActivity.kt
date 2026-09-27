@@ -8,12 +8,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -22,12 +24,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import eu.ocnotes.R
 import eu.ocnotes.appContainer
 import eu.ocnotes.data.AppMode
 import eu.ocnotes.ui.common.ChargementPleinEcran
@@ -65,10 +70,11 @@ class MainActivity : ComponentActivity() {
                         val container = LocalContext.current.appContainer
                         val activeSession by container.activeSession.collectAsStateWithLifecycle()
                         key(activeSession.generation) {
-                            SessionViewModelScope {
+                            SessionViewModelScope(activeSession.generation) {
                                 OCnotesApp(activeSession.profile.id, activeSession.generation)
                             }
                         }
+                        EchecCompteDialog()
                     }
                 }
             }
@@ -132,9 +138,9 @@ private fun OCnotesApp(
             onReglages = {
                 navController.navigate(Routes.REGLAGES) { launchSingleTop = true }
             },
-            onCompte = { id -> scope.launch { container.activateAccount(id) } },
-            onAjouterCompte = { scope.launch { container.createAccount() } },
-            onSupprimerCompte = { id -> scope.launch { container.deleteAccount(id) } },
+            onCompte = { id -> container.lancerGesteCompte { activateAccount(id) } },
+            onAjouterCompte = { container.lancerGesteCompte { createAccount() } },
+            onSupprimerCompte = { id -> container.lancerGesteCompte { deleteAccount(id) } },
         ) {
             OCnotesNavHost(
                 navController = navController,
@@ -147,21 +153,64 @@ private fun OCnotesApp(
 }
 
 /**
- * Chaque activation de compte reçoit son propre ViewModelStore. Le vider au
- * changement annule les coroutines et libère les anciens dépôts : revenir sur
- * un compte reconstruit alors une session unique sur son dossier.
+ * Chaque activation de compte reçoit son propre ViewModelStore.
+ *
+ * Ce store vit dans [SessionStores], donc dans le store de l'activité : il
+ * survit à une rotation, un changement de thème ou de langue, comme les
+ * ViewModels d'avant les comptes multiples. Le recréer à chaque recréation
+ * d'activité détruirait tous les écrans — et l'éditeur rouvrirait sa note
+ * pendant que l'ancien ViewModel enregistre encore son dernier texte.
  */
 @Composable
-private fun SessionViewModelScope(content: @Composable () -> Unit) {
-    val owner = remember {
+private fun SessionViewModelScope(generation: Long, content: @Composable () -> Unit) {
+    val stores: SessionStores = viewModel()
+    val owner = remember(generation) {
+        val store = stores.pour(generation)
         object : ViewModelStoreOwner {
-            override val viewModelStore = ViewModelStore()
+            override val viewModelStore = store
         }
     }
-    DisposableEffect(owner) {
-        onDispose { owner.viewModelStore.clear() }
-    }
     CompositionLocalProvider(LocalViewModelStoreOwner provides owner, content = content)
+}
+
+/**
+ * Détient le store de la génération affichée. Il n'est vidé qu'en changeant de
+ * génération — ce qui annule les coroutines des écrans quittés — ou quand
+ * l'activité se termine pour de bon.
+ */
+internal class SessionStores : ViewModel() {
+    private var generation: Long? = null
+    private var store = ViewModelStore()
+
+    fun pour(generation: Long): ViewModelStore {
+        if (generation != this.generation) {
+            store.clear()
+            store = ViewModelStore()
+            this.generation = generation
+        }
+        return store
+    }
+
+    override fun onCleared() {
+        store.clear()
+    }
+}
+
+/** Signale l'échec d'un geste du tiroir sur les comptes. */
+@Composable
+private fun EchecCompteDialog() {
+    val container = LocalContext.current.appContainer
+    val echec by container.echecCompte.collectAsStateWithLifecycle()
+    if (!echec) return
+    AlertDialog(
+        onDismissRequest = container::acquitterEchecCompte,
+        text = { Text(stringResource(R.string.compte_geste_echec)) },
+        confirmButton = {
+            TextButton(onClick = container::acquitterEchecCompte) {
+                Text(stringResource(R.string.action_fermer))
+            }
+        },
+    )
 }
 
 /** Le tiroir gestuel ne concurrence jamais une surface de saisie. */

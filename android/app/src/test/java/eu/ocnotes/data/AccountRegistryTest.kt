@@ -228,6 +228,27 @@ class AccountRegistryTest {
         }
     }
 
+    // Le subject OIDC est un identifiant opaque : le tiroir montre le nom
+    // affiché, qui ne doit ni se perdre quand le serveur ne le fournit pas, ni
+    // survivre au compte.
+    @Test
+    fun `le nom affiché se conserve puis disparaît avec le compte`() = runBlocking {
+        val root = Files.createTempDirectory("ocnotes-nom").toFile()
+        try {
+            val registry = AccountRegistry(root)
+            val id = registry.active.id
+            registry.recordAuthenticated(id, "https://cloud.test", "a1b2", "oidc", "cle", displayName = "Élodie")
+            registry.recordAuthenticated(id, "https://cloud.test", "a1b2", "oidc", "cle")
+
+            assertEquals("Élodie", AccountRegistry(root).active.displayName)
+
+            registry.recordDisconnected(id)
+            assertEquals("", AccountRegistry(root).active.displayName)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
     // Le registre est lu dans Application.onCreate : une exception y ferait une
     // boucle de plantage dont on ne sort qu'en effaçant les données — file
     // d'attente hors ligne comprise.

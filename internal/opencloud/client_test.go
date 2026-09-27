@@ -172,6 +172,39 @@ func TestListDrives(t *testing.T) {
 	}
 }
 
+// Me lit l'utilisateur connecté. me.json est une réponse du vrai serveur,
+// capturée par scripts/capture-me.ps1 puis anonymisée.
+func TestMe(t *testing.T) {
+	var gotPath string
+	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(readFixture(t, "me.json"))
+	})
+
+	me, err := c.Me(context.Background())
+	if err != nil {
+		t.Fatalf("Me: %v", err)
+	}
+	if gotPath != "/graph/v1.0/me" {
+		t.Errorf("chemin interrogé = %q", gotPath)
+	}
+	if me != (User{DisplayName: "Alice Martin", Login: "alice", Mail: "alice@example.test"}) {
+		t.Errorf("Me() = %+v", me)
+	}
+	if me.Name() != "Alice Martin" {
+		t.Errorf("Name() = %q", me.Name())
+	}
+
+	// Un nom complet vide laisse la place au login, puis à l'adresse.
+	if got := (User{Login: "emartin", Mail: "e@x"}).Name(); got != "emartin" {
+		t.Errorf("Name() sans displayName = %q", got)
+	}
+	if got := (User{DisplayName: "  ", Mail: "e@x"}).Name(); got != "e@x" {
+		t.Errorf("Name() sans displayName ni login = %q", got)
+	}
+}
+
 // PersonalDrive doit écarter l'espace virtuel « Shares », qui n'est pas un
 // emplacement où l'on peut créer des notes.
 func TestPersonalDrive(t *testing.T) {

@@ -87,6 +87,10 @@ type Config struct {
 	// reconnexion réussie.
 	IdentityKey string `json:"identityKey,omitempty"`
 
+	// DisplayName est le nom du compte à montrer, lu dans LibreGraph à chaque
+	// connexion. Username ne convient pas : en OIDC, c'est le subject.
+	DisplayName string `json:"displayName,omitempty"`
+
 	// DriveID a la forme {storageID}${spaceID}.
 	DriveID   string `json:"driveId,omitempty"`
 	DriveName string `json:"driveName,omitempty"`

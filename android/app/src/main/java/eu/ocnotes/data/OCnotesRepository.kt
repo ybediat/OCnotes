@@ -143,6 +143,34 @@ class OCnotesRepository(
      */
     val sessionExpired: StateFlow<Boolean> = _sessionExpired.asStateFlow()
 
+    /**
+     * Recopie dans le registre ce que le cœur Go sait du compte : le tiroir
+     * liste les profils sans ouvrir leur cœur. Le nom vient de LibreGraph, lu
+     * par le cœur à chaque connexion ; vide, il ne remplace pas celui qu'on a.
+     */
+    private suspend fun enregistrerCompte() {
+        val current = state()
+        if (current.mode != AppMode.SERVER) return
+        accountRegistry.recordAuthenticated(
+            accountId, current.serverUrl, current.username, current.authMode, current.identityKey,
+            displayName = current.displayName.ifBlank { null },
+        )
+    }
+
+    /**
+     * Même chose après une restauration ou une revalidation, où la session est
+     * déjà acquise : un registre qu'on n'a pas pu tenir à jour ne la remet pas
+     * en cause, la prochaine passe s'en chargera.
+     */
+    private suspend fun enregistrerCompteSansEchec() {
+        try {
+            enregistrerCompte()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+        }
+    }
+
     /** Marque la session comme perdue. Ne touche pas au token enregistré :
      * l'écran de connexion le repropose, le nom d'utilisateur et l'URL avec. */
     fun invalidateSession() {
@@ -277,33 +305,29 @@ class OCnotesRepository(
         val token = appToken.trim()
         call { it.connect(serverUrl.trim(), username.trim(), token) }
         tokenStore.saveAppToken(token)
-        val current = state()
-        if (current.mode == AppMode.SERVER) {
-            accountRegistry.recordAuthenticated(
-                accountId, current.serverUrl, current.username, current.authMode, current.identityKey,
-            )
-        }
+        enregistrerCompte()
         sessionOpen = true
         _sessionValidee.value = true
         _sessionExpired.value = false
         refreshPending()
     }
 
-    /** Termine le parcours navigateur et ouvre le même espace qu'une session classique. */
+    /**
+     * Termine le parcours navigateur et ouvre le même espace qu'une session classique.
+     *
+     * [subject] est l'identifiant OIDC du compte, à ne pas confondre avec
+     * `accountId`, l'UUID du profil local : sous le même nom, le paramètre
+     * masquait la propriété et le registre recevait le subject.
+     */
     suspend fun connectOidc(
         serverUrl: String,
-        accountId: String,
+        subject: String,
         accessToken: String,
         serializedState: String,
     ) {
-        call { it.connectOIDC(serverUrl.trim(), accountId, accessToken) }
+        call { it.connectOIDC(serverUrl.trim(), subject, accessToken) }
         tokenStore.saveOidcState(serializedState)
-        val current = state()
-        if (current.mode == AppMode.SERVER) {
-            accountRegistry.recordAuthenticated(
-                accountId, current.serverUrl, current.username, current.authMode, current.identityKey,
-            )
-        }
+        enregistrerCompte()
         sessionOpen = true
         _sessionValidee.value = true
         _sessionExpired.value = false
@@ -359,6 +383,7 @@ class OCnotesRepository(
             sessionOpen = true
             _sessionExpired.value = false
             refreshPending()
+            enregistrerCompteSansEchec()
             RestoreOutcome.PRETE
         } catch (e: CancellationException) {
             throw e
@@ -396,6 +421,7 @@ class OCnotesRepository(
             _sessionValidee.value = true
             _sessionExpired.value = false
             refreshPending()
+            enregistrerCompteSansEchec()
             ValidationSession.VALIDEE
         } catch (e: CancellationException) {
             throw e
@@ -459,10 +485,7 @@ class OCnotesRepository(
         return operationMutex.withLock {
             val request = encoder(AttachRequestDto(driveId, root, adopt))
             val result: AttachResultDto = authenticatedCallJson { it.attachJSON(request) }
-            val current = state()
-            accountRegistry.recordAuthenticated(
-                accountId, current.serverUrl, current.username, current.authMode, current.identityKey,
-            )
+            enregistrerCompte()
             sessionOpen = true
             _sessionValidee.value = true
             _sessionExpired.value = false

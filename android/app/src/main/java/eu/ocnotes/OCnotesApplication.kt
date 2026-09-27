@@ -2,6 +2,7 @@ package eu.ocnotes
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -15,6 +16,7 @@ import eu.ocnotes.diagnostic.CrashReporter
 import eu.ocnotes.sync.SyncNotifier
 import eu.ocnotes.sync.SyncScheduler
 import eu.ocnotes.ui.common.nettoyerPartagesExpires
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -48,143 +50,156 @@ class AppContainer(
 
     val syncNotifier = SyncNotifier(this.context)
 
-    private data class AccountRuntime(
-        val profile: AccountProfile,
+    /**
+     * Ce qu'un profil possède en propre. Il n'en existe **qu'un par profil**
+     * pour toute la vie du processus : deux cœurs Go ouverts sur le même
+     * dossier réécrivent chacun l'index entier depuis leur mémoire, et le
+     * dernier qui enregistre efface la file d'attente de l'autre.
+     */
+    private class AccountRuntime(
         val tokenStore: TokenStore,
         val repository: OCnotesRepository,
         val syncScheduler: SyncScheduler,
     )
 
+    private val runtimes = ConcurrentHashMap<String, AccountRuntime>()
+
     @Volatile
-    private var runtime = buildRuntime(accountRegistry.active)
+    private var activeId = accountRegistry.active.id
     private val switchMutex = Mutex()
     private val accountLocks = ConcurrentHashMap<String, Mutex>()
     data class ActiveSession(val profile: AccountProfile, val generation: Long)
 
     private var generation = 0L
-    private val mutableActiveSession = MutableStateFlow(ActiveSession(runtime.profile, generation))
+    private val mutableActiveSession = MutableStateFlow(ActiveSession(accountRegistry.active, generation))
     val activeSession: StateFlow<ActiveSession> = mutableActiveSession.asStateFlow()
 
-    val tokenStore: TokenStore get() = runtime.tokenStore
-    val repository: OCnotesRepository get() = runtime.repository
-    val syncScheduler: SyncScheduler get() = runtime.syncScheduler
+    val tokenStore: TokenStore get() = runtimeFor(activeId).tokenStore
+    val repository: OCnotesRepository get() = runtimeFor(activeId).repository
+    val syncScheduler: SyncScheduler get() = runtimeFor(activeId).syncScheduler
 
     /**
-     * Chaque profil possède un sous-dossier privé de `filesDir` : le cœur Go
-     * n'ouvre que le cache et la configuration du profil actif. La
-     * configuration ne contient aucun secret — un test Go le vérifie.
+     * Le runtime du profil, créé au premier besoin puis gardé. Sa construction
+     * ne touche ni au disque ni au réseau : le cœur Go ne s'ouvre qu'au premier
+     * appel du dépôt.
      */
-    private fun buildRuntime(profile: AccountProfile): AccountRuntime {
-        val tokenStore = TokenStore(context, profile.id)
-        val scheduler = SyncScheduler(context, profile.id)
-        val repository = buildRepository(profile, tokenStore)
-        return AccountRuntime(profile, tokenStore, repository, scheduler)
+    private fun runtimeFor(id: String): AccountRuntime = runtimes.computeIfAbsent(id) {
+        val tokenStore = TokenStore(context, id)
+        AccountRuntime(
+            tokenStore = tokenStore,
+            repository = OCnotesRepository(
+                dataDir = accountRegistry.profileDir(id).absolutePath,
+                accountId = id,
+                accountRegistry = accountRegistry,
+                tokenStore = tokenStore,
+                oidcManager = oidcManager,
+                preferences = preferencesAffichage,
+            ),
+            syncScheduler = SyncScheduler(context, id),
+        )
     }
 
-    private fun buildRepository(
-        profile: AccountProfile,
-        tokenStore: TokenStore = TokenStore(context, profile.id),
-    ) = OCnotesRepository(
-        dataDir = accountRegistry.profileDir(profile.id).absolutePath,
-        accountId = profile.id,
-        accountRegistry = accountRegistry,
-        tokenStore = tokenStore,
-        oidcManager = oidcManager,
-        preferences = preferencesAffichage,
-    )
-
     /**
-     * Fournit au Worker le dépôt du profil demandé, actif ou non. Le verrou
-     * reste acquis pendant toute la passe : une suppression du même profil
-     * attend donc sa fin et ne peut pas voir ses fichiers réapparaître.
+     * Fournit au Worker le dépôt du profil demandé, actif ou non — le même que
+     * celui des écrans, jamais un second. Le verrou reste acquis pendant toute
+     * la passe : une suppression du même profil attend donc sa fin.
      */
     suspend fun <T> withAccountRepository(
         accountId: String,
         operation: suspend (OCnotesRepository) -> T,
     ): T? = accountLock(accountId).withLock {
-        val profile = accountRegistry.accounts.firstOrNull { it.id == accountId }
-            ?: return@withLock null
-        val current = runtime
-        val repository = if (current.profile.id == accountId) {
-            current.repository
-        } else {
-            withContext(Dispatchers.IO) { buildRepository(profile) }
-        }
-        operation(repository)
+        if (accountRegistry.accounts.none { it.id == accountId }) return@withLock null
+        operation(runtimeFor(accountId).repository)
     }
 
     /** Installe le travail périodique de chaque compte serveur enregistré. */
     fun scheduleAllAccounts() {
         accountRegistry.accounts
             .filter { it.kind != "local" && it.serverUrl.isNotBlank() }
-            .forEach { SyncScheduler(context, it.id).schedulePeriodic() }
+            .forEach { runtimeFor(it.id).syncScheduler.schedulePeriodic() }
     }
 
     private fun accountLock(id: String): Mutex = accountLocks.computeIfAbsent(id) { Mutex() }
 
-    /** Change de profil sans effacer la session, le cache ou le secret quittés. */
+    /**
+     * Change de profil sans effacer la session, le cache ou le secret quittés.
+     * N'attend aucune passe : le profil repris garde son dépôt, passe en cours
+     * comprise.
+     */
     suspend fun activateAccount(id: String) = switchMutex.withLock {
-        if (id == runtime.profile.id) return@withLock
-        accountLock(id).withLock {
-            val profile = accountRegistry.accounts.firstOrNull { it.id == id }
-                ?: throw IllegalArgumentException("Profil inconnu") // i18n-ok
-            val next = withContext(Dispatchers.IO) { buildRuntime(profile) }
-            accountRegistry.activate(id)
-            runtime = next
-            next.syncScheduler.schedulePeriodic()
-            generation += 1
-            mutableActiveSession.value = ActiveSession(profile, generation)
-        }
+        if (id == activeId) return@withLock
+        val profile = accountRegistry.activate(id)
+        afficher(profile)
     }
 
     /** Ajoute un emplacement de compte vierge et l'ouvre sur la connexion. */
     suspend fun createAccount() = switchMutex.withLock {
-        val previousId = runtime.profile.id
-        val profile = accountRegistry.createAndActivate()
-        val next = try {
-            withContext(Dispatchers.IO) { buildRuntime(profile) }
-        } catch (error: Exception) {
-            accountRegistry.activate(previousId)
-            throw error
+        afficher(accountRegistry.createAndActivate())
+    }
+
+    /**
+     * Supprime secret, cache, configuration et travaux du profil.
+     *
+     * L'ordre compte. Le cœur Go est vidé d'abord : `Disconnect` annule et
+     * attend une passe en cours, et un échec à ce stade laisse le profil
+     * intact. Le registre ensuite, puis l'interface quitte le profil. Le
+     * dossier en dernier : son effacement est un ménage, et un échec n'y doit
+     * pas faire croire que la suppression a échoué.
+     */
+    suspend fun deleteAccount(id: String) = switchMutex.withLock {
+        accountLock(id).withLock {
+            require(accountRegistry.accounts.any { it.id == id }) { "Profil inconnu" } // i18n-ok
+            val supprime = runtimeFor(id)
+            supprime.syncScheduler.cancelAll()
+            supprime.repository.disconnect()
+            runCatching { supprime.tokenStore.destroy() }
+
+            val suivant = accountRegistry.remove(id)
+            runtimes.remove(id)
+            if (id == activeId) afficher(suivant)
+
+            val dossier = accountRegistry.profileDir(id)
+            withContext(Dispatchers.IO) { runCatching { dossier.deleteRecursively() } }
         }
-        runtime = next
-        next.syncScheduler.schedulePeriodic()
+        accountLocks.remove(id)
+    }
+
+    /** Fait du profil celui de l'interface. Appelé sous [switchMutex]. */
+    private fun afficher(profile: AccountProfile) {
+        activeId = profile.id
+        runtimeFor(profile.id).syncScheduler.schedulePeriodic()
         generation += 1
         mutableActiveSession.value = ActiveSession(profile, generation)
     }
 
-    /** Supprime secret, cache, configuration et travaux du profil. */
-    suspend fun deleteAccount(id: String) = switchMutex.withLock {
-        accountLock(id).withLock {
-            require(accountRegistry.accounts.any { it.id == id }) { "Profil inconnu" } // i18n-ok
-            val deletingActive = runtime.profile.id == id
-            val directory = accountRegistry.profileDir(id)
-            SyncScheduler(context, id).cancelAll()
+    private val mutableEchecCompte = MutableStateFlow(false)
 
-            if (deletingActive) {
-                runtime.repository.disconnect()
-                runtime.tokenStore.destroy()
-            } else {
-                TokenStore(context, id).destroy()
-            }
+    /** Vrai quand le dernier geste sur les comptes a échoué ; l'interface le signale. */
+    val echecCompte: StateFlow<Boolean> = mutableEchecCompte.asStateFlow()
 
-            val nextProfile = accountRegistry.remove(id)
-            if (deletingActive) {
-                accountLock(nextProfile.id).withLock {
-                    val next = withContext(Dispatchers.IO) { buildRuntime(nextProfile) }
-                    runtime = next
-                    next.syncScheduler.schedulePeriodic()
-                    generation += 1
-                    mutableActiveSession.value = ActiveSession(nextProfile, generation)
-                }
-            }
+    fun acquitterEchecCompte() {
+        mutableEchecCompte.value = false
+    }
 
-            withContext(Dispatchers.IO) {
-                check(!directory.exists() || directory.deleteRecursively()) {
-                    "Suppression du dossier de profil impossible" // i18n-ok
-                }
+    /**
+     * Exécute un geste du tiroir — activer, ajouter, supprimer un compte.
+     *
+     * Dans [applicationScope] et non dans une portée d'écran : le geste change
+     * la génération affichée, donc détruit la composition qui l'a lancé, et une
+     * suppression interrompue à mi-chemin laisserait un dossier orphelin. Une
+     * exception y est rattrapée : laissée filer, elle tuerait le processus.
+     */
+    fun lancerGesteCompte(geste: suspend AppContainer.() -> Unit) {
+        applicationScope.launch {
+            try {
+                geste()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Le type seul : un message peut porter un chemin ou une URL.
+                Log.w(TAG, "geste de compte abandonné (${e.javaClass.simpleName})") // i18n-ok
+                mutableEchecCompte.value = true
             }
-            accountLocks.remove(id)
         }
     }
 
@@ -206,6 +221,10 @@ class AppContainer(
      * frappe des dernières secondes serait perdue.
      */
     val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    private companion object {
+        const val TAG = "OCnotes"
+    }
 }
 
 class OCnotesApplication : Application() {

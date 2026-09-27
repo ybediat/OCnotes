@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.ocnotes.R
 import eu.ocnotes.appContainer
 import eu.ocnotes.data.AccountProfile
+import eu.ocnotes.data.AuthMode
 import eu.ocnotes.ui.browser.ModeAffichage
 import eu.ocnotes.ui.theme.CouleurSignatureClaire
 import eu.ocnotes.ui.theme.CouleurSignatureSombre
@@ -121,9 +122,10 @@ fun TiroirApplication(
                         label = {
                             Column {
                                 Text(nom)
-                                if (compte.username.isNotBlank() && compte.serverUrl.isNotBlank()) {
+                                val adresse = adresseServeur(compte)
+                                if (adresse != null && adresse != nom) {
                                     Text(
-                                        compte.serverUrl,
+                                        adresse,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -265,13 +267,22 @@ fun TiroirApplication(
     }
 }
 
+/**
+ * Titre d'un compte dans le tiroir. Jamais le `username` d'un compte OIDC :
+ * c'est le subject, un identifiant opaque. Tant que le nom affiché manque —
+ * il arrive avec la session suivante —, l'adresse du serveur en tient lieu.
+ */
 @Composable
 private fun nomCompte(compte: AccountProfile): String = when {
     compte.kind == "local" -> stringResource(R.string.compte_local)
-    compte.username.isNotBlank() -> compte.username
-    compte.serverUrl.isNotBlank() -> compte.serverUrl
-    else -> stringResource(R.string.compte_nouveau)
+    compte.displayName.isNotBlank() -> compte.displayName
+    compte.authMode != AuthMode.OIDC && compte.username.isNotBlank() -> compte.username
+    else -> adresseServeur(compte) ?: stringResource(R.string.compte_nouveau)
 }
+
+/** L'hôte du serveur, sans le schéma : `https://` n'apprend rien ici. */
+private fun adresseServeur(compte: AccountProfile): String? =
+    compte.serverUrl.takeIf { it.isNotBlank() }?.substringAfter("://")?.trimEnd('/')
 
 @Composable
 private fun AProposDialog(onFermer: () -> Unit) {
