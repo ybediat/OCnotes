@@ -97,12 +97,13 @@
     <string name="err_quota_local">The storage limit is too low to keep all notes on this device.</string>
     <string name="err_quota_protege">Limit saved. Your unsynced changes and conflict copies already exceed it: they are kept.</string>
     <string name="err_modifications_attente">Some changes still need to be synchronized before disconnecting the server.</string>
+    <string name="err_compte_different">This account is not the one whose notes are on this device. Sign in with that account, or sign out from the settings to switch accounts.</string>
+    <string name="err_session_changee">The session changed while connecting. Please try again.</string>
 
     <!-- ================================================================
          Démarrage
          ================================================================ -->
     <string name="demarrage_token_refuse">Your App Token is no longer accepted by the server. It has probably expired: create a new one and enter it.</string>
-    <string name="demarrage_migration_reconnexion">Account storage was updated. Your local notes are safe; sign in again to resume synchronization.</string>
     <string name="demarrage_espace_hors_ligne">There is still a notes space to choose, and this step requires a connection to the server. Try again once the network is back.</string>
 
     <!-- ================================================================

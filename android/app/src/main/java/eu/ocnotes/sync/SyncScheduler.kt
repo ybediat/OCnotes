@@ -33,9 +33,13 @@ class SyncScheduler(
 
     private val workManager = WorkManager.getInstance(context.applicationContext)
 
-    init {
-        // Les travaux créés avant l'isolation par profil n'ont pas d'UUID et
-        // ne doivent pas rester planifiés indéfiniment après la migration.
+    /**
+     * Annule les travaux créés avant l'isolation par profil, qui n'ont pas
+     * d'UUID : le périodique réveillerait sinon le processus toutes les heures,
+     * indéfiniment, pour rien — [SyncWorker] les écarte sans rien faire.
+     * Appelé une fois, au lancement qui crée le registre des profils.
+     */
+    fun annulerTravauxSansProfil() {
         workManager.cancelUniqueWork(WORK_PERIODIC)
         workManager.cancelUniqueWork(WORK_NOW)
         workManager.cancelUniqueWork(WORK_DEBOUNCED)

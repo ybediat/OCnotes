@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ybediat/OpenNote/internal/config"
+	"github.com/ybediat/OpenNote/internal/opencloud"
 )
 
 // prepare monte une application connectée à un serveur factice, avec un espace
@@ -126,7 +127,7 @@ func TestOIDCConnexionRenouvellementEtRestauration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewApp: %v", err)
 	}
-	if err := app.ConnectOIDC(server.URL, "https://issuer.example.test", "compte-oidc", fakeToken); err != nil {
+	if err := app.ConnectOIDC(server.URL, "compte-oidc", fakeToken); err != nil {
 		t.Fatalf("ConnectOIDC: %v", err)
 	}
 	if err := app.SelectWorkspace(fakeSpaceID, "Notes"); err != nil {
@@ -163,59 +164,143 @@ func TestOIDCConnexionRenouvellementEtRestauration(t *testing.T) {
 
 // Tant que chaque profil possède son propre cache, une reconnexion ne peut pas
 // transformer silencieusement le profil courant en celui d'un autre compte.
-func TestConnexionRefuseUneAutreIdentiteSansMuterLaSession(t *testing.T) {
-	app, _, _ := prepare(t)
-	ancienneLib := app.lib
+// L'autre compte est un autre propriétaire LibreGraph : c'est lui, et non le
+// mode d'authentification, qui fait l'identité.
+func TestConnexionRefuseUnAutreProprietaireSansMuterLaSession(t *testing.T) {
+	for nom, connecter := range map[string]func(*App, *fakeServer) error{
+		"App Token": func(app *App, server *fakeServer) error {
+			return app.Connect(server.URL, fakeUser, fakeToken)
+		},
+		"OIDC": func(app *App, server *fakeServer) error {
+			return app.ConnectOIDC(server.URL, "autre-compte", fakeToken)
+		},
+	} {
+		t.Run(nom, func(t *testing.T) {
+			app, server, _ := prepare(t)
+			ancienneLib, ancienneCfg := app.lib, app.cfg
+			server.setOwner("55555555-5555-4555-8555-555555555555")
 
-	err := app.ConnectOIDC(app.cfg.ServerURL, "https://issuer.example.test", "autre-compte", fakeToken)
-	if err == nil || ErrorCode(err.Error()) != CodeAccountMismatch {
-		t.Fatalf("ConnectOIDC autre compte = %v, ACCOUNT_MISMATCH attendu", err)
+			err := connecter(app, server)
+			if err == nil || ErrorCode(err.Error()) != CodeAccountMismatch {
+				t.Fatalf("connexion d'un autre propriétaire = %v, ACCOUNT_MISMATCH attendu", err)
+			}
+			if app.lib != ancienneLib {
+				t.Fatal("la bibliothèque active a changé malgré le refus")
+			}
+			if app.cfg != ancienneCfg {
+				t.Fatalf("configuration mutée après refus: %+v", app.cfg)
+			}
+		})
 	}
-	if app.lib != ancienneLib {
-		t.Fatal("la bibliothèque active a changé malgré le refus")
+}
+
+// Passer de l'App Token à OIDC ne change pas de compte : le cache, sa file
+// d'attente et l'espace choisi doivent survivre au changement de méthode.
+func TestMemeCompteAppTokenPuisOIDC(t *testing.T) {
+	app, _, _ := prepare(t)
+	cle := app.cfg.IdentityKey
+	if cle == "" {
+		t.Fatal("la clé d'identité App Token est vide")
 	}
-	if app.cfg.Username != fakeUser || app.cfg.EffectiveAuthMode() != "app_token" {
-		t.Fatalf("configuration mutée après refus: %+v", app.cfg)
+
+	if err := app.ConnectOIDC(app.cfg.ServerURL, "sub-oidc", fakeToken); err != nil {
+		t.Fatalf("ConnectOIDC du même compte: %v", err)
+	}
+	if app.lib == nil || app.cfg.DriveID != fakeSpaceID {
+		t.Fatalf("espace perdu au changement de méthode: %+v", app.cfg)
+	}
+	if app.cfg.EffectiveAuthMode() != config.AuthOIDC || app.cfg.IdentityKey != cle {
+		t.Fatalf("configuration après ConnectOIDC: %+v", app.cfg)
+	}
+}
+
+// La revalidation d'arrière-plan tourne pendant que l'utilisateur navigue
+// déjà dans le cache : retenir le dernier dossier n'est pas changer de session.
+func TestNaviguerPendantLaRevalidationNeLaFaitPasEchouer(t *testing.T) {
+	app, server, dataDir := prepare(t)
+	server.mu.Lock()
+	server.surDAV = func() { app.rememberLastPath("sous-dossier") }
+	server.mu.Unlock()
+
+	if err := app.Connect(server.URL, fakeUser, fakeToken); err != nil {
+		t.Fatalf("revalidation pendant la navigation: %v", err)
+	}
+	if app.cfg.LastPath != "sous-dossier" {
+		t.Fatalf("LastPath = %q, le dossier consulté a été oublié", app.cfg.LastPath)
+	}
+	persistee, err := config.Load(dataDir)
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	if persistee.LastPath != "sous-dossier" {
+		t.Fatalf("LastPath persisté = %q", persistee.LastPath)
+	}
+}
+
+// Une vraie concurrence — une déconnexion pendant la connexion — reste
+// refusée, et avec un code que l'interface sait lire.
+func TestDeconnexionPendantLaConnexionEstSignalee(t *testing.T) {
+	app, server, _ := prepare(t)
+	server.mu.Lock()
+	server.surDAV = func() {
+		server.mu.Lock()
+		server.surDAV = nil
+		server.mu.Unlock()
+		if err := app.Disconnect(); err != nil {
+			t.Errorf("Disconnect: %v", err)
+		}
+	}
+	server.mu.Unlock()
+
+	err := app.Connect(server.URL, fakeUser, fakeToken)
+	if err == nil || ErrorCode(err.Error()) != CodeSessionChanged {
+		t.Fatalf("connexion pendant une déconnexion = %v, %s attendu", err, CodeSessionChanged)
+	}
+	if app.cfg.IsConnected() || app.lib != nil {
+		t.Fatalf("la connexion a ressuscité une session déconnectée: %+v", app.cfg)
 	}
 }
 
 func TestIdentiteStablePrimeSurLeLibelleDeConnexion(t *testing.T) {
+	cle := identityKey("https://cloud.example.test", []opencloud.Drive{
+		{Type: opencloud.DrivePersonal, OwnerID: "proprietaire"},
+	})
 	current := config.Config{
 		Mode:        config.ModeServer,
 		ServerURL:   "https://cloud.example.test",
 		Username:    "ancien-login",
-		IdentityKey: "v1:identite-stable",
+		IdentityKey: cle,
 	}
 
-	if err := requireSameAccount(
-		current,
-		"https://cloud.example.test",
-		"nouveau-login",
-		config.AuthAppToken,
-		"v1:identite-stable",
-	); err != nil {
-		t.Fatalf("le même compte avec un nouveau login a été refusé: %v", err)
+	if err := requireSameAccount(current, "https://cloud.example.test", "nouveau-login", config.AuthOIDC, cle); err != nil {
+		t.Fatalf("le même compte avec un autre login et une autre méthode a été refusé: %v", err)
 	}
-	if err := requireSameAccount(
-		current,
-		"https://cloud.example.test",
-		"ancien-login",
-		config.AuthAppToken,
-		"v1:autre-identite",
-	); err == nil || ErrorCode(err.Error()) != CodeAccountMismatch {
+	autre := identityKey("https://cloud.example.test", []opencloud.Drive{
+		{Type: opencloud.DrivePersonal, OwnerID: "autre"},
+	})
+	if err := requireSameAccount(current, "https://cloud.example.test", "ancien-login", config.AuthAppToken, autre); err == nil || ErrorCode(err.Error()) != CodeAccountMismatch {
 		t.Fatalf("autre identité = %v, ACCOUNT_MISMATCH attendu", err)
 	}
 }
 
-func TestCleOIDCDistingueIssuerEtSubject(t *testing.T) {
-	base, err := oidcIdentityKey("https://cloud.example.test", "https://idp.example.test", "alice")
-	if err != nil {
-		t.Fatalf("oidcIdentityKey: %v", err)
+// Sans clé exploitable des deux côtés, la comparaison retombe sur l'URL, le
+// login et la méthode. Une clé d'un autre format compte comme absente.
+func TestSansCleComparableLeReplieCompareLeLogin(t *testing.T) {
+	current := config.Config{
+		Mode:        config.ModeServer,
+		ServerURL:   "https://cloud.example.test",
+		Username:    "alice",
+		IdentityKey: "v1:format-abandonne",
 	}
-	autreIssuer, _ := oidcIdentityKey("https://cloud.example.test", "https://other-idp.example.test", "alice")
-	autreSubject, _ := oidcIdentityKey("https://cloud.example.test", "https://idp.example.test", "bob")
-	if base == autreIssuer || base == autreSubject {
-		t.Fatal("la clé OIDC ne distingue pas l'issuer et le subject")
+	cle := identityKey("https://cloud.example.test", []opencloud.Drive{
+		{Type: opencloud.DrivePersonal, OwnerID: "proprietaire"},
+	})
+
+	if err := requireSameAccount(current, "https://cloud.example.test", "alice", config.AuthAppToken, cle); err != nil {
+		t.Fatalf("clé d'un ancien format, même login: %v", err)
+	}
+	if err := requireSameAccount(current, "https://cloud.example.test", "bob", config.AuthAppToken, cle); err == nil || ErrorCode(err.Error()) != CodeAccountMismatch {
+		t.Fatalf("clé d'un ancien format, autre login = %v, ACCOUNT_MISMATCH attendu", err)
 	}
 }
 
@@ -404,9 +489,7 @@ func TestConnectHTTPEstCategorise(t *testing.T) {
 
 	for nom, connecter := range map[string]func() error{
 		"App Token": func() error { return app.Connect("http://cloud.exemple.fr", "alice", "un-token") },
-		"OIDC": func() error {
-			return app.ConnectOIDC("http://cloud.exemple.fr", "https://issuer.exemple.fr", "alice", "un-jeton")
-		},
+		"OIDC":      func() error { return app.ConnectOIDC("http://cloud.exemple.fr", "alice", "un-jeton") },
 	} {
 		err := connecter()
 		if err == nil {

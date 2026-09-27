@@ -24,7 +24,6 @@ data class AccountProfile(
     val username: String = "",
     val authMode: String = "",
     val identityKey: String = "",
-    val needsReauthentication: Boolean = false,
 )
 
 /**
@@ -45,15 +44,23 @@ class AccountRegistry(private val filesDir: File) {
     var active: AccountProfile
         private set
 
+    /**
+     * Vrai si ce processus a créé le registre : première installation, ou
+     * passage depuis le schéma sans profils. C'est le seul lancement où les
+     * restes de l'ancien schéma — travaux WorkManager sans UUID — sont à
+     * nettoyer.
+     */
+    var vientDeMigrer: Boolean = false
+        private set
+
     init {
         filesDir.mkdirs()
         active = loadRegistry() ?: migrateOrCreate()
-        require(UUID.fromString(active.id).toString() == active.id) { "Identifiant de profil invalide" } // i18n-ok
         profileDir(active.id).mkdirs()
     }
 
     fun profileDir(id: String = active.id): File {
-        require(UUID.fromString(id).toString() == id) { "Identifiant de profil invalide" } // i18n-ok
+        require(isProfileId(id)) { "Identifiant de profil invalide" } // i18n-ok
         val accounts = File(filesDir, ACCOUNTS_DIR)
         val result = File(accounts, id)
         require(result.canonicalFile.parentFile == accounts.canonicalFile) { "Dossier de profil invalide" } // i18n-ok
@@ -74,7 +81,6 @@ class AccountRegistry(private val filesDir: File) {
                     username = username,
                     authMode = authMode,
                     identityKey = identityKey,
-                    needsReauthentication = false,
                 )
             }
         }
@@ -87,7 +93,6 @@ class AccountRegistry(private val filesDir: File) {
                 username = "",
                 authMode = "",
                 identityKey = "",
-                needsReauthentication = false,
             )
         }
     }
@@ -100,7 +105,6 @@ class AccountRegistry(private val filesDir: File) {
                 username = "",
                 authMode = "",
                 identityKey = "",
-                needsReauthentication = false,
             )
         }
     }
@@ -112,13 +116,47 @@ class AccountRegistry(private val filesDir: File) {
         active = updated
     }
 
+    /**
+     * Le profil actif, ou `null` si le registre n'existe pas encore.
+     *
+     * Ce code tourne dans `Application.onCreate` : une exception y ferait une
+     * boucle de plantage dont on ne sort qu'en effaçant les données de
+     * l'application, file d'attente hors ligne comprise. Un registre présent
+     * mais illisible est donc reconstruit, jamais fatal.
+     */
     private fun loadRegistry(): AccountProfile? {
         val file = File(filesDir, REGISTRY_FILE)
         if (!file.isFile) return null
+        return readRegistry(file) ?: rebuildRegistry(file)
+    }
+
+    private fun readRegistry(file: File): AccountProfile? = runCatching {
         val registry = json.decodeFromString<RegistryDocument>(file.readText(Charsets.UTF_8))
-        check(registry.version == VERSION) { "Version de registre inconnue" } // i18n-ok
-        return registry.accounts.firstOrNull { it.id == registry.activeAccountId }
-            ?: error("Le profil actif est absent du registre") // i18n-ok
+        registry.accounts
+            .takeIf { registry.version == VERSION }
+            ?.firstOrNull { it.id == registry.activeAccountId && isProfileId(it.id) }
+    }.getOrNull()
+
+    /**
+     * Reconstruit le registre depuis les dossiers de profil.
+     *
+     * Le dossier porte l'UUID, donc aussi le secret et les travaux qui en
+     * dépendent : le reprendre tel quel garde la session. L'original est mis de
+     * côté plutôt qu'écrasé — un registre d'une version future reste ainsi
+     * récupérable après un retour en arrière.
+     */
+    private fun rebuildRegistry(file: File): AccountProfile {
+        runCatching { file.copyTo(File(filesDir, "$REGISTRY_FILE$UNREADABLE_SUFFIX"), overwrite = true) }
+        val directory = File(filesDir, ACCOUNTS_DIR).listFiles()
+            ?.filter { it.isDirectory && isProfileId(it.name) }
+            ?.maxByOrNull { File(it, CONFIG_FILE).lastModified() }
+            ?: return migrateOrCreate()
+        val profile = profileFromConfig(directory.name, File(directory, CONFIG_FILE))
+        migrateLegacyFiles(profile)
+        // Un échec d'écriture n'empêche pas de démarrer : le profil est connu,
+        // et la reconstruction se refera au lancement suivant.
+        runCatching { writeRegistry(profile) }
+        return profile
     }
 
     private fun migrateOrCreate(): AccountProfile {
@@ -126,44 +164,54 @@ class AccountRegistry(private val filesDir: File) {
         migrateLegacyFiles(profile)
         writeRegistry(profile)
         File(profileDir(profile.id), MIGRATION_MARKER).delete()
+        vientDeMigrer = true
         return profile
     }
 
-    /** Reprend une migration interrompue avant l'écriture du registre. */
+    /**
+     * Reprend une migration interrompue avant l'écriture du registre. Un
+     * marqueur tronqué ne perd que ses métadonnées : l'UUID est le nom du
+     * dossier, et la configuration dit le reste.
+     */
     private fun pendingMigration(): AccountProfile? {
-        val accounts = File(filesDir, ACCOUNTS_DIR)
-        return accounts.listFiles()
-            ?.firstOrNull { File(it, MIGRATION_MARKER).isFile }
-            ?.let { directory ->
-                json.decodeFromString<AccountProfile>(
-                    File(directory, MIGRATION_MARKER).readText(Charsets.UTF_8),
-                )
-            }
+        val directory = File(filesDir, ACCOUNTS_DIR).listFiles()
+            ?.firstOrNull { isProfileId(it.name) && File(it, MIGRATION_MARKER).isFile }
+            ?: return null
+        return runCatching {
+            json.decodeFromString<AccountProfile>(File(directory, MIGRATION_MARKER).readText(Charsets.UTF_8))
+        }.getOrNull()?.takeIf { it.id == directory.name }
+            ?: profileFromConfig(
+                directory.name,
+                File(filesDir, CONFIG_FILE).takeIf { it.isFile } ?: File(directory, CONFIG_FILE),
+            )
     }
 
     private fun legacyProfile(): AccountProfile {
-        val config = File(filesDir, CONFIG_FILE)
-        val metadata = if (config.isFile) runCatching {
-            json.parseToJsonElement(config.readText(Charsets.UTF_8)).jsonObject
-        }.getOrNull() else null
-        fun field(name: String): String = metadata?.get(name)?.jsonPrimitive?.contentOrNull.orEmpty()
-        val mode = field("mode")
-        val profile = AccountProfile(
-            id = UUID.randomUUID().toString(),
-            kind = if (mode == KIND_LOCAL) KIND_LOCAL else KIND_SERVER,
-            serverUrl = field("serverUrl"),
-            username = field("username"),
-            authMode = field("authMode"),
-            identityKey = field("identityKey"),
-            // Le nouveau stockage de secrets est lié à l'UUID. Une ancienne
-            // session serveur devra donc être authentifiée de nouveau.
-            needsReauthentication = metadata != null && mode != KIND_LOCAL,
-        )
+        val profile = profileFromConfig(UUID.randomUUID().toString(), File(filesDir, CONFIG_FILE))
         val directory = profileDir(profile.id)
         check(directory.mkdirs() || directory.isDirectory) { "Création du dossier de profil impossible" } // i18n-ok
         writeAtomically(File(directory, MIGRATION_MARKER), json.encodeToString(profile))
         return profile
     }
+
+    /** Profil décrit par un `config.json` du cœur Go ; illisible, il reste vierge. */
+    private fun profileFromConfig(id: String, config: File): AccountProfile {
+        val metadata = if (config.isFile) runCatching {
+            json.parseToJsonElement(config.readText(Charsets.UTF_8)).jsonObject
+        }.getOrNull() else null
+        fun field(name: String): String = metadata?.get(name)?.jsonPrimitive?.contentOrNull.orEmpty()
+        return AccountProfile(
+            id = id,
+            kind = if (field("mode") == KIND_LOCAL) KIND_LOCAL else KIND_SERVER,
+            serverUrl = field("serverUrl"),
+            username = field("username"),
+            authMode = field("authMode"),
+            identityKey = field("identityKey"),
+        )
+    }
+
+    private fun isProfileId(id: String): Boolean =
+        runCatching { UUID.fromString(id).toString() == id }.getOrDefault(false)
 
     private fun migrateLegacyFiles(profile: AccountProfile) {
         val destination = profileDir(profile.id)
@@ -217,6 +265,7 @@ class AccountRegistry(private val filesDir: File) {
     private companion object {
         const val VERSION = 1
         const val REGISTRY_FILE = "accounts.json"
+        const val UNREADABLE_SUFFIX = ".illisible"
         const val ACCOUNTS_DIR = "accounts"
         const val MIGRATION_MARKER = "migration.pending"
         const val CONFIG_FILE = "config.json"
