@@ -19,10 +19,41 @@ import (
 // lecteur d'Entry existant suppose qu'un blob l'accompagne, et leur apprendre
 // à s'en méfier un par un aurait été la vraie source de bugs.
 type Known struct {
-	Path    string    `json:"path"`
-	ETag    string    `json:"etag,omitempty"`
-	Size    int64     `json:"size"`
-	ModTime time.Time `json:"modTime"`
+	Path        string    `json:"path"`
+	ETag        string    `json:"etag,omitempty"`
+	Size        int64     `json:"size"`
+	ModTime     time.Time `json:"modTime"`
+	Permissions string    `json:"permissions,omitempty"`
+}
+
+// FolderKnown est un dossier de l'inventaire accompagné de ses droits WebDAV.
+type FolderKnown struct {
+	Path        string
+	Permissions string
+}
+
+// RememberPermissions fusionne les droits d'un listing sans remplacer
+// l'inventaire complet. ListFolder l'utilise après un PROPFIND Depth 1.
+func (s *Store) RememberPermissions(current FolderKnown, notes []Known, folders []FolderKnown) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.folderPermissions == nil {
+		s.folderPermissions = map[string]string{}
+	}
+	s.folderPermissions[current.Path] = current.Permissions
+	for _, folder := range folders {
+		s.rememberFolderLocked(folder.Path)
+		s.folderPermissions[folder.Path] = folder.Permissions
+	}
+	for _, note := range notes {
+		if known, ok := s.known[note.Path]; ok {
+			known.Permissions = note.Permissions
+		} else {
+			copy := note
+			s.known[note.Path] = &copy
+		}
+	}
+	return s.save()
 }
 
 // SetIndex remplace l'inventaire distant par celui qu'on vient de recevoir.
@@ -44,6 +75,16 @@ type Known struct {
 //     serveur la voit encore ;
 //  3. un dossier créé hors connexion est conservé, même absent du serveur.
 func (s *Store) SetIndex(notes []Known, folders []string) error {
+	withPermissions := make([]FolderKnown, 0, len(folders))
+	for _, folder := range folders {
+		withPermissions = append(withPermissions, FolderKnown{Path: folder})
+	}
+	return s.SetIndexWithPermissions(notes, withPermissions)
+}
+
+// SetIndexWithPermissions remplace l'inventaire en conservant les capacités
+// WebDAV des dossiers et des notes.
+func (s *Store) SetIndexWithPermissions(notes []Known, folders []FolderKnown) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -68,7 +109,13 @@ func (s *Store) SetIndex(notes []Known, folders []string) error {
 		if !e.Dirty || supprimeeOuDedans(supprimees, chemin) {
 			continue
 		}
-		s.known[chemin] = &Known{Path: chemin, Size: e.Size, ModTime: e.LocalMod}
+		permissions := ""
+		if known, ok := s.known[chemin]; ok {
+			permissions = known.Permissions
+		}
+		s.known[chemin] = &Known{
+			Path: chemin, Size: e.Size, ModTime: e.LocalMod, Permissions: permissions,
+		}
 	}
 
 	// Règle 3 : les dossiers en attente de création survivent au remplacement.
@@ -79,11 +126,13 @@ func (s *Store) SetIndex(notes []Known, folders []string) error {
 		}
 	}
 	s.folders = map[string]bool{}
+	s.folderPermissions = map[string]string{}
 	for _, d := range folders {
-		if supprimeeOuDedans(supprimees, d) {
+		if supprimeeOuDedans(supprimees, d.Path) {
 			continue
 		}
-		s.rememberFolderLocked(d)
+		s.rememberFolderLocked(d.Path)
+		s.folderPermissions[d.Path] = d.Permissions
 	}
 	for d := range enAttente {
 		s.rememberFolderLocked(d)
@@ -114,7 +163,11 @@ func (s *Store) Index() []Known {
 		if !s.localOnly && !e.Dirty {
 			continue
 		}
-		out[chemin] = Known{Path: chemin, Size: e.Size, ModTime: e.LocalMod}
+		permissions := ""
+		if known, ok := out[chemin]; ok {
+			permissions = known.Permissions
+		}
+		out[chemin] = Known{Path: chemin, Size: e.Size, ModTime: e.LocalMod, Permissions: permissions}
 	}
 
 	liste := make([]Known, 0, len(out))
@@ -185,6 +238,9 @@ func (s *Store) GoLocal() ([]string, error) {
 	s.queue = nil
 	s.indexed = true
 	s.localOnly = true
+	// Une bibliothèque devenue locale n'est plus soumise aux ACL du serveur
+	// qu'elle vient de quitter.
+	s.folderPermissions = map[string]string{}
 
 	return abandonnees, s.save()
 }

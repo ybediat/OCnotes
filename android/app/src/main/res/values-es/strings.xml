@@ -37,6 +37,7 @@
          cœur Go, qui refuse de créer un nom que le cache ne saurait écrire.
          ================================================================ -->
     <string name="err_auth">Credenciales rechazadas. Compruebe el nombre de usuario y el App Token, que puede haber caducado.</string>
+    <string name="err_autorisation">No tiene permiso para realizar esta acción.</string>
     <string name="err_conflit">Esta nota se ha modificado en otro dispositivo.</string>
     <string name="err_introuvable">No se encuentra en el servidor. Es posible que la nota o la carpeta se haya eliminado desde otro dispositivo.</string>
     <string name="err_http">El servidor no está disponible en este momento.</string>
@@ -494,6 +495,7 @@
     <string name="apercu_lecture_seule">Esta nota contiene un elemento demasiado largo para editarlo aquí. Se ha abierto en modo de solo lectura.</string>
     <string name="apercu_document_lecture_seule">Este documento se abre en modo de solo lectura.</string>
     <string name="apercu_texte_lecture_seule">Este tipo de archivo se abre en modo de solo lectura.</string>
+    <string name="apercu_autorisation_lecture_seule">Puede consultar esta nota, pero no tiene permiso para modificarla.</string>
     <string name="apercu_encodage_lecture_seule">Este archivo no está codificado en UTF-8. Se ha abierto en modo de solo lectura para no dañarlo.</string>
     <string name="sync_conflits_suppression">\n• eliminación cancelada: %1$s cambió de forma remota</string>
     <string name="sync_conflits_deplacement">\n• traslado cancelado; copia conservada: %1$s</string>

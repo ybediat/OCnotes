@@ -50,6 +50,7 @@
          cœur Go, qui refuse de créer un nom que le cache ne saurait écrire.
          ================================================================ -->
     <string name="err_auth">Identifiants refusés. Vérifiez le nom d\'utilisateur et l\'App Token, qui a pu expirer.</string>
+    <string name="err_autorisation">Vous n’avez pas l’autorisation d’effectuer cette action.</string>
     <string name="err_conflit">Cette note a été modifiée ailleurs entre-temps.</string>
     <string name="err_introuvable">Introuvable sur le serveur. La note ou le dossier a peut-être été supprimé depuis un autre appareil.</string>
     <string name="err_http">Le serveur est injoignable pour le moment.</string>
@@ -519,6 +520,7 @@
     <string name="apercu_lecture_seule">Cette note contient un élément trop long pour être modifié ici. Elle est ouverte en lecture seule.</string>
     <string name="apercu_document_lecture_seule">Ce document est ouvert en lecture seule.</string>
     <string name="apercu_texte_lecture_seule">Ce type de fichier s\'ouvre en lecture seule.</string>
+    <string name="apercu_autorisation_lecture_seule">Vous pouvez consulter cette note, mais vous n’avez pas l’autorisation de la modifier.</string>
     <string name="apercu_encodage_lecture_seule">Ce fichier n\'est pas encodé en UTF-8. Il est ouvert en lecture seule pour ne pas l\'abîmer.</string>
     <string name="sync_conflits_suppression">\n• suppression annulée : %1$s a changé à distance</string>
     <string name="sync_conflits_deplacement">\n• déplacement annulé ; copie conservée : %1$s</string>

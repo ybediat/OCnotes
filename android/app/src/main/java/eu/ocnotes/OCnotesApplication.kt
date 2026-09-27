@@ -12,9 +12,11 @@ import eu.ocnotes.data.auth.OidcManager
 import eu.ocnotes.diagnostic.CrashReporter
 import eu.ocnotes.sync.SyncNotifier
 import eu.ocnotes.sync.SyncScheduler
+import eu.ocnotes.ui.common.nettoyerPartagesExpires
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -77,6 +79,9 @@ class OCnotesApplication : Application() {
         // construction du dépôt Go ou des autres objets du processus.
         val crashReporter = CrashReporter.install(this)
         container = AppContainer(this, crashReporter)
+        container.applicationScope.launch(Dispatchers.IO) {
+            nettoyerPartagesExpires(container.dossierPartage)
+        }
         container.syncNotifier.ensureChannel()
         container.syncScheduler.schedulePeriodic()
 

@@ -228,7 +228,7 @@ func TestHTTPErrorSeTraduitEnSentinelle(t *testing.T) {
 		{http.StatusNotFound, ErrNotFound},
 		{http.StatusPreconditionFailed, ErrConflict},
 		{http.StatusUnauthorized, ErrUnauthorized},
-		{http.StatusForbidden, ErrUnauthorized},
+		{http.StatusForbidden, ErrForbidden},
 	}
 
 	for _, tc := range tests {

@@ -64,6 +64,9 @@ data class BrowserUiState(
     val selection: Set<String> = emptySet(),
     /** Les suppressions sont définitives : aucune copie serveur n'existe. */
     val modeLocal: Boolean = false,
+    /** Capacités du dossier actuellement affiché. */
+    val canCreateFile: Boolean = true,
+    val canCreateFolder: Boolean = true,
     /**
      * Occupation des notes, en octets, quand elle dépasse le seuil d'alerte
      * du mode local ; nul sinon. C'est la seule chose que ce seuil fait : il
@@ -98,11 +101,15 @@ data class BrowserUiState(
         get() = entrees.any { it.readOnly && it.path in selection }
 
     /** Le déplacement groupé est proposable : une sélection, et aucune n'est un dossier. */
-    val peutDeplacerSelection: Boolean get() = modeSelection && !selectionContientDossier
+    val peutDeplacerSelection: Boolean
+        get() = modeSelection && !selectionContientDossier && entrees
+            .filter { it.path in selection }
+            .all { it.canMove } && peutRecevoirNote
 
     /** La copie groupée est proposable : que des notes modifiables, ni dossier ni document. */
     val peutCopierSelection: Boolean
-        get() = peutDeplacerSelection && !selectionContientDocument
+        get() = modeSelection && !selectionContientDossier && !selectionContientDocument &&
+            peutRecevoirNote
 
     /**
      * Le partage groupé est proposable dans les mêmes conditions que le
@@ -110,7 +117,16 @@ data class BrowserUiState(
      * joindre. Un document `.docx`/`.odt` part tel quel — le cœur Go le recopie
      * octet pour octet, sans qu'il traverse la façade.
      */
-    val peutPartagerSelection: Boolean get() = peutDeplacerSelection
+    val peutPartagerSelection: Boolean get() = modeSelection && !selectionContientDossier
+
+    val peutSupprimerSelection: Boolean
+        get() = modeSelection && entrees.filter { it.path in selection }.all { it.canDelete }
+
+    val peutCreerNote: Boolean
+        get() = if (enListePlate) dossiers.any { it.canCreateFile } else canCreateFile
+
+    /** Au moins un dossier peut recevoir une note copiée ou déplacée. */
+    val peutRecevoirNote: Boolean get() = dossiers.any { it.canCreateFile }
 
     /**
      * Ce que la liste montre réellement : [entrees] filtré puis ordonné.
@@ -322,6 +338,8 @@ class BrowserViewModel(
                         cheminCourant = if (it.enListePlate) it.cheminCourant else listing.path,
                         entrees = listing.entries,
                         depuisCache = listing.fromCache,
+                        canCreateFile = listing.canCreateFile,
+                        canCreateFolder = listing.canCreateFolder,
                         // Une entrée déplacée ou supprimée disparaît du listing :
                         // la retirer de la sélection referme la barre contextuelle
                         // toute seule quand un lot a été traité, et évite qu'un

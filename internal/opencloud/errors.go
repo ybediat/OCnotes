@@ -16,6 +16,7 @@ var (
 	ErrConflict     = errors.New("opencloud: la version distante a changé")
 	ErrExists       = errors.New("opencloud: la ressource existe déjà")
 	ErrUnauthorized = errors.New("opencloud: authentification refusée")
+	ErrForbidden    = errors.New("opencloud: opération non autorisée")
 
 	// ErrOffline signale que le serveur n'a pas pu être joint : la requête
 	// n'a jamais abouti, par opposition à un serveur qui répond une erreur.
@@ -34,6 +35,7 @@ var (
 // chaîne de caractères, l'erreur typée ne franchit pas la frontière.
 const (
 	CodeUnauthorized = "AUTH"
+	CodeForbidden    = "FORBIDDEN"
 	CodeConflict     = "CONFLICT"
 	CodeNotFound     = "NOTFOUND"
 	CodeHTTP         = "HTTP"
@@ -55,8 +57,10 @@ func (e *HTTPError) Code() string {
 		return CodeNotFound
 	case http.StatusPreconditionFailed:
 		return CodeConflict
-	case http.StatusUnauthorized, http.StatusForbidden:
+	case http.StatusUnauthorized:
 		return CodeUnauthorized
+	case http.StatusForbidden:
+		return CodeForbidden
 	}
 	return CodeHTTP
 }
@@ -80,8 +84,10 @@ func (e *HTTPError) Unwrap() error {
 		return ErrNotFound
 	case http.StatusPreconditionFailed:
 		return ErrConflict
-	case http.StatusUnauthorized, http.StatusForbidden:
+	case http.StatusUnauthorized:
 		return ErrUnauthorized
+	case http.StatusForbidden:
+		return ErrForbidden
 	}
 	return nil
 }

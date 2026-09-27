@@ -186,6 +186,7 @@ fun BrowserScreen(
                     peutDeplacer = etat.peutDeplacerSelection,
                     peutCopier = etat.peutCopierSelection,
                     peutPartager = etat.peutPartagerSelection,
+                    peutSupprimer = etat.peutSupprimerSelection,
                     onQuitter = viewModel::viderSelection,
                     onDeplacer = { dialogue = Dialogue.DeplacerLot },
                     onCopier = { dialogue = Dialogue.CopierLot },
@@ -245,27 +246,31 @@ fun BrowserScreen(
         floatingActionButton = {
             // Rien à créer pendant une sélection : la barre contextuelle a la
             // main, le bouton d'ajout n'y a pas sa place.
-            if (!etat.modeSelection) {
+            if (!etat.modeSelection && (etat.peutCreerNote || etat.canCreateFolder)) {
                 Column(
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    FloatingActionButton(
-                        onClick = { dialogue = Dialogue.NouveauDossier },
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CreateNewFolder,
-                            contentDescription = stringResource(
-                                R.string.browser_nouveau_dossier,
-                            ),
+                    if (etat.canCreateFolder && !etat.enListePlate) {
+                        FloatingActionButton(
+                            onClick = { dialogue = Dialogue.NouveauDossier },
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CreateNewFolder,
+                                contentDescription = stringResource(
+                                    R.string.browser_nouveau_dossier,
+                                ),
+                            )
+                        }
+                    }
+                    if (etat.peutCreerNote) {
+                        ExtendedFloatingActionButton(
+                            onClick = { dialogue = Dialogue.NouvelleNote },
+                            icon = { Icon(Icons.Default.Add, null) },
+                            text = { Text(stringResource(R.string.browser_nouvelle_note)) },
                         )
                     }
-                    ExtendedFloatingActionButton(
-                        onClick = { dialogue = Dialogue.NouvelleNote },
-                        icon = { Icon(Icons.Default.Add, null) },
-                        text = { Text(stringResource(R.string.browser_nouvelle_note)) },
-                    )
                 }
             }
         },
@@ -345,6 +350,7 @@ fun BrowserScreen(
                     afficherDossier = etat.enListePlate,
                     selection = etat.selection,
                     modeSelection = etat.modeSelection,
+                    peutRecevoirNote = etat.peutRecevoirNote,
                     onOuvrir = viewModel::ouvrir,
                     onBasculer = viewModel::basculerSelection,
                     onRenommer = { dialogue = Dialogue.Renommer(it) },
@@ -455,6 +461,7 @@ private fun BarreSelection(
     peutDeplacer: Boolean,
     peutCopier: Boolean,
     peutPartager: Boolean,
+    peutSupprimer: Boolean,
     onQuitter: () -> Unit,
     onDeplacer: () -> Unit,
     onCopier: () -> Unit,
@@ -498,11 +505,13 @@ private fun BarreSelection(
                     )
                 }
             }
-            IconButton(onClick = onSupprimer) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = stringResource(R.string.action_supprimer),
-                )
+            if (peutSupprimer) {
+                IconButton(onClick = onSupprimer) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = stringResource(R.string.action_supprimer),
+                    )
+                }
             }
         },
         // Teinte distincte de la barre normale : le mode sélection doit se
@@ -532,6 +541,7 @@ private fun ListeEntrees(
     afficherDossier: Boolean,
     selection: Set<String>,
     modeSelection: Boolean,
+    peutRecevoirNote: Boolean,
     onOuvrir: (FolderEntryDto) -> Unit,
     onBasculer: (FolderEntryDto) -> Unit,
     onRenommer: (FolderEntryDto) -> Unit,
@@ -561,8 +571,12 @@ private fun ListeEntrees(
                     modeSelection = modeSelection,
                     onClick = { onOuvrir(entree) },
                     onBasculer = { onBasculer(entree) },
-                    onRenommer = { onRenommer(entree) },
-                    onDeplacer = if (entree.isDir) null else ({ onDeplacer(entree) }),
+                    onRenommer = if (entree.canRename) ({ onRenommer(entree) }) else null,
+                    onDeplacer = if (entree.isDir || !entree.canMove || !peutRecevoirNote) {
+                        null
+                    } else {
+                        ({ onDeplacer(entree) })
+                    },
                     // Partage réservé aux fichiers : un dossier n'a pas de
                     // contenu à joindre. Un document `.docx`/`.odt` part tel
                     // quel, recopié par le cœur Go.
@@ -571,7 +585,7 @@ private fun ListeEntrees(
                     } else {
                         ({ onPartager(entree) })
                     },
-                    onSupprimer = { onSupprimer(entree) },
+                    onSupprimer = if (entree.canDelete) ({ onSupprimer(entree) }) else null,
                 )
             }
         }
@@ -688,15 +702,17 @@ private fun LigneEntree(
     modeSelection: Boolean,
     onClick: () -> Unit,
     onBasculer: () -> Unit,
-    onRenommer: () -> Unit,
+    onRenommer: (() -> Unit)?,
     // `null` retire l'action du menu plutôt que de l'y laisser inerte —
     // c'est le cas d'un dossier, que DeplacerDialog ne couvre pas.
     onDeplacer: (() -> Unit)?,
     // `null` pour un dossier : le partage ne joint que des fichiers.
     onPartager: (() -> Unit)?,
-    onSupprimer: () -> Unit,
+    onSupprimer: (() -> Unit)?,
 ) {
     var menuOuvert by remember { mutableStateOf(false) }
+    val aDesActions = onRenommer != null || onDeplacer != null ||
+        onPartager != null || onSupprimer != null
 
     ListItem(
         headlineContent = {
@@ -771,7 +787,7 @@ private fun LigneEntree(
 
                 // Le menu par ligne n'a pas de sens pendant une sélection
                 // multiple : les actions passent alors par la barre contextuelle.
-                if (!modeSelection) {
+                if (!modeSelection && aDesActions) {
                     IconButton(onClick = { menuOuvert = true }) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
@@ -783,13 +799,15 @@ private fun LigneEntree(
                     }
 
                     DropdownMenu(expanded = menuOuvert, onDismissRequest = { menuOuvert = false }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.action_renommer)) },
-                            onClick = {
-                                menuOuvert = false
-                                onRenommer()
-                            },
-                        )
+                        onRenommer?.let { renommer ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.action_renommer)) },
+                                onClick = {
+                                    menuOuvert = false
+                                    renommer()
+                                },
+                            )
+                        }
                         onDeplacer?.let { deplacer ->
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.action_deplacer)) },
@@ -808,13 +826,15 @@ private fun LigneEntree(
                                 },
                             )
                         }
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.action_supprimer)) },
-                            onClick = {
-                                menuOuvert = false
-                                onSupprimer()
-                            },
-                        )
+                        onSupprimer?.let { supprimer ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.action_supprimer)) },
+                                onClick = {
+                                    menuOuvert = false
+                                    supprimer()
+                                },
+                            )
+                        }
                     }
                 }
             }

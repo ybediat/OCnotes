@@ -6,7 +6,10 @@
 // l'interface graphique : il se compile et se teste sur desktop.
 package opencloud
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Types d'espaces renvoyés par LibreGraph dans le champ driveType.
 const (
@@ -64,4 +67,32 @@ type Resource struct {
 	// Permissions est la chaîne de droits OpenCloud, par exemple RDNVCKZP
 	// pour un dossier modifiable ou RDNVWZP pour un fichier.
 	Permissions string
+}
+
+// Capabilities traduit la chaîne compacte oc:permissions en gestes que le
+// client peut présenter. Une chaîne vide conserve le comportement historique :
+// certains serveurs ou caches anciens n'exposent pas cette propriété, et les
+// traiter comme intégralement verrouillés rendrait leurs notes inutilisables.
+type Capabilities struct {
+	CanWrite        bool
+	CanDelete       bool
+	CanRename       bool
+	CanMove         bool
+	CanCreateFile   bool
+	CanCreateFolder bool
+}
+
+// CapabilitiesOf décode les lettres définies par l'extension WebDAV ownCloud.
+func CapabilitiesOf(permissions string) Capabilities {
+	if permissions == "" {
+		return Capabilities{true, true, true, true, true, true}
+	}
+	return Capabilities{
+		CanWrite:        strings.ContainsRune(permissions, 'W'),
+		CanDelete:       strings.ContainsRune(permissions, 'D'),
+		CanRename:       strings.ContainsRune(permissions, 'N'),
+		CanMove:         strings.ContainsRune(permissions, 'V'),
+		CanCreateFile:   strings.ContainsRune(permissions, 'C'),
+		CanCreateFolder: strings.ContainsRune(permissions, 'K'),
+	}
 }

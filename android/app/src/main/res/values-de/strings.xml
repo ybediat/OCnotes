@@ -39,6 +39,7 @@
          einen Namen zu erstellen, den der Cache nicht schreiben kann.
          ================================================================ -->
     <string name="err_auth">Anmeldedaten abgelehnt. Überprüfen Sie den Benutzernamen und das App-Token, das möglicherweise abgelaufen ist.</string>
+    <string name="err_autorisation">Sie sind nicht berechtigt, diese Aktion auszuführen.</string>
     <string name="err_conflit">Diese Notiz wurde in der Zwischenzeit woanders geändert.</string>
     <string name="err_introuvable">Auf dem Server nicht auffindbar. Die Notiz oder der Ordner wurde möglicherweise von einem anderen Gerät aus gelöscht.</string>
     <string name="err_http">Der Server ist derzeit nicht erreichbar.</string>
@@ -488,6 +489,7 @@
     <string name="apercu_lecture_seule">Diese Notiz enthält ein Element, das zu lang ist, um hier bearbeitet zu werden. Sie wird schreibgeschützt geöffnet.</string>
     <string name="apercu_document_lecture_seule">Dieses Dokument wird schreibgeschützt geöffnet.</string>
     <string name="apercu_texte_lecture_seule">Dieser Dateityp wird schreibgeschützt geöffnet.</string>
+    <string name="apercu_autorisation_lecture_seule">Sie können diese Notiz anzeigen, sind aber nicht berechtigt, sie zu bearbeiten.</string>
     <string name="apercu_encodage_lecture_seule">Diese Datei ist nicht UTF-8-kodiert. Sie wird schreibgeschützt geöffnet, damit sie nicht beschädigt wird.</string>
     <string name="sync_conflits_suppression">\n• Löschung abgebrochen: %1$s wurde remote geändert</string>
     <string name="sync_conflits_deplacement">\n• Verschiebung abgebrochen; Kopie beibehalten: %1$s</string>

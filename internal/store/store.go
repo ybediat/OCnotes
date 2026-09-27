@@ -146,6 +146,9 @@ type Store struct {
 	// navigateur, ce qu'une simple déduction à partir des chemins de notes ne
 	// permettrait pas.
 	folders map[string]bool
+	// folderPermissions garde les droits WebDAV des dossiers, racine comprise.
+	// Séparée de folders pour lire sans migration les anciens index map[string]bool.
+	folderPermissions map[string]string
 
 	// localOnly dit qu'aucun serveur ne double ce cache : il n'est plus un
 	// cache mais le stockage. Voir SetLocalOnly pour ce que cela change.
@@ -159,13 +162,14 @@ type Store struct {
 
 // persisted est la forme sérialisée de l'état du cache.
 type persisted struct {
-	Version   int                 `json:"version"`
-	Entries   map[string]*Entry   `json:"entries"`
-	Queue     []Operation         `json:"queue"`
-	Folders   map[string]bool     `json:"folders,omitempty"`
-	Known     map[string]*Known   `json:"known,omitempty"`
-	Indexed   bool                `json:"indexed,omitempty"`
-	Conflicts map[string]Conflict `json:"conflicts,omitempty"`
+	Version           int                 `json:"version"`
+	Entries           map[string]*Entry   `json:"entries"`
+	Queue             []Operation         `json:"queue"`
+	Folders           map[string]bool     `json:"folders,omitempty"`
+	FolderPermissions map[string]string   `json:"folderPermissions,omitempty"`
+	Known             map[string]*Known   `json:"known,omitempty"`
+	Indexed           bool                `json:"indexed,omitempty"`
+	Conflicts         map[string]Conflict `json:"conflicts,omitempty"`
 
 	// LocalOnly n'a pas demandé de version d'index : un champ dont la valeur
 	// nulle est le comportement d'avant ne casse aucune lecture.
@@ -183,12 +187,13 @@ func Open(dir string) (*Store, error) {
 	}
 
 	s := &Store{
-		dir:       dir,
-		entries:   map[string]*Entry{},
-		folders:   map[string]bool{},
-		known:     map[string]*Known{},
-		quota:     DefaultQuotaBytes,
-		conflicts: map[string]Conflict{},
+		dir:               dir,
+		entries:           map[string]*Entry{},
+		folders:           map[string]bool{},
+		folderPermissions: map[string]string{},
+		known:             map[string]*Known{},
+		quota:             DefaultQuotaBytes,
+		conflicts:         map[string]Conflict{},
 	}
 
 	data, err := os.ReadFile(s.indexPath())
@@ -208,6 +213,9 @@ func Open(dir string) (*Store, error) {
 	}
 	if state.Folders != nil {
 		s.folders = state.Folders
+	}
+	if state.FolderPermissions != nil {
+		s.folderPermissions = state.FolderPermissions
 	}
 	if state.Known != nil {
 		s.known = state.Known
@@ -350,14 +358,15 @@ func contentHash(content []byte) string {
 // au mauvais moment laisserait sinon un index tronqué, donc un cache perdu.
 func (s *Store) save() error {
 	state := persisted{
-		Version:   indexVersion,
-		Entries:   s.entries,
-		Queue:     s.queue,
-		Folders:   s.folders,
-		Known:     s.known,
-		Indexed:   s.indexed,
-		Conflicts: s.conflicts,
-		LocalOnly: s.localOnly,
+		Version:           indexVersion,
+		Entries:           s.entries,
+		Queue:             s.queue,
+		Folders:           s.folders,
+		FolderPermissions: s.folderPermissions,
+		Known:             s.known,
+		Indexed:           s.indexed,
+		Conflicts:         s.conflicts,
+		LocalOnly:         s.localOnly,
 	}
 	data, err := json.Marshal(state)
 	if err != nil {
@@ -725,16 +734,24 @@ func (s *Store) renameLocked(from, to string, enqueue, refuseTaken bool) error {
 	// Les sous-dossiers suivent leur parent, vides compris : ne réinscrire que
 	// la cible les faisait disparaître du sélecteur de destination, et pour
 	// de bon en mode local, où aucun listing serveur ne les rapporte.
-	dossiers := make([]string, 0)
+	type dossierDeplace struct {
+		path        string
+		permissions string
+	}
+	dossiers := make([]dossierDeplace, 0)
 	for d := range s.folders {
 		if suffixe, ok := sousChemin(d, from); ok {
-			dossiers = append(dossiers, to+suffixe)
+			dossiers = append(dossiers, dossierDeplace{
+				path:        to + suffixe,
+				permissions: s.folderPermissions[d],
+			})
 		}
 	}
 	if len(dossiers) > 0 {
 		s.forgetFolderLocked(from)
 		for _, d := range dossiers {
-			s.rememberFolderLocked(d)
+			s.rememberFolderLocked(d.path)
+			s.folderPermissions[d.path] = d.permissions
 		}
 	}
 
@@ -847,10 +864,20 @@ func (s *Store) EnsureFolder(dir string) error {
 // RememberFolder retient un dossier vu sur le serveur, sans rien mettre en
 // file : il existe déjà là-bas.
 func (s *Store) RememberFolder(dir string) error {
+	return s.RememberFolderPermissions(dir, "")
+}
+
+// RememberFolderPermissions retient un dossier et les capacités annoncées par
+// le serveur. Le chemin vide désigne la racine du dossier de notes.
+func (s *Store) RememberFolderPermissions(dir, permissions string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.rememberFolderLocked(dir)
+	if s.folderPermissions == nil {
+		s.folderPermissions = map[string]string{}
+	}
+	s.folderPermissions[strings.Trim(dir, "/")] = permissions
 	return s.save()
 }
 
@@ -884,11 +911,35 @@ func (s *Store) Folders() []string {
 	return out
 }
 
+// FolderPermissions renvoie les droits mémorisés d'un dossier. Une chaîne vide
+// signifie « inconnus » et doit conserver le comportement permissif historique.
+func (s *Store) FolderPermissions(dir string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.folderPermissions[strings.Trim(dir, "/")]
+}
+
+// Permissions renvoie les droits connus d'une note ou, à défaut, d'un dossier.
+func (s *Store) Permissions(itemPath string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	itemPath = strings.Trim(itemPath, "/")
+	if known, ok := s.known[itemPath]; ok {
+		return known.Permissions
+	}
+	return s.folderPermissions[itemPath]
+}
+
 // forgetFolderLocked oublie un dossier et sa descendance.
 func (s *Store) forgetFolderLocked(dir string) {
 	for d := range s.folders {
 		if d == dir || strings.HasPrefix(d, dir+"/") {
 			delete(s.folders, d)
+		}
+	}
+	for d := range s.folderPermissions {
+		if d == dir || strings.HasPrefix(d, dir+"/") {
+			delete(s.folderPermissions, d)
 		}
 	}
 }

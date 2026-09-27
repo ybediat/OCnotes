@@ -403,6 +403,7 @@ private fun BandeauLectureSeule(raison: RaisonLectureSeule) {
                         RaisonLectureSeule.MOT_TROP_LONG -> R.string.apercu_lecture_seule
                         RaisonLectureSeule.DOCUMENT -> R.string.apercu_document_lecture_seule
                         RaisonLectureSeule.FORMAT_TEXTE -> R.string.apercu_texte_lecture_seule
+                        RaisonLectureSeule.AUTORISATION -> R.string.apercu_autorisation_lecture_seule
                         RaisonLectureSeule.ENCODAGE -> R.string.apercu_encodage_lecture_seule
                     },
                 ),

@@ -26,6 +26,7 @@ import mobile.Mobile
  */
 fun OCnotesException.texte(): Texte = when (category) {
     ErrorCategory.AUTH -> Texte.de(R.string.err_auth)
+    ErrorCategory.FORBIDDEN -> Texte.de(R.string.err_autorisation)
     ErrorCategory.CONFLICT -> Texte.de(R.string.err_conflit)
     ErrorCategory.NOT_FOUND -> Texte.de(R.string.err_introuvable)
     ErrorCategory.OFFLINE -> Texte.de(R.string.err_hors_ligne)

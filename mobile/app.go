@@ -33,8 +33,8 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
+	"github.com/ybediat/OpenNote/internal/charset"
 	"github.com/ybediat/OpenNote/internal/config"
 	"github.com/ybediat/OpenNote/internal/markdown"
 	"github.com/ybediat/OpenNote/internal/notes"
@@ -971,6 +971,13 @@ type folderEntry struct {
 	// l'interface, c'est se préparer à la voir diverger au premier format
 	// ajouté.
 	ReadOnly bool `json:"readOnly,omitempty"`
+
+	CanWrite        bool `json:"canWrite"`
+	CanDelete       bool `json:"canDelete"`
+	CanRename       bool `json:"canRename"`
+	CanMove         bool `json:"canMove"`
+	CanCreateFile   bool `json:"canCreateFile"`
+	CanCreateFolder bool `json:"canCreateFolder"`
 }
 
 // folderListing est le contenu d'un dossier.
@@ -980,7 +987,24 @@ type folderListing struct {
 
 	// FromCache signale un listing servi hors connexion : l'interface peut
 	// alors prévenir que la vue peut être incomplète.
-	FromCache bool `json:"fromCache"`
+	FromCache       bool `json:"fromCache"`
+	CanCreateFile   bool `json:"canCreateFile"`
+	CanCreateFolder bool `json:"canCreateFolder"`
+}
+
+func permissionsFields(permissions string) opencloud.Capabilities {
+	return opencloud.CapabilitiesOf(permissions)
+}
+
+func folderEntryCapabilities(entry folderEntry, permissions string) folderEntry {
+	c := permissionsFields(permissions)
+	entry.CanWrite = c.CanWrite
+	entry.CanDelete = c.CanDelete
+	entry.CanRename = c.CanRename
+	entry.CanMove = c.CanMove
+	entry.CanCreateFile = c.CanCreateFile
+	entry.CanCreateFolder = c.CanCreateFolder
+	return entry
 }
 
 // ListFolderJSON renvoie le contenu d'un dossier, dossiers d'abord.
@@ -1023,17 +1047,13 @@ func (a *App) ListFolderJSON(dir string) (string, error) {
 	// pas à gérer deux formes pour un dossier vide.
 	out := folderListing{Path: listing.Path, Entries: []folderEntry{}}
 	for _, f := range listing.Folders {
-		// Mémoriser les dossiers vus permet de les afficher hors connexion,
-		// même vides : le cache ne stocke que des notes, il ne pourrait pas
-		// les déduire autrement.
-		_ = a.cache.RememberFolder(f.Path)
-		out.Entries = append(out.Entries, folderEntry{
+		out.Entries = append(out.Entries, folderEntryCapabilities(folderEntry{
 			Path: f.Path, Name: f.Name, Display: f.Name, IsDir: true,
-		})
+		}, f.Permissions))
 	}
 	for _, n := range listing.Notes {
 		entry, cached := a.cache.CachedEntry(n.Path)
-		out.Entries = append(out.Entries, folderEntry{
+		out.Entries = append(out.Entries, folderEntryCapabilities(folderEntry{
 			Path:     n.Path,
 			Name:     n.Name,
 			Display:  n.DisplayName,
@@ -1041,7 +1061,22 @@ func (a *App) ListFolderJSON(dir string) (string, error) {
 			ModTime:  n.ModTime.UTC().Format(time.RFC3339),
 			Pending:  cached && entry.Dirty,
 			ReadOnly: notes.IsReadOnly(n.Name),
-		})
+		}, n.Permissions))
+	}
+	caps := permissionsFields(listing.Permissions)
+	out.CanCreateFile, out.CanCreateFolder = caps.CanCreateFile, caps.CanCreateFolder
+	knownNotes := make([]store.Known, 0, len(listing.Notes))
+	knownFolders := make([]store.FolderKnown, 0, len(listing.Folders))
+	for _, n := range listing.Notes {
+		knownNotes = append(knownNotes, store.Known{Path: n.Path, ETag: n.ETag, Size: n.Size, ModTime: n.ModTime, Permissions: n.Permissions})
+	}
+	for _, f := range listing.Folders {
+		knownFolders = append(knownFolders, store.FolderKnown{Path: f.Path, Permissions: f.Permissions})
+	}
+	// Le lot retient aussi les dossiers vides pour le mode hors connexion et
+	// persiste leurs droits dans la même écriture atomique de l'index.
+	if err := a.cache.RememberPermissions(store.FolderKnown{Path: listing.Path, Permissions: listing.Permissions}, knownNotes, knownFolders); err != nil {
+		return "", err
 	}
 	return toJSON(out)
 }
@@ -1068,7 +1103,8 @@ func (a *App) listFromCache(dir string, repli bool) folderListing {
 		prefix = dir + "/"
 	}
 
-	out := folderListing{Path: dir, FromCache: repli, Entries: []folderEntry{}}
+	currentCaps := permissionsFields(a.cache.FolderPermissions(dir))
+	out := folderListing{Path: dir, FromCache: repli, Entries: []folderEntry{}, CanCreateFile: currentCaps.CanCreateFile, CanCreateFolder: currentCaps.CanCreateFolder}
 	seenDirs := map[string]bool{}
 
 	// Les dossiers connus d'abord : un dossier vide n'apparaîtrait dans aucun
@@ -1082,9 +1118,9 @@ func (a *App) listFromCache(dir string, repli bool) folderListing {
 			continue
 		}
 		seenDirs[rest] = true
-		out.Entries = append(out.Entries, folderEntry{
+		out.Entries = append(out.Entries, folderEntryCapabilities(folderEntry{
 			Path: folder, Name: rest, Display: rest, IsDir: true,
-		})
+		}, a.cache.FolderPermissions(folder)))
 	}
 
 	for _, entry := range a.cache.Entries() {
@@ -1100,14 +1136,14 @@ func (a *App) listFromCache(dir string, repli bool) folderListing {
 			name := rest[:i]
 			if !seenDirs[name] {
 				seenDirs[name] = true
-				out.Entries = append(out.Entries, folderEntry{
+				out.Entries = append(out.Entries, folderEntryCapabilities(folderEntry{
 					Path: prefix + name, Name: name, Display: name, IsDir: true,
-				})
+				}, a.cache.FolderPermissions(prefix+name)))
 			}
 			continue
 		}
 
-		out.Entries = append(out.Entries, folderEntry{
+		out.Entries = append(out.Entries, folderEntryCapabilities(folderEntry{
 			Path:     entry.Path,
 			Name:     rest,
 			Display:  notes.DisplayName(rest),
@@ -1115,7 +1151,7 @@ func (a *App) listFromCache(dir string, repli bool) folderListing {
 			ModTime:  entry.LocalMod.UTC().Format(time.RFC3339),
 			Pending:  entry.Dirty,
 			ReadOnly: notes.IsReadOnly(rest),
-		})
+		}, a.cache.Permissions(entry.Path)))
 	}
 
 	return out
@@ -1148,13 +1184,17 @@ func indexByte(s string, b byte) int {
 // en remplacerait les octets invalides par des « � » en passant à Java, et le
 // premier enregistrement écrirait ces remplacements sur le serveur, à la place
 // des accents d'un fichier Latin-1. L'interface l'ouvre alors en aperçu par
-// RenderFileJSON, qui lit les octets côté Go.
+// RenderFileJSON, qui décode les octets côté Go.
+//
+// La question posée est « est-ce de l'UTF-8 ? » au sens de charset.Detect, et
+// non utf8.Valid : « ok » en UTF-16 sans BOM s'écrit « o\x00k\x00 », UTF-8
+// valide, et s'ouvrirait en saisie avec ses octets nuls.
 func (a *App) ReadNote(notePath string) (string, error) {
 	content, err := a.readBytes(notePath)
 	if err != nil {
 		return "", err
 	}
-	if !utf8.Valid(content) {
+	if charset.Detect(content).Name != charset.UTF8 {
 		return "", fmt.Errorf("mobile: [%s] %s n'est pas encodé en UTF-8 : il ne s'ouvre qu'en lecture", CodeNotUTF8, notePath)
 	}
 	return string(content), nil
@@ -1251,6 +1291,9 @@ func (a *App) recentlyOffline() bool {
 // échouer faute de réseau. La propagation vers le serveur a lieu au prochain
 // Sync.
 func (a *App) WriteNote(notePath, content string) error {
+	if err := a.requirePermission(notePath, "modifier", func(c opencloud.Capabilities) bool { return c.CanWrite }); err != nil {
+		return err
+	}
 	// Un document ne s'écrit jamais, et le refus est ici plutôt que dans
 	// l'interface : c'est le seul appel de la façade qui peut détruire un
 	// fichier de l'utilisateur en silence. Une écriture partie sur un .docx le
@@ -1296,6 +1339,9 @@ func (a *App) CreateNoteJSON(dir, name, content string) (string, error) {
 
 	if local {
 		return a.createNoteLocal(dir, name, content)
+	}
+	if err := a.requirePermission(dir, "créer une note dans", func(c opencloud.Capabilities) bool { return c.CanCreateFile }); err != nil {
+		return "", err
 	}
 	if lib == nil {
 		return "", errNoWorkspace()
@@ -1378,6 +1424,9 @@ func (a *App) CreateFolderJSON(dir, name string) (string, error) {
 	if local {
 		return a.createFolderLocal(dir, name)
 	}
+	if err := a.requirePermission(dir, "créer un dossier dans", func(c opencloud.Capabilities) bool { return c.CanCreateFolder }); err != nil {
+		return "", err
+	}
 	if lib == nil {
 		return "", errNoWorkspace()
 	}
@@ -1423,6 +1472,9 @@ func (a *App) Rename(itemPath, newName string) (string, error) {
 
 	if local {
 		return a.renameLocal(itemPath, newName, false)
+	}
+	if err := a.requirePermission(itemPath, "renommer", func(c opencloud.Capabilities) bool { return c.CanRename }); err != nil {
+		return "", err
 	}
 	if lib == nil {
 		return "", errNoWorkspace()
@@ -1473,6 +1525,17 @@ func (a *App) Move(itemPath, targetDir string) (string, error) {
 
 	if local {
 		return a.moveLocal(itemPath, targetDir, false)
+	}
+	if err := a.requirePermission(itemPath, "déplacer", func(c opencloud.Capabilities) bool { return c.CanMove }); err != nil {
+		return "", err
+	}
+	if err := a.requirePermission(targetDir, "déplacer un élément vers", func(c opencloud.Capabilities) bool {
+		if notes.IsNote(itemPath) {
+			return c.CanCreateFile
+		}
+		return c.CanCreateFolder
+	}); err != nil {
+		return "", err
 	}
 	if lib == nil {
 		return "", errNoWorkspace()
@@ -1552,6 +1615,11 @@ func (a *App) CopyJSON(itemPath, targetDir string) (string, error) {
 	if lib == nil && !local {
 		return "", errNoWorkspace()
 	}
+	if !local {
+		if err := a.requirePermission(targetDir, "copier une note vers", func(c opencloud.Capabilities) bool { return c.CanCreateFile }); err != nil {
+			return "", err
+		}
+	}
 
 	itemPath = notes.CleanPath(itemPath)
 	if itemPath == "" {
@@ -1605,6 +1673,9 @@ func (a *App) Delete(itemPath string) error {
 		// Delete refuse la suppression différée d'un dossier — une prudence
 		// qui n'a plus d'objet quand il n'y a pas de serveur à qui la rejouer.
 		return a.cache.Forget(itemPath)
+	}
+	if err := a.requirePermission(itemPath, "supprimer", func(c opencloud.Capabilities) bool { return c.CanDelete }); err != nil {
+		return err
 	}
 	if lib == nil {
 		return errNoWorkspace()
@@ -2136,6 +2207,32 @@ func MaxEditableWord() int { return markdown.MaxEditableWord() }
 // gomobile dans une chaîne.
 const CodeUnsupported = "UNSUPPORTED"
 
+// CodePermissionDenied signale un geste que les capacités WebDAV connues
+// interdisent avant même de contacter le serveur.
+const CodePermissionDenied = "PERMISSION_DENIED"
+
+func (a *App) requirePermission(itemPath, action string, allowed func(opencloud.Capabilities) bool) error {
+	if allowed(opencloud.CapabilitiesOf(a.cache.Permissions(itemPath))) {
+		return nil
+	}
+	return fmt.Errorf("mobile: [%s] droits insuffisants pour %s %s", CodePermissionDenied, action, itemPath)
+}
+
+type capabilityInfo struct {
+	CanWrite        bool `json:"canWrite"`
+	CanDelete       bool `json:"canDelete"`
+	CanRename       bool `json:"canRename"`
+	CanMove         bool `json:"canMove"`
+	CanCreateFile   bool `json:"canCreateFile"`
+	CanCreateFolder bool `json:"canCreateFolder"`
+}
+
+// CapabilitiesJSON renvoie les droits mémorisés d'un chemin, sans réseau.
+func (a *App) CapabilitiesJSON(itemPath string) (string, error) {
+	c := opencloud.CapabilitiesOf(a.cache.Permissions(itemPath))
+	return toJSON(capabilityInfo(c))
+}
+
 // CodeNotUTF8 signale un fichier texte dont le contenu n'est pas de l'UTF-8
 // valide — typiquement un fichier Latin-1 ou UTF-16 venu de Windows.
 //
@@ -2189,6 +2286,7 @@ func ErrorCode(message string) string {
 	// d'Android — réessayer, redemander le token, ou renoncer.
 	for _, code := range []string{
 		opencloud.CodeUnauthorized,
+		opencloud.CodeForbidden,
 		opencloud.CodeConflict,
 		opencloud.CodeNotFound,
 		opencloud.CodeOffline,

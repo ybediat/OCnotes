@@ -134,6 +134,9 @@ enum class RaisonLectureSeule {
     /** Un fichier texte de configuration ou de données, que l'application n'écrit pas. */
     FORMAT_TEXTE,
 
+    /** Le serveur autorise la lecture du fichier, mais pas sa modification. */
+    AUTORISATION,
+
     /**
      * Un contenu qui n'est pas de l'UTF-8 valide. Passé par une chaîne, il
      * perdrait ses accents au premier enregistrement.
@@ -176,7 +179,7 @@ class EditorViewModel(
     // La frontière de formats vit dans Go. La poser avant le chargement évite
     // qu'un .docx passe par ReadNote, où sa chaîne binaire serait abîmée avant
     // d'atteindre RenderFileJSON — et qu'un .yaml atteigne un champ de saisie.
-    private val lectureSeule: RaisonLectureSeule? = when {
+    private val lectureSeuleFormat: RaisonLectureSeule? = when {
         repository.isDocument(nom) -> RaisonLectureSeule.DOCUMENT
         repository.isReadOnly(nom) -> RaisonLectureSeule.FORMAT_TEXTE
         else -> null
@@ -189,7 +192,7 @@ class EditorViewModel(
     private val _uiState = MutableStateFlow(
         EditorUiState(
             chemin = chemin,
-            texteBrut = lectureSeule != RaisonLectureSeule.DOCUMENT && repository.isPlainText(nom),
+            texteBrut = lectureSeuleFormat != RaisonLectureSeule.DOCUMENT && repository.isPlainText(nom),
             garderEcranAllumeLecture = garderEcranAllumeLecture,
             garderEcranAllumeEdition = garderEcranAllumeEdition,
             saisieAutomatique = saisieAutomatique,
@@ -229,6 +232,9 @@ class EditorViewModel(
     init {
         viewModelScope.launch {
             try {
+                val lectureSeule = lectureSeuleFormat ?: repository.capabilities(chemin)
+                    .takeUnless { it.canWrite }
+                    ?.let { RaisonLectureSeule.AUTORISATION }
                 if (lectureSeule != null) {
                     ouvrirEnApercu(lectureSeule)
                 } else {

@@ -10,33 +10,46 @@ import (
 // gomobile remplacerait ses accents par des « � » ; l'éditeur afficherait ces
 // remplacements, et le premier caractère tapé les écrirait sur le serveur à la
 // place des accents — tout le fichier, sans un message. ReadNote refuse donc,
-// et l'aperçu passe par RenderFileJSON, qui lit les octets côté Go.
+// et l'aperçu passe par RenderFileJSON, qui décode les octets côté Go : le
+// fichier s'y lit avec ses vrais accents.
 func TestReadNoteRefuseUnContenuQuiNEstPasUTF8(t *testing.T) {
 	app, server, _ := prepare(t)
 
-	latin1 := []byte("r\xe9sum\xe9 de l'\xe9t\xe9\n") // « résumé de l'été » en Latin-1
-	utf16 := []byte("\xff\xfeo\x00k\x00")             // « ok » en UTF-16LE avec BOM
+	fichiers := map[string]struct {
+		brut    []byte
+		attendu string // ce que l'aperçu doit montrer
+	}{
+		// « résumé de l'été » en Latin-1.
+		"latin1.txt": {[]byte("r\xe9sum\xe9 de l'\xe9t\xe9\n"), "résumé de l'été"},
+		// Les guillemets et l'euro propres à Windows-1252.
+		"cp1252.txt": {[]byte("\x93prix\x94 : 5 \x80\n"), "“prix” : 5 €"},
+		// « # Été » en UTF-16LE avec BOM, comme l'écrit le Bloc-notes.
+		"windows.md": {[]byte("\xff\xfe#\x00 \x00\xc9\x00t\x00\xe9\x00"), "Été"},
+		// « note ok » en UTF-16LE sans BOM. Tout en ASCII, c'est de l'UTF-8
+		// valide pour utf8.Valid — qui l'ouvrirait en saisie, nuls compris.
+		"sans-bom.txt": {[]byte("n\x00o\x00t\x00e\x00 \x00o\x00k\x00"), "note ok"},
+	}
 	server.mu.Lock()
-	server.files["Notes/latin1.txt"] = latin1
-	server.etags["Notes/latin1.txt"] = server.nextETag()
-	server.files["Notes/windows.md"] = utf16
-	server.etags["Notes/windows.md"] = server.nextETag()
+	for nom, f := range fichiers {
+		server.files["Notes/"+nom] = f.brut
+		server.etags["Notes/"+nom] = server.nextETag()
+	}
 	server.files["Notes/propre.md"] = []byte("# Été 😀\n")
 	server.etags["Notes/propre.md"] = server.nextETag()
 	server.mu.Unlock()
 
-	for _, nom := range []string{"latin1.txt", "windows.md"} {
+	for nom, f := range fichiers {
 		contenu, err := app.ReadNote(nom)
 		if code := ErrorCode(errString(err)); code != CodeNotUTF8 {
 			t.Errorf("ReadNote(%s) : code %q, attendu %s (contenu %q)", nom, code, CodeNotUTF8, contenu)
 		}
 
-		// Le même fichier reste lisible en aperçu.
+		// Le même fichier reste lisible en aperçu, accents compris.
 		sortie, err := app.RenderFileJSON(nom)
 		if err != nil {
 			t.Errorf("RenderFileJSON(%s) : %v", nom, err)
-		} else if !strings.Contains(sortie, `"kind"`) {
-			t.Errorf("RenderFileJSON(%s) n'a produit aucun bloc : %s", nom, sortie)
+		} else if !strings.Contains(sortie, f.attendu) {
+			t.Errorf("RenderFileJSON(%s) ne montre pas %q : %s", nom, f.attendu, sortie)
 		}
 	}
 

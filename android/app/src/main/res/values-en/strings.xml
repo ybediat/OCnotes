@@ -56,6 +56,7 @@
          cœur Go, qui refuse de créer un nom que le cache ne saurait écrire.
          ================================================================ -->
     <string name="err_auth">Credentials rejected. Check the username and App Token, which may have expired.</string>
+    <string name="err_autorisation">You do not have permission to perform this action.</string>
     <string name="err_conflit">This note was modified elsewhere in the meantime.</string>
     <string name="err_introuvable">Not found on the server. The note or folder may have been deleted from another device.</string>
     <string name="err_http">The server is currently unreachable.</string>
@@ -511,6 +512,7 @@
     <string name="apercu_lecture_seule">This note contains an element that is too long to edit here. It is open in read-only mode.</string>
     <string name="apercu_document_lecture_seule">This document is open in read-only mode.</string>
     <string name="apercu_texte_lecture_seule">This type of file opens in read-only mode.</string>
+    <string name="apercu_autorisation_lecture_seule">You can view this note, but you do not have permission to edit it.</string>
     <string name="apercu_encodage_lecture_seule">This file is not UTF-8 encoded. It is open in read-only mode so that it is not damaged.</string>
     <string name="sync_conflits_suppression">\n• deletion cancelled: %1$s changed remotely</string>
     <string name="sync_conflits_deplacement">\n• move cancelled; copy kept: %1$s</string>

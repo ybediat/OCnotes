@@ -27,12 +27,13 @@ import (
 type fakeServer struct {
 	*httptest.Server
 
-	mu      sync.Mutex
-	files   map[string][]byte
-	etags   map[string]string
-	folders map[string]bool
-	seq     int
-	offline bool
+	mu          sync.Mutex
+	files       map[string][]byte
+	etags       map[string]string
+	folders     map[string]bool
+	permissions map[string]string
+	seq         int
+	offline     bool
 
 	// honorsIfNoneMatch reste faux par défaut : le vrai OpenCloud ne
 	// respecte pas cet en-tête, et la protection des notes créées hors
@@ -77,9 +78,10 @@ func newFakeServer(t *testing.T) *fakeServer {
 	t.Helper()
 
 	f := &fakeServer{
-		files:   map[string][]byte{},
-		etags:   map[string]string{},
-		folders: map[string]bool{"": true},
+		files:       map[string][]byte{},
+		etags:       map[string]string{},
+		folders:     map[string]bool{"": true},
+		permissions: map[string]string{},
 	}
 	f.Server = httptest.NewTLSServer(http.HandlerFunc(f.handle))
 
@@ -274,6 +276,14 @@ func (f *fakeServer) report(w http.ResponseWriter, _ string) {
 // responseXML reproduit le double propstat du vrai serveur : les propriétés
 // absentes sur une collection reviennent dans un bloc 404 séparé.
 func (f *fakeServer) responseXML(p string, isDir bool) string {
+	permissions := f.permissions[p]
+	if permissions == "" {
+		if isDir {
+			permissions = "GDNVCK"
+		} else {
+			permissions = "GDNVW"
+		}
+	}
 	href := davPrefix() + "/" + escapePath(p)
 	if isDir {
 		if p == "" {
@@ -285,12 +295,12 @@ func (f *fakeServer) responseXML(p string, isDir bool) string {
 			`<d:response><d:href>%s</d:href>`+
 				`<d:propstat><d:prop><d:getetag>"dir"</d:getetag>`+
 				`<d:resourcetype><d:collection/></d:resourcetype>`+
-				`<oc:fileid>%s!%s</oc:fileid></d:prop>`+
+				`<oc:fileid>%s!%s</oc:fileid><oc:permissions>%s</oc:permissions></d:prop>`+
 				`<d:status>HTTP/1.1 200 OK</d:status></d:propstat>`+
 				`<d:propstat><d:prop><d:getcontentlength></d:getcontentlength>`+
 				`<d:getcontenttype></d:getcontenttype></d:prop>`+
 				`<d:status>HTTP/1.1 404 Not Found</d:status></d:propstat></d:response>`,
-			href, fakeSpaceID, p)
+			href, fakeSpaceID, p, permissions)
 	}
 
 	return fmt.Sprintf(
@@ -300,9 +310,9 @@ func (f *fakeServer) responseXML(p string, isDir bool) string {
 			`<d:getcontentlength>%d</d:getcontentlength>`+
 			`<d:getcontenttype>text/markdown</d:getcontenttype>`+
 			`<d:getetag>%s</d:getetag><d:resourcetype/>`+
-			`<oc:fileid>%s!%s</oc:fileid></d:prop>`+
+			`<oc:fileid>%s!%s</oc:fileid><oc:permissions>%s</oc:permissions></d:prop>`+
 			`<d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>`,
-		href, len(f.files[p]), strings.ReplaceAll(f.etags[p], `"`, "&quot;"), fakeSpaceID, p)
+		href, len(f.files[p]), strings.ReplaceAll(f.etags[p], `"`, "&quot;"), fakeSpaceID, p, permissions)
 }
 
 func escapePath(p string) string {

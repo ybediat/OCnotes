@@ -878,6 +878,7 @@ func (s *Store) Clear() error {
 
 	s.entries = map[string]*Entry{}
 	s.folders = map[string]bool{}
+	s.folderPermissions = map[string]string{}
 	s.queue = nil
 	s.known = map[string]*Known{}
 	s.conflicts = map[string]Conflict{}

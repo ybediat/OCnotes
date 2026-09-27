@@ -89,6 +89,12 @@ data class FolderEntryDto(
      * elle divergerait au premier format ajouté.
      */
     val readOnly: Boolean = false,
+    val canWrite: Boolean = true,
+    val canDelete: Boolean = true,
+    val canRename: Boolean = true,
+    val canMove: Boolean = true,
+    val canCreateFile: Boolean = true,
+    val canCreateFolder: Boolean = true,
 )
 
 /** Réponse de `App.listFolderJSON(dir)`. */
@@ -98,6 +104,8 @@ data class FolderListingDto(
     val entries: List<FolderEntryDto> = emptyList(),
     /** Vrai quand le réseau manquait : la vue peut être incomplète. */
     val fromCache: Boolean = false,
+    val canCreateFile: Boolean = true,
+    val canCreateFolder: Boolean = true,
 )
 
 /**
@@ -110,6 +118,18 @@ data class FolderListingDto(
 data class FolderRefDto(
     val path: String = "",
     val name: String = "",
+    val canCreateFile: Boolean = true,
+)
+
+/** Capacités WebDAV effectives du compte courant sur une ressource. */
+@Serializable
+data class CapabilitiesDto(
+    val canWrite: Boolean = true,
+    val canDelete: Boolean = true,
+    val canRename: Boolean = true,
+    val canMove: Boolean = true,
+    val canCreateFile: Boolean = true,
+    val canCreateFolder: Boolean = true,
 )
 
 /** Réponse de `App.createNoteJSON(...)` et `App.createFolderJSON(...)`. */

@@ -28,6 +28,9 @@ type Searcher interface {
 type Index struct {
 	Notes   []Note
 	Folders []Folder
+	// RootPermissions porte les droits du dossier de notes lui-même, qui ne
+	// figure pas parmi ses propres descendants.
+	RootPermissions string
 
 	// FromSearch dit par quel chemin l'inventaire a été obtenu. Utile au
 	// diagnostic : les deux chemins n'ont ni le même coût ni la même
@@ -81,6 +84,9 @@ func (l *Library) listAllViaSearch(ctx context.Context, s Searcher) (Index, erro
 	}
 
 	index := Index{FromSearch: true}
+	if root, statErr := l.backend.Stat(ctx, l.resolve("")); statErr == nil {
+		index.RootPermissions = root.Permissions
+	}
 	for _, r := range resources {
 		relative, ok := l.within(r.Path)
 		if !ok {
@@ -121,6 +127,9 @@ func (l *Library) listAllViaWalk(ctx context.Context) (Index, error) {
 				return Index{}, err
 			}
 			continue
+		}
+		if dir == "" {
+			index.RootPermissions = listing.Permissions
 		}
 
 		index.Notes = append(index.Notes, listing.Notes...)
@@ -165,7 +174,7 @@ func (l *Library) collect(index *Index, r opencloud.Resource, relative string) {
 		return
 	}
 	if r.IsDir {
-		index.Folders = append(index.Folders, Folder{Path: relative, Name: r.Name})
+		index.Folders = append(index.Folders, Folder{Path: relative, Name: r.Name, Permissions: r.Permissions})
 		return
 	}
 	if !IsNote(r.Name) {
@@ -179,6 +188,7 @@ func (l *Library) collect(index *Index, r opencloud.Resource, relative string) {
 		ModTime:     r.ModTime,
 		ETag:        r.ETag,
 		FileID:      r.FileID,
+		Permissions: r.Permissions,
 	})
 }
 

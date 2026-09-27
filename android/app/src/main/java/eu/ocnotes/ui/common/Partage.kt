@@ -5,28 +5,57 @@ import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
 import eu.ocnotes.R
+import eu.ocnotes.appContainer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
+import java.util.UUID
 
 /**
- * Vide `dossier` et le recrée, avant d'y déposer les copies d'un partage.
+ * Crée un sous-dossier propre à ce partage, avant d'y déposer ses copies.
  *
  * Pourquoi recopier : le cache local nomme ses fichiers par une empreinte
  * SHA-256 du chemin — il n'y a pas de `journal.md` sur le disque à désigner. On
  * en recrée un au vrai nom, exposé par le `FileProvider` déclaré au manifeste.
- * Le dossier est vidé à chaque partage : ces copies ne servent que le temps de
- * l'envoi.
+ * Chaque partage reste isolé des suivants : l'application destinataire peut
+ * ainsi continuer à lire ses URI pendant qu'un autre partage est préparé.
  *
  * La copie elle-même est faite par le cœur Go (`App.exportFile`), octet pour
  * octet : un `.docx` ou un `.odt` ne survivrait pas à un passage par une
  * chaîne Kotlin.
  */
 suspend fun preparerDossierPartage(dossier: File): File = withContext(Dispatchers.IO) {
-    dossier.apply {
-        deleteRecursively()
-        mkdirs()
+    if (!dossier.exists() && !dossier.mkdirs()) {
+        throw IOException("Impossible de créer le dossier de partage") // i18n-ok : erreur technique
     }
+    if (!dossier.isDirectory) {
+        throw IOException("Le chemin de partage n'est pas un dossier") // i18n-ok : erreur technique
+    }
+
+    nettoyerPartagesExpires(dossier)
+
+    repeat(NOMBRE_ESSAIS_CREATION) {
+        val partage = File(dossier, UUID.randomUUID().toString())
+        if (partage.mkdir()) return@withContext partage
+        if (!partage.exists()) {
+            throw IOException("Impossible de créer un partage") // i18n-ok : erreur technique
+        }
+    }
+    throw IOException("Impossible de réserver un dossier de partage unique") // i18n-ok : erreur technique
+}
+
+/** Supprime les partages vieux d'au moins une heure, sans toucher aux récents. */
+fun nettoyerPartagesExpires(
+    dossier: File,
+    maintenant: Long = System.currentTimeMillis(),
+) {
+    val expiration = maintenant - DUREE_VIE_PARTAGE_MS
+    dossier.listFiles()
+        ?.filter { it.lastModified() <= expiration }
+        ?.forEach(File::deleteRecursively)
 }
 
 /**
@@ -85,6 +114,19 @@ fun partagerFichiers(context: Context, fichiers: List<File>) {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         },
     )
+
+    val container = context.appContainer
+    val dossiers = fichiers.mapNotNull { it.parentFile }
+        .filter { it.parentFile == container.dossierPartage }
+        .distinct()
+    if (dossiers.isNotEmpty()) {
+        container.applicationScope.launch {
+            delay(DUREE_VIE_PARTAGE_MS)
+            withContext(Dispatchers.IO) {
+                dossiers.forEach(File::deleteRecursively)
+            }
+        }
+    }
 }
 
 /**
@@ -125,6 +167,8 @@ private const val TYPE_TEXTE_GENERIQUE = PREFIXE_TEXTE + "*"
 private const val TYPE_QUELCONQUE = "*/" + "*"
 private const val TYPE_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 private const val TYPE_ODT = "application/vnd.oasis.opendocument.text"
+private const val DUREE_VIE_PARTAGE_MS = 60 * 60 * 1_000L
+private const val NOMBRE_ESSAIS_CREATION = 3
 
 /**
  * Le serveur OpenCloud accepte dans un nom des caractères qu'un système de

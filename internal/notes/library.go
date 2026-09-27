@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ybediat/OpenNote/internal/charset"
 	"github.com/ybediat/OpenNote/internal/documents"
 	"github.com/ybediat/OpenNote/internal/markdown"
 	"github.com/ybediat/OpenNote/internal/opencloud"
@@ -51,12 +52,14 @@ type Note struct {
 	ModTime     time.Time
 	ETag        string
 	FileID      string
+	Permissions string
 }
 
 // Folder décrit un sous-dossier.
 type Folder struct {
-	Path string
-	Name string
+	Path        string
+	Name        string
+	Permissions string
 }
 
 // Listing est le contenu d'un dossier : ses sous-dossiers et ses notes.
@@ -64,6 +67,9 @@ type Listing struct {
 	Path    string
 	Folders []Folder
 	Notes   []Note
+	// Permissions porte les droits sur le dossier listé lui-même. Ils décident
+	// notamment si une note ou un sous-dossier peut y être créé.
+	Permissions string
 }
 
 // IsEmpty indique qu'un dossier ne contient rien à afficher.
@@ -130,19 +136,23 @@ func (l *Library) Bootstrap(ctx context.Context) error {
 // posé dans le dossier depuis l'interface web ne doit pas apparaître comme une
 // note illisible.
 func (l *Library) List(ctx context.Context, dir string) (Listing, error) {
+	self, err := l.backend.Stat(ctx, l.resolve(dir))
+	if err != nil {
+		return Listing{}, err
+	}
 	resources, err := l.backend.List(ctx, l.resolve(dir))
 	if err != nil {
 		return Listing{}, err
 	}
 
-	listing := Listing{Path: CleanPath(dir)}
+	listing := Listing{Path: CleanPath(dir), Permissions: self.Permissions}
 	for _, r := range resources {
 		if isHidden(r.Name) {
 			continue
 		}
 		relative := l.relative(r.Path)
 		if r.IsDir {
-			listing.Folders = append(listing.Folders, Folder{Path: relative, Name: r.Name})
+			listing.Folders = append(listing.Folders, Folder{Path: relative, Name: r.Name, Permissions: r.Permissions})
 			continue
 		}
 		if !IsNote(r.Name) {
@@ -156,6 +166,7 @@ func (l *Library) List(ctx context.Context, dir string) (Listing, error) {
 			ModTime:     r.ModTime,
 			ETag:        r.ETag,
 			FileID:      r.FileID,
+			Permissions: r.Permissions,
 		})
 	}
 
@@ -422,9 +433,10 @@ func TitleOf(note Note, content []byte) string {
 	if IsReadOnlyText(note.Name) {
 		return note.DisplayName
 	}
-	title := markdown.Title(string(content))
+	text, _ := charset.Decode(content)
+	title := markdown.Title(text)
 	if IsPlainText(note.Name) {
-		title = markdown.PlainTitle(string(content))
+		title = markdown.PlainTitle(text)
 	}
 	if title != "" {
 		return title
@@ -442,15 +454,18 @@ func TitleOf(note Note, content []byte) string {
 // absente, une bombe de décompression. Ni le Markdown ni le texte brut ne
 // savent échouer — mais leur faire porter la même signature évite d'avoir deux
 // points d'entrée, donc deux endroits où l'on oublie d'ajouter un format.
+//
+// Un texte est décodé avant d'être lu : un fichier Latin-1 ou UTF-16 venu de
+// Windows s'affiche avec ses accents, et non en « � ».
 func Render(name string, content []byte) ([]markdown.Block, error) {
-	switch {
-	case IsDocument(name):
+	if IsDocument(name) {
 		return renderDocument(name, content)
-	case IsPlainText(name):
-		return markdown.RenderPlain(string(content)), nil
-	default:
-		return markdown.Render(string(content)), nil
 	}
+	text, _ := charset.Decode(content)
+	if IsPlainText(name) {
+		return markdown.RenderPlain(text), nil
+	}
+	return markdown.Render(text), nil
 }
 
 func renderDocument(name string, content []byte) ([]markdown.Block, error) {

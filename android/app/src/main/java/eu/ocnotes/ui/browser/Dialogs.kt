@@ -112,8 +112,14 @@ fun NouvelleNoteDialog(
     onValider: (titre: String, dossier: String) -> Unit,
     onFermer: () -> Unit,
 ) {
+    val choix = remember(dossiers) { dossiers.filter { it.canCreateFile } }
     var titre by remember { mutableStateOf("") }
-    var dossier by remember { mutableStateOf(dossierPropose) }
+    var dossier by remember(choix, dossierPropose) {
+        mutableStateOf(
+            dossierPropose.takeIf { propose -> choix.any { it.path == propose } }
+                ?: choix.firstOrNull()?.path.orEmpty(),
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onFermer,
@@ -129,7 +135,7 @@ fun NouvelleNoteDialog(
                 )
 
                 SelecteurDossier(
-                    dossiers = dossiers,
+                    dossiers = choix,
                     nomRacine = nomRacine,
                     valeur = dossier,
                     onValeur = { dossier = it },
@@ -150,7 +156,7 @@ fun NouvelleNoteDialog(
                     onValider(titre, dossier)
                     onFermer()
                 },
-                enabled = titre.isNotBlank(),
+                enabled = titre.isNotBlank() && choix.any { it.path == dossier },
             ) {
                 Text(stringResource(R.string.action_creer))
             }
@@ -169,9 +175,9 @@ fun NouvelleNoteDialog(
  * dossier ne remet à jour que ses notes déjà chargées, pas celles jamais
  * ouvertes — et n'est pas couvert ici.
  *
- * Le dossier actuel de la note reste sélectionnable dans la liste : le
- * confirmer ne fait rien, plutôt que d'obliger l'utilisateur à en choisir un
- * autre pour fermer la boîte.
+ * Le dossier actuel et les dossiers où OpenCloud interdit la création de
+ * fichiers sont retirés : chaque choix proposé produit donc un déplacement
+ * possible.
  */
 @Composable
 fun DeplacerDialog(
@@ -182,14 +188,17 @@ fun DeplacerDialog(
     onFermer: () -> Unit,
 ) {
     val dossierActuel = entree.path.substringBeforeLast('/', "")
-    var dossier by remember { mutableStateOf(dossierActuel) }
+    val choix = remember(dossiers, dossierActuel) {
+        dossiers.filter { it.canCreateFile && it.path != dossierActuel }
+    }
+    var dossier by remember(choix) { mutableStateOf(choix.firstOrNull()?.path.orEmpty()) }
 
     AlertDialog(
         onDismissRequest = onFermer,
         title = { Text(stringResource(R.string.browser_deplacer_titre, entree.display)) },
         text = {
             SelecteurDossier(
-                dossiers = dossiers,
+                dossiers = choix,
                 nomRacine = nomRacine,
                 valeur = dossier,
                 onValeur = { dossier = it },
@@ -201,7 +210,7 @@ fun DeplacerDialog(
                     onValider(dossier)
                     onFermer()
                 },
-                enabled = dossier != dossierActuel,
+                enabled = choix.any { it.path == dossier },
             ) {
                 Text(stringResource(R.string.action_deplacer))
             }
@@ -221,11 +230,9 @@ fun DeplacerDialog(
  * est hors périmètre ; le ViewModel ne propose donc pas l'action quand la
  * sélection en contient un.
  *
- * Aucune destination n'est écartée : contrairement à l'action sur une seule
- * note, la sélection peut venir de dossiers différents (mode liste plate), il
- * n'y a donc pas de « dossier actuel » unique à neutraliser. Le bouton reste
- * actif ; viser le dossier d'origine ne fait rien de fâcheux — une copie y
- * reçoit simplement un suffixe « (2) ».
+ * La sélection peut venir de dossiers différents (mode liste plate), il n'y a
+ * donc pas de « dossier actuel » unique à neutraliser. Seuls les dossiers où
+ * OpenCloud autorise la création d'un fichier sont proposés.
  */
 @Composable
 fun DossierCibleLotDialog(
@@ -236,14 +243,15 @@ fun DossierCibleLotDialog(
     onValider: (dossier: String) -> Unit,
     onFermer: () -> Unit,
 ) {
-    var dossier by remember { mutableStateOf("") }
+    val choix = remember(dossiers) { dossiers.filter { it.canCreateFile } }
+    var dossier by remember(choix) { mutableStateOf(choix.firstOrNull()?.path.orEmpty()) }
 
     AlertDialog(
         onDismissRequest = onFermer,
         title = { Text(titre) },
         text = {
             SelecteurDossier(
-                dossiers = dossiers,
+                dossiers = choix,
                 nomRacine = nomRacine,
                 valeur = dossier,
                 onValeur = { dossier = it },
@@ -255,6 +263,7 @@ fun DossierCibleLotDialog(
                     onValider(dossier)
                     onFermer()
                 },
+                enabled = choix.any { it.path == dossier },
             ) {
                 Text(libelleAction)
             }
@@ -284,7 +293,7 @@ private fun SelecteurDossier(
     var deroule by remember { mutableStateOf(false) }
 
     val libelle: (FolderRefDto) -> String = { if (it.path.isEmpty()) nomRacine else it.path }
-    val choix = dossiers.ifEmpty { listOf(FolderRefDto()) }
+    val choix = dossiers
     val libelleCourant = choix.firstOrNull { it.path == valeur }?.let(libelle) ?: nomRacine
 
     ExposedDropdownMenuBox(

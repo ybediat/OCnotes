@@ -14,6 +14,9 @@ enum class ErrorCategory {
     /** Token invalide ou expiré : redemander la saisie, ne pas réessayer. */
     AUTH,
 
+    /** Le compte est authentifié mais ne possède pas le droit demandé. */
+    FORBIDDEN,
+
     /** Le serveur a une version plus récente. */
     CONFLICT,
 
@@ -77,6 +80,7 @@ class OCnotesException(
  */
 fun categorieDuCode(code: String): ErrorCategory = when (code) {
     "AUTH" -> ErrorCategory.AUTH
+    "FORBIDDEN", "PERMISSION_DENIED" -> ErrorCategory.FORBIDDEN
     "CONFLICT" -> ErrorCategory.CONFLICT
     "NOTFOUND" -> ErrorCategory.NOT_FOUND
     "OFFLINE" -> ErrorCategory.OFFLINE

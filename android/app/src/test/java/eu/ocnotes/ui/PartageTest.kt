@@ -1,9 +1,17 @@
 package eu.ocnotes.ui
 
 import eu.ocnotes.ui.common.cibleLibre
+import eu.ocnotes.ui.common.nettoyerPartagesExpires
+import eu.ocnotes.ui.common.preparerDossierPartage
 import eu.ocnotes.ui.common.typeCommun
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import java.io.File
 
 /**
@@ -14,7 +22,40 @@ import java.io.File
  */
 class PartageTest {
 
+    @get:Rule
+    val temporaire = TemporaryFolder()
+
     private val dossier = File("partage")
+
+    @Test
+    fun chaquePartageObtientSonPropreDossier() = runBlocking {
+        val racine = temporaire.newFolder("partage")
+
+        val premier = preparerDossierPartage(racine)
+        File(premier, "note.md").writeText("premier")
+        val second = preparerDossierPartage(racine)
+
+        assertNotEquals(premier, second)
+        assertTrue(File(premier, "note.md").exists())
+        assertTrue(second.isDirectory)
+    }
+
+    @Test
+    fun leNettoyageNeSupprimeQueLesPartagesExpires() {
+        val racine = temporaire.newFolder("partage")
+        val maintenant = 10_000_000L
+        val expire = File(racine, "expire").apply { mkdir() }
+        val recent = File(racine, "recent").apply { mkdir() }
+        File(expire, "ancien.md").writeText("ancien")
+        File(recent, "recent.md").writeText("recent")
+        expire.setLastModified(maintenant - 60 * 60 * 1_000L)
+        recent.setLastModified(maintenant - 59 * 60 * 1_000L)
+
+        nettoyerPartagesExpires(racine, maintenant)
+
+        assertFalse(expire.exists())
+        assertTrue(recent.exists())
+    }
 
     /**
      * En liste plate, deux notes de dossiers différents portent souvent le

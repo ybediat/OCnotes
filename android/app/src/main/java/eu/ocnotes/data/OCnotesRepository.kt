@@ -537,6 +537,10 @@ class OCnotesRepository(
     suspend fun folders(): List<FolderRefDto> =
         callJson { it.foldersJSON() }
 
+    /** Droits connus d'un chemin, servis depuis l'index local sans réseau. */
+    suspend fun capabilities(path: String): CapabilitiesDto =
+        callJson { it.capabilitiesJSON(path) }
+
     suspend fun readNote(notePath: String): String = authenticatedCall { it.readNote(notePath) }
 
     /**

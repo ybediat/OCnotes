@@ -16,8 +16,9 @@ import (
 // traverser la frontière obligerait à choisir un nom en Go pour un libellé qui
 // est déjà connu de Kotlin.
 type folderRef struct {
-	Path string `json:"path"`
-	Name string `json:"name"`
+	Path          string `json:"path"`
+	Name          string `json:"name"`
+	CanCreateFile bool   `json:"canCreateFile"`
 }
 
 // ListAllJSON renvoie l'inventaire complet du dossier de notes, à plat.
@@ -66,13 +67,14 @@ func (a *App) ListAllJSON() (string, error) {
 
 	connues := make([]store.Known, 0, len(index.Notes))
 	for _, n := range index.Notes {
-		connues = append(connues, store.Known{Path: n.Path, ETag: n.ETag, Size: n.Size, ModTime: n.ModTime})
+		connues = append(connues, store.Known{Path: n.Path, ETag: n.ETag, Size: n.Size, ModTime: n.ModTime, Permissions: n.Permissions})
 	}
-	dossiers := make([]string, 0, len(index.Folders))
+	dossiers := make([]store.FolderKnown, 0, len(index.Folders)+1)
+	dossiers = append(dossiers, store.FolderKnown{Path: "", Permissions: index.RootPermissions})
 	for _, f := range index.Folders {
-		dossiers = append(dossiers, f.Path)
+		dossiers = append(dossiers, store.FolderKnown{Path: f.Path, Permissions: f.Permissions})
 	}
-	if err := a.cache.SetIndex(connues, dossiers); err != nil {
+	if err := a.cache.SetIndexWithPermissions(connues, dossiers); err != nil {
 		return "", err
 	}
 
@@ -86,12 +88,13 @@ func (a *App) ListAllJSON() (string, error) {
 // avoir deux chemins de mise en forme ferait diverger la liste selon l'état du
 // réseau.
 func (a *App) listingDepuisIndex(fromCache bool) folderListing {
-	out := folderListing{Path: "", FromCache: fromCache, Entries: []folderEntry{}}
+	rootCaps := permissionsFields(a.cache.FolderPermissions(""))
+	out := folderListing{Path: "", FromCache: fromCache, Entries: []folderEntry{}, CanCreateFile: rootCaps.CanCreateFile, CanCreateFolder: rootCaps.CanCreateFolder}
 
 	for _, k := range a.cache.Index() {
 		nom := lastSegment(k.Path)
 		entry, cached := a.cache.CachedEntry(k.Path)
-		out.Entries = append(out.Entries, folderEntry{
+		out.Entries = append(out.Entries, folderEntryCapabilities(folderEntry{
 			Path:     k.Path,
 			Name:     nom,
 			Display:  notes.DisplayName(nom),
@@ -99,7 +102,7 @@ func (a *App) listingDepuisIndex(fromCache bool) folderListing {
 			ModTime:  k.ModTime.UTC().Format(time.RFC3339),
 			Pending:  cached && entry.Dirty,
 			ReadOnly: notes.IsReadOnly(nom),
-		})
+		}, k.Permissions))
 	}
 	return out
 }
@@ -119,9 +122,11 @@ func (a *App) FoldersJSON() (string, error) {
 		return "", errNoWorkspace()
 	}
 
-	out := []folderRef{{Path: "", Name: ""}}
+	root := permissionsFields(a.cache.FolderPermissions(""))
+	out := []folderRef{{Path: "", Name: "", CanCreateFile: root.CanCreateFile}}
 	for _, d := range a.cache.Folders() {
-		out = append(out, folderRef{Path: d, Name: lastSegment(d)})
+		caps := permissionsFields(a.cache.FolderPermissions(d))
+		out = append(out, folderRef{Path: d, Name: lastSegment(d), CanCreateFile: caps.CanCreateFile})
 	}
 	return toJSON(out)
 }
