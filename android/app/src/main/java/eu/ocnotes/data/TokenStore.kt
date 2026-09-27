@@ -148,6 +148,15 @@ class TokenStore(
         keyStore().deleteEntry(keyAlias)
     }
 
+    /** Efface aussi le fichier de préférences vide lors de la suppression du profil. */
+    suspend fun destroy() {
+        clear()
+        withContext(Dispatchers.IO) {
+            cached = null
+            context.deleteSharedPreferences("${FILE_NAME}_$accountId")
+        }
+    }
+
     private fun encrypt(token: String): String {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, encryptionKey())

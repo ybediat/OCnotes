@@ -138,6 +138,15 @@ class AccountRegistry(private val filesDir: File) {
         activateLocked(id)
     }
 
+    /**
+     * Retire un profil du registre et renvoie le profil qui doit rester actif.
+     * Si c'était le dernier, un profil vierge est créé : l'application garde
+     * toujours un emplacement valide vers lequel revenir.
+     */
+    suspend fun remove(id: String): AccountProfile = withContext(Dispatchers.IO) {
+        removeLocked(id)
+    }
+
     @Synchronized
     private fun updateAccount(id: String, transform: (AccountProfile) -> AccountProfile) {
         val current = accounts.firstOrNull { it.id == id }
@@ -182,6 +191,33 @@ class AccountRegistry(private val filesDir: File) {
         active = profile
         publishState()
         return profile
+    }
+
+    @Synchronized
+    private fun removeLocked(id: String): AccountProfile {
+        require(isProfileId(id)) { "Identifiant de profil invalide" } // i18n-ok
+        require(accounts.any { it.id == id }) { "Profil inconnu" } // i18n-ok
+
+        val remaining = accounts.filterNot { it.id == id }.toMutableList()
+        var replacementDirectory: File? = null
+        if (remaining.isEmpty()) {
+            val replacement = AccountProfile(UUID.randomUUID().toString(), KIND_SERVER)
+            val directory = profileDir(replacement.id)
+            check(directory.mkdirs()) { "Création du dossier de profil impossible" } // i18n-ok
+            replacementDirectory = directory
+            remaining += replacement
+        }
+        val nextActive = if (active.id == id) remaining.first() else active
+        try {
+            writeRegistry(nextActive.id, remaining)
+        } catch (error: Exception) {
+            replacementDirectory?.delete()
+            throw error
+        }
+        accounts = remaining.toList()
+        active = nextActive
+        publishState()
+        return nextActive
     }
 
     private fun publishState() {

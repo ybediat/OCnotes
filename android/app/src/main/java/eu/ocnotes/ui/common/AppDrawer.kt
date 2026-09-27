@@ -10,12 +10,14 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -26,6 +28,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -37,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.ocnotes.R
 import eu.ocnotes.appContainer
+import eu.ocnotes.data.AccountProfile
 import eu.ocnotes.ui.browser.ModeAffichage
 import eu.ocnotes.ui.theme.CouleurSignatureClaire
 import eu.ocnotes.ui.theme.CouleurSignatureSombre
@@ -79,11 +83,13 @@ fun TiroirApplication(
     onReglages: () -> Unit,
     onCompte: (String) -> Unit,
     onAjouterCompte: () -> Unit,
+    onSupprimerCompte: (String) -> Unit,
     content: @Composable () -> Unit,
 ) {
     val portee = rememberCoroutineScope()
     val fermer: () -> Unit = { portee.launch { etatTiroir.close() } }
     var aProposOuvert by rememberSaveable { mutableStateOf(false) }
+    var compteASupprimer by remember { mutableStateOf<AccountProfile?>(null) }
     val couleurTitre = if (isSystemInDarkTheme()) CouleurSignatureSombre else CouleurSignatureClaire
     val container = LocalContext.current.appContainer
     val comptes by container.accountRegistry.state.collectAsStateWithLifecycle()
@@ -109,12 +115,7 @@ fun TiroirApplication(
                 )
 
                 comptes.accounts.forEach { compte ->
-                    val nom = when {
-                        compte.kind == "local" -> stringResource(R.string.compte_local)
-                        compte.username.isNotBlank() -> compte.username
-                        compte.serverUrl.isNotBlank() -> compte.serverUrl
-                        else -> stringResource(R.string.compte_nouveau)
-                    }
+                    val nom = nomCompte(compte)
                     NavigationDrawerItem(
                         icon = { Icon(Icons.Default.AccountCircle, contentDescription = null) },
                         label = {
@@ -130,6 +131,14 @@ fun TiroirApplication(
                             }
                         },
                         selected = compte.id == comptes.active.id,
+                        badge = {
+                            IconButton(onClick = { compteASupprimer = compte }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = stringResource(R.string.compte_supprimer),
+                                )
+                            }
+                        },
                         onClick = {
                             fermer()
                             onCompte(compte.id)
@@ -225,6 +234,43 @@ fun TiroirApplication(
     if (aProposOuvert) {
         AProposDialog(onFermer = { aProposOuvert = false })
     }
+
+    compteASupprimer?.let { compte ->
+        AlertDialog(
+            onDismissRequest = { compteASupprimer = null },
+            title = { Text(stringResource(R.string.compte_supprimer_titre)) },
+            text = {
+                Text(stringResource(R.string.compte_supprimer_message, nomCompte(compte)))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        compteASupprimer = null
+                        fermer()
+                        onSupprimerCompte(compte.id)
+                    },
+                ) {
+                    Text(
+                        stringResource(R.string.compte_supprimer),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { compteASupprimer = null }) {
+                    Text(stringResource(R.string.action_annuler))
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun nomCompte(compte: AccountProfile): String = when {
+    compte.kind == "local" -> stringResource(R.string.compte_local)
+    compte.username.isNotBlank() -> compte.username
+    compte.serverUrl.isNotBlank() -> compte.serverUrl
+    else -> stringResource(R.string.compte_nouveau)
 }
 
 @Composable

@@ -134,6 +134,7 @@ private fun OCnotesApp(
             },
             onCompte = { id -> scope.launch { container.activateAccount(id) } },
             onAjouterCompte = { scope.launch { container.createAccount() } },
+            onSupprimerCompte = { id -> scope.launch { container.deleteAccount(id) } },
         ) {
             OCnotesNavHost(
                 navController = navController,

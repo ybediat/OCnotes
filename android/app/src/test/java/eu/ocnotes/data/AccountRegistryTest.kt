@@ -172,6 +172,62 @@ class AccountRegistryTest {
         }
     }
 
+    @Test
+    fun `supprimer le profil actif conserve les autres comptes`() = runBlocking {
+        val root = Files.createTempDirectory("ocnotes-remove").toFile()
+        try {
+            val registry = AccountRegistry(root)
+            val first = registry.active
+            val second = registry.createAndActivate()
+
+            val next = registry.remove(second.id)
+
+            assertEquals(first.id, next.id)
+            assertEquals(first.id, registry.active.id)
+            assertEquals(listOf(first.id), registry.accounts.map { it.id })
+            assertEquals(first.id, AccountRegistry(root).active.id)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `supprimer le dernier profil cree un profil vierge de remplacement`() = runBlocking {
+        val root = Files.createTempDirectory("ocnotes-remove-last").toFile()
+        try {
+            val registry = AccountRegistry(root)
+            val removed = registry.active
+
+            val replacement = registry.remove(removed.id)
+
+            assertTrue(replacement.id != removed.id)
+            assertEquals("", replacement.serverUrl)
+            assertEquals(listOf(replacement.id), registry.accounts.map { it.id })
+            assertTrue(registry.profileDir(replacement.id).isDirectory)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `supprimer un profil inactif ne change pas le compte courant`() = runBlocking {
+        val root = Files.createTempDirectory("ocnotes-remove-inactive").toFile()
+        try {
+            val registry = AccountRegistry(root)
+            val first = registry.active
+            val second = registry.createAndActivate()
+            registry.activate(first.id)
+
+            val current = registry.remove(second.id)
+
+            assertEquals(first.id, current.id)
+            assertEquals(first.id, registry.active.id)
+            assertEquals(listOf(first.id), registry.accounts.map { it.id })
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
     // Le registre est lu dans Application.onCreate : une exception y ferait une
     // boucle de plantage dont on ne sort qu'en effaçant les données — file
     // d'attente hors ligne comprise.

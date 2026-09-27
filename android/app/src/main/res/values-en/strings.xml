@@ -310,6 +310,9 @@
     <string name="compte_local">Local notes</string>
     <string name="compte_nouveau">New account</string>
     <string name="compte_ajouter">Add account</string>
+    <string name="compte_supprimer">Remove account</string>
+    <string name="compte_supprimer_titre">Remove this account?</string>
+    <string name="compte_supprimer_message">The %1$s account, its cache and any unsynced local changes will be removed from this device. This cannot be undone.</string>
     <string name="menu_mode_arborescence">By folder</string>
     <string name="menu_mode_liste">All notes</string>
 

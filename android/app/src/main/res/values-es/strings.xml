@@ -291,6 +291,9 @@
     <string name="compte_local">Notas locales</string>
     <string name="compte_nouveau">Nueva cuenta</string>
     <string name="compte_ajouter">Añadir una cuenta</string>
+    <string name="compte_supprimer">Eliminar cuenta</string>
+    <string name="compte_supprimer_titre">¿Eliminar esta cuenta?</string>
+    <string name="compte_supprimer_message">La cuenta %1$s, su caché y todos los cambios locales sin sincronizar se eliminarán de este dispositivo. Esta acción no se puede deshacer.</string>
     <string name="menu_mode_arborescence">Por carpetas</string>
     <string name="menu_mode_liste">Todas las notas</string>
 

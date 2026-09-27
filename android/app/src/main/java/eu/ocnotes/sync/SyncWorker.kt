@@ -4,9 +4,11 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import eu.ocnotes.AppContainer
 import eu.ocnotes.OCnotesApplication
 import eu.ocnotes.data.ErrorCategory
 import eu.ocnotes.data.OCnotesException
+import eu.ocnotes.data.OCnotesRepository
 
 /**
  * Une passe de synchronisation, exécutée par WorkManager.
@@ -26,11 +28,19 @@ class SyncWorker(
     override suspend fun doWork(): Result {
         val container = (applicationContext as OCnotesApplication).container
 
-        // Un ancien travail ou le travail d'un autre profil ne doit jamais
-        // ouvrir le cache du compte actuellement actif.
+        // Chaque travail porte l'UUID de son profil. Le conteneur ouvre ce
+        // profil même s'il n'est pas affiché et le verrouille contre une
+        // suppression concurrente pendant toute la passe.
         val accountId = inputData.getString(SyncScheduler.KEY_ACCOUNT_ID) ?: return Result.success()
-        val repository = container.activeRepository(accountId) ?: return Result.success()
+        return container.withAccountRepository(accountId) { repository ->
+            synchronize(repository, container)
+        } ?: Result.success()
+    }
 
+    private suspend fun synchronize(
+        repository: OCnotesRepository,
+        container: AppContainer,
+    ): Result {
         // Pas de session récupérable : rien à synchroniser, et surtout rien à
         // signaler. L'utilisateur se reconnectera, ce n'est pas un échec.
         if (!repository.ensureSession()) return Result.success()

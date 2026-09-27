@@ -26,6 +26,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Conteneur de dépendances, construit à la main.
@@ -57,6 +58,7 @@ class AppContainer(
     @Volatile
     private var runtime = buildRuntime(accountRegistry.active)
     private val switchMutex = Mutex()
+    private val accountLocks = ConcurrentHashMap<String, Mutex>()
     data class ActiveSession(val profile: AccountProfile, val generation: Long)
 
     private var generation = 0L
@@ -67,12 +69,6 @@ class AppContainer(
     val repository: OCnotesRepository get() = runtime.repository
     val syncScheduler: SyncScheduler get() = runtime.syncScheduler
 
-    /** Capture cohérente pour un Worker : aucun changement de compte ultérieur ne peut la remplacer. */
-    fun activeRepository(expectedAccountId: String): OCnotesRepository? {
-        val current = runtime
-        return current.repository.takeIf { current.profile.id == expectedAccountId }
-    }
-
     /**
      * Chaque profil possède un sous-dossier privé de `filesDir` : le cœur Go
      * n'ouvre que le cache et la configuration du profil actif. La
@@ -81,28 +77,64 @@ class AppContainer(
     private fun buildRuntime(profile: AccountProfile): AccountRuntime {
         val tokenStore = TokenStore(context, profile.id)
         val scheduler = SyncScheduler(context, profile.id)
-        val repository = OCnotesRepository(
-            dataDir = accountRegistry.profileDir(profile.id).absolutePath,
-            accountId = profile.id,
-            accountRegistry = accountRegistry,
-            tokenStore = tokenStore,
-            oidcManager = oidcManager,
-            preferences = preferencesAffichage,
-        )
+        val repository = buildRepository(profile, tokenStore)
         return AccountRuntime(profile, tokenStore, repository, scheduler)
     }
+
+    private fun buildRepository(
+        profile: AccountProfile,
+        tokenStore: TokenStore = TokenStore(context, profile.id),
+    ) = OCnotesRepository(
+        dataDir = accountRegistry.profileDir(profile.id).absolutePath,
+        accountId = profile.id,
+        accountRegistry = accountRegistry,
+        tokenStore = tokenStore,
+        oidcManager = oidcManager,
+        preferences = preferencesAffichage,
+    )
+
+    /**
+     * Fournit au Worker le dépôt du profil demandé, actif ou non. Le verrou
+     * reste acquis pendant toute la passe : une suppression du même profil
+     * attend donc sa fin et ne peut pas voir ses fichiers réapparaître.
+     */
+    suspend fun <T> withAccountRepository(
+        accountId: String,
+        operation: suspend (OCnotesRepository) -> T,
+    ): T? = accountLock(accountId).withLock {
+        val profile = accountRegistry.accounts.firstOrNull { it.id == accountId }
+            ?: return@withLock null
+        val current = runtime
+        val repository = if (current.profile.id == accountId) {
+            current.repository
+        } else {
+            withContext(Dispatchers.IO) { buildRepository(profile) }
+        }
+        operation(repository)
+    }
+
+    /** Installe le travail périodique de chaque compte serveur enregistré. */
+    fun scheduleAllAccounts() {
+        accountRegistry.accounts
+            .filter { it.kind != "local" && it.serverUrl.isNotBlank() }
+            .forEach { SyncScheduler(context, it.id).schedulePeriodic() }
+    }
+
+    private fun accountLock(id: String): Mutex = accountLocks.computeIfAbsent(id) { Mutex() }
 
     /** Change de profil sans effacer la session, le cache ou le secret quittés. */
     suspend fun activateAccount(id: String) = switchMutex.withLock {
         if (id == runtime.profile.id) return@withLock
-        val profile = accountRegistry.accounts.firstOrNull { it.id == id }
-            ?: throw IllegalArgumentException("Profil inconnu") // i18n-ok
-        val next = withContext(Dispatchers.IO) { buildRuntime(profile) }
-        accountRegistry.activate(id)
-        runtime = next
-        next.syncScheduler.schedulePeriodic()
-        generation += 1
-        mutableActiveSession.value = ActiveSession(profile, generation)
+        accountLock(id).withLock {
+            val profile = accountRegistry.accounts.firstOrNull { it.id == id }
+                ?: throw IllegalArgumentException("Profil inconnu") // i18n-ok
+            val next = withContext(Dispatchers.IO) { buildRuntime(profile) }
+            accountRegistry.activate(id)
+            runtime = next
+            next.syncScheduler.schedulePeriodic()
+            generation += 1
+            mutableActiveSession.value = ActiveSession(profile, generation)
+        }
     }
 
     /** Ajoute un emplacement de compte vierge et l'ouvre sur la connexion. */
@@ -119,6 +151,41 @@ class AppContainer(
         next.syncScheduler.schedulePeriodic()
         generation += 1
         mutableActiveSession.value = ActiveSession(profile, generation)
+    }
+
+    /** Supprime secret, cache, configuration et travaux du profil. */
+    suspend fun deleteAccount(id: String) = switchMutex.withLock {
+        accountLock(id).withLock {
+            require(accountRegistry.accounts.any { it.id == id }) { "Profil inconnu" } // i18n-ok
+            val deletingActive = runtime.profile.id == id
+            val directory = accountRegistry.profileDir(id)
+            SyncScheduler(context, id).cancelAll()
+
+            if (deletingActive) {
+                runtime.repository.disconnect()
+                runtime.tokenStore.destroy()
+            } else {
+                TokenStore(context, id).destroy()
+            }
+
+            val nextProfile = accountRegistry.remove(id)
+            if (deletingActive) {
+                accountLock(nextProfile.id).withLock {
+                    val next = withContext(Dispatchers.IO) { buildRuntime(nextProfile) }
+                    runtime = next
+                    next.syncScheduler.schedulePeriodic()
+                    generation += 1
+                    mutableActiveSession.value = ActiveSession(nextProfile, generation)
+                }
+            }
+
+            withContext(Dispatchers.IO) {
+                check(!directory.exists() || directory.deleteRecursively()) {
+                    "Suppression du dossier de profil impossible" // i18n-ok
+                }
+            }
+            accountLocks.remove(id)
+        }
     }
 
     /**
@@ -156,7 +223,7 @@ class OCnotesApplication : Application() {
             nettoyerPartagesExpires(container.dossierPartage)
         }
         container.syncNotifier.ensureChannel()
-        container.syncScheduler.schedulePeriodic()
+        container.scheduleAllAccounts()
 
         // Retour au premier plan : c'est le moment où l'utilisateur va
         // regarder ses notes, donc celui où il faut avoir poussé les
