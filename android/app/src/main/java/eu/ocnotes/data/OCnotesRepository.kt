@@ -863,6 +863,19 @@ class OCnotesRepository(
     suspend fun unrepresentable(notePath: String, text: String): String? =
         call { it.unrepresentable(notePath, text) }.ifEmpty { null }
 
+    /**
+     * Encodage dans lequel une note refusée par [readNote] (`NOT_UTF8`) peut
+     * s'ouvrir quand même si l'utilisateur le demande, ou `null` s'il n'y en a
+     * aucun. Sans réseau : la note doit être en cache, ce qu'a fait son aperçu.
+     */
+    suspend fun forcibleEncoding(notePath: String): String? =
+        call { it.forcibleEncoding(notePath) }.ifEmpty { null }
+
+    /** Retient cet encodage pour le contenu actuel : [readNote] l'ouvre ensuite. */
+    suspend fun forceEncoding(notePath: String) {
+        call { it.forceEncoding(notePath) }
+    }
+
     /** Libère les images d'une session, **après** sa dernière écriture. */
     suspend fun closeEdit(session: String) {
         if (session.isNotEmpty()) call { it.closeEdit(session) }

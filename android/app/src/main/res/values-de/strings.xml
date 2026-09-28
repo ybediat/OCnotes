@@ -506,6 +506,7 @@
     <string name="apercu_texte_lecture_seule">Dieser Dateityp wird schreibgeschützt geöffnet.</string>
     <string name="apercu_autorisation_lecture_seule">Sie können diese Notiz anzeigen, sind aber nicht berechtigt, sie zu bearbeiten.</string>
     <string name="apercu_encodage_lecture_seule">Die Kodierung dieser Datei lässt sich nicht sicher bestimmen. Sie wird schreibgeschützt geöffnet, damit sie nicht beschädigt wird.</string>
+    <string name="apercu_ouvrir_quand_meme">Trotzdem als %1$s öffnen</string>
     <string name="sync_conflits_suppression">\n• Löschung abgebrochen: %1$s wurde remote geändert</string>
     <string name="sync_conflits_deplacement">\n• Verschiebung abgebrochen; Kopie beibehalten: %1$s</string>
     <string name="reglages_conflits_suppression">• Löschung abgebrochen: %1$s wurde remote geändert</string>

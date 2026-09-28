@@ -1322,6 +1322,9 @@ func indexByte(s string, b byte) int {
 //
 //   - l'UTF-16 sans BOM, reconnu à ses octets nuls par une heuristique : on ne
 //     réécrit pas un fichier sur une supposition qui peut être fausse ;
+//   - un texte qui, lu en Windows-1252, ne ressemble pas à une langue de
+//     l'Ouest : c'est sans doute un autre encodage sur 8 bits (polonais,
+//     russe, japonais…), qu'y écrire mêlerait au Windows-1252 ;
 //   - un contenu que décoder puis réencoder ne rend pas à l'identique — un
 //     UTF-16 tronqué, par exemple. L'écrire, même sans rien y changer, en
 //     perdrait des octets.
@@ -1361,11 +1364,17 @@ func asciiOnly(content []byte) bool {
 }
 
 // rewritable dit si un encodage détecté est assez sûr pour réécrire le
-// fichier. Seul l'UTF-16 sans BOM ne l'est pas : c'est une supposition.
-func rewritable(enc charset.Encoding) bool {
+// fichier. Deux détections sont des suppositions : l'UTF-16 sans BOM, et le
+// Windows-1252, qui reçoit tout ce qui n'est ni UTF-8 ni UTF-16. Le premier
+// n'est jamais réécrit ; le second seulement si le texte ressemble à une
+// langue de l'Ouest (charset.Plausible1252) — un fichier polonais en
+// ISO-8859-2 lu en Windows-1252 reste en aperçu.
+func rewritable(enc charset.Encoding, text string) bool {
 	switch enc.Name {
 	case charset.UTF16LE, charset.UTF16BE:
 		return enc.BOM
+	case charset.Windows1252:
+		return charset.Plausible1252(text)
 	default:
 		return true
 	}
@@ -1409,6 +1418,11 @@ func (a *App) formatFor(notePath string) noteFormat {
 		return f
 	}
 	if content, _, cached := a.cache.Get(notePath); cached {
+		if enc, ok := a.rememberedEncoding(notePath, content); ok {
+			if text, ok := charset.DecodeAs(content, enc); ok {
+				return noteFormat{encoding: enc, ending: notes.DetectLineEnding(text)}
+			}
+		}
 		text, enc := charset.Decode(content)
 		if enc.Name == charset.UTF8 && !enc.BOM && asciiOnly(content) && a.cache.TextEncoding(notePath) == string(charset.Windows1252) {
 			enc = charset.Encoding{Name: charset.Windows1252}
@@ -1558,7 +1572,10 @@ func (a *App) WriteNote(notePath, content string) error {
 		// plutôt que le remplacer par « ? », qui serait une perte sans message.
 		return fmt.Errorf("mobile: %s : %w", notePath, err)
 	}
-	return a.cache.Put(notePath, encoded)
+	// L'encodage est retenu avec le contenu : à la réouverture, c'est lui qui
+	// décide, et non une détection qui pourrait douter du texte qu'on vient
+	// d'écrire.
+	return a.cache.PutEncoded(notePath, encoded, encodingLabel(f.encoding))
 }
 
 // RefreshNote force la relecture d'une note depuis le serveur.

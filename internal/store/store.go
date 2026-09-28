@@ -95,6 +95,19 @@ type Entry struct {
 	// pas moins importante.
 	Conflict bool `json:"conflict,omitempty"`
 
+	// Encoding est l'encodage d'un contenu qui n'est pas de l'UTF-8 simple,
+	// tel que l'application l'a écrit ou que l'utilisateur l'a choisi — une
+	// étiquette opaque pour le cache, que mobile/ produit et relit.
+	//
+	// Il ne vaut que pour le contenu dont EncodedHash est l'empreinte : un
+	// encodage sur 8 bits ne se lit pas dans les octets, il se devine, et la
+	// supposition peut changer d'avis sur un texte qu'on vient pourtant
+	// d'écrire nous-mêmes. Tant que le contenu est celui-là — qu'il soit resté
+	// en cache ou revenu du serveur à l'identique —, on sait ; dès qu'il
+	// change ailleurs, on ne sait plus, et la détection reprend la main.
+	Encoding    string `json:"encoding,omitempty"`
+	EncodedHash string `json:"encodedHash,omitempty"`
+
 	Size       int64     `json:"size"`
 	LocalMod   time.Time `json:"localMod"`
 	LastAccess time.Time `json:"lastAccess,omitempty"`
@@ -538,13 +551,72 @@ func (s *Store) Entries() []Entry {
 // La garde vit ici plutôt que dans l'interface parce que c'est la seule couche
 // que tous les chemins d'écriture traversent, et la seule qui se teste.
 func (s *Store) Put(notePath string, content []byte) error {
+	return s.PutEncoded(notePath, content, "")
+}
+
+// PutEncoded est Put pour un contenu qui n'est pas de l'UTF-8 simple : il
+// retient en plus son encodage, pour ce contenu-là (voir Entry.Encoding). Une
+// étiquette vide dit « UTF-8 » et efface toute mémoire antérieure.
+//
+// Un contenu inchangé n'est pas réécrit, mais son encodage est tout de même
+// retenu : c'est le même texte, et l'encodeur vient d'en répondre.
+func (s *Store) PutEncoded(notePath string, content []byte, encoding string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.unchangedLocked(notePath, content) {
+		if s.entries[notePath].setEncoding(content, encoding) {
+			return s.save()
+		}
 		return nil
 	}
-	return s.putLocked(notePath, content, true)
+	return s.putLocked(notePath, content, encoding, true)
+}
+
+// EncodingOf renvoie l'encodage retenu pour ce contenu précis, et false si
+// rien n'est retenu ou si le contenu a changé depuis.
+func (s *Store) EncodingOf(notePath string, content []byte) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entry, ok := s.entries[notePath]
+	if !ok || entry.Encoding == "" || entry.EncodedHash != contentHash(content) {
+		return "", false
+	}
+	return entry.Encoding, true
+}
+
+// RememberEncoding retient un encodage pour le contenu actuellement en cache,
+// sans le réécrire — le choix explicite de l'utilisateur, par exemple.
+func (s *Store) RememberEncoding(notePath, encoding string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entry, ok := s.entries[notePath]
+	if !ok {
+		return fmt.Errorf("store: %s n'est pas en cache", notePath)
+	}
+	content, err := os.ReadFile(s.blobPath(entry.Cache))
+	if err != nil {
+		return fmt.Errorf("store: [%s] lecture du cache de %s: %w", CodeStorageIO, notePath, err)
+	}
+	if entry.setEncoding(content, encoding) {
+		return s.save()
+	}
+	return nil
+}
+
+// setEncoding pose l'encodage d'un contenu, et dit s'il a changé.
+func (e *Entry) setEncoding(content []byte, encoding string) bool {
+	hash := ""
+	if encoding != "" {
+		hash = contentHash(content)
+	}
+	if e.Encoding == encoding && e.EncodedHash == hash {
+		return false
+	}
+	e.Encoding, e.EncodedHash = encoding, hash
+	return true
 }
 
 // unchangedLocked dit si réenregistrer ce contenu serait sans effet : le cache
@@ -632,12 +704,19 @@ func (s *Store) acceptLocked(notePath string, content []byte, etag string) error
 		LocalMod:   time.Now().UTC(),
 		LastAccess: time.Now().UTC(),
 	}
+	// L'encodage retenu suit : il ne vaut que pour son empreinte, donc il
+	// s'applique encore si le serveur a renvoyé le contenu qu'on lui avait
+	// écrit, et plus du tout sinon. Le perdre ici l'effaçait à chaque
+	// réouverture, puisque ReadNote rafraîchit toute note propre.
+	if old, ok := s.entries[notePath]; ok {
+		entry.Encoding, entry.EncodedHash = old.Encoding, old.EncodedHash
+	}
 	s.touchLocked(entry)
 	s.entries[notePath] = entry
 	return nil
 }
 
-func (s *Store) putLocked(notePath string, content []byte, enqueue bool) error {
+func (s *Store) putLocked(notePath string, content []byte, encoding string, enqueue bool) error {
 	if err := s.writeBlob(notePath, content); err != nil {
 		return err
 	}
@@ -652,6 +731,7 @@ func (s *Store) putLocked(notePath string, content []byte, enqueue bool) error {
 	// n'existent pas et ferait chercher à requeueOrphanWritesLocked une file
 	// à réparer.
 	entry.Dirty = !s.localOnly
+	entry.setEncoding(content, encoding)
 	entry.Size = int64(len(content))
 	entry.LocalMod = time.Now().UTC()
 	entry.LastAccess = entry.LocalMod

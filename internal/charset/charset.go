@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"strings"
+	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
 )
@@ -39,6 +41,68 @@ const (
 type Encoding struct {
 	Name Name
 	BOM  bool
+}
+
+// String est l'étiquette d'un encodage : son nom, suivi de « +BOM » quand il
+// en porte une. ParseEncoding la relit.
+func (e Encoding) String() string {
+	if e.BOM {
+		return string(e.Name) + "+BOM"
+	}
+	return string(e.Name)
+}
+
+// ParseEncoding relit une étiquette produite par String.
+func ParseEncoding(label string) (Encoding, bool) {
+	name, bom := strings.CutSuffix(label, "+BOM")
+	switch Name(name) {
+	case UTF8, UTF16LE, UTF16BE, Windows1252:
+		return Encoding{Name: Name(name), BOM: bom}, true
+	}
+	return Encoding{}, false
+}
+
+// DecodeAs décode un contenu dans un encodage imposé plutôt que détecté, et
+// refuse (false) si Encode ne le rendrait pas à l'identique : un encodage
+// imposé à tort ne doit pas plus abîmer un fichier qu'un encodage deviné.
+func DecodeAs(b []byte, enc Encoding) (string, bool) {
+	var s string
+	switch enc.Name {
+	case UTF8:
+		body := b
+		if enc.BOM {
+			if !bytes.HasPrefix(b, bomUTF8) {
+				return "", false
+			}
+			body = b[len(bomUTF8):]
+		}
+		if !utf8.Valid(body) {
+			return "", false
+		}
+		s = string(body)
+	case UTF16LE, UTF16BE:
+		body := b
+		if enc.BOM {
+			bom := bomUTF16LE
+			if enc.Name == UTF16BE {
+				bom = bomUTF16BE
+			}
+			if !bytes.HasPrefix(b, bom) {
+				return "", false
+			}
+			body = b[len(bom):]
+		}
+		s = decodeUTF16(body, enc.Name)
+	case Windows1252:
+		s = decode1252(b)
+	default:
+		return "", false
+	}
+	again, err := Encode(s, enc)
+	if err != nil || !bytes.Equal(again, b) {
+		return "", false
+	}
+	return s, true
 }
 
 // CodeUnrepresentable signale un caractère que l'encodage du fichier ne sait
@@ -258,6 +322,73 @@ func encode1252(s string) ([]byte, error) {
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+// Plausible1252 dit si un texte lu en Windows-1252 ressemble à une langue
+// d'Europe de l'Ouest — donc si la supposition de Detect a des chances d'être
+// la bonne.
+//
+// Detect lit en Windows-1252 tout ce qui n'est ni UTF-8 ni UTF-16. C'est
+// exact pour un fichier Latin-1, faux pour un fichier polonais en ISO-8859-2,
+// russe en Windows-1251 ou japonais en Shift-JIS : ils s'affichent en caractères
+// incohérents, et y écrire mêlerait deux encodages dans le même fichier. Un
+// tel fichier doit rester en aperçu seul.
+//
+// Trois motifs trahissent la mauvaise lecture, constatés sur de vrais textes :
+//
+//  1. un caractère de contrôle, ou l'un des cinq octets que Windows-1252 ne
+//     définit pas — le « ť » tchèque de Windows-1250 en est un ;
+//  2. un symbole coincé entre deux lettres : « Za¿ó³æ » pour « Zażółć » en
+//     ISO-8859-2, « R‚sum‚ » pour « Résumé » dans un fichier DOS. Une langue
+//     de l'Ouest n'y met qu'une apostrophe (« aujourd’hui ») ou le point
+//     médian catalan (« col·lecció ») ;
+//  3. trois caractères non ASCII d'affilée : « Ïðèâåò » pour « Привет »,
+//     « “ú–{Œê » pour « 日本語 ». Le français n'en aligne jamais plus de deux
+//     (« l’é », « ção » en portugais).
+//
+// La règle est volontairement prudente : un faux refus laisse le fichier en
+// aperçu, un faux accord le laisserait abîmer. Elle ne voit pas tout — un
+// texte tchèque sans « ť » ou un texte turc se lisent en lettres plausibles —
+// mais un caractère propre à ces langues y serait refusé à la saisie
+// (ENCODING_UNREPRESENTABLE) plutôt qu'écrit de travers.
+func Plausible1252(s string) bool {
+	var prev, prev2 rune
+	run := 0
+	for _, r := range s {
+		switch {
+		case r < 0x20 && r != '\t' && r != '\n' && r != '\r' && r != '\f':
+			return false
+		case r == 0x7F || (r >= 0x80 && r <= 0x9F):
+			return false
+		}
+
+		if r >= 0x80 {
+			run++
+			if run >= 3 {
+				return false
+			}
+		} else {
+			run = 0
+		}
+
+		// prev est coincé entre prev2 et r ?
+		if prev >= 0x80 && !unicode.IsLetter(prev) && !interLettres(prev) &&
+			unicode.IsLetter(prev2) && unicode.IsLetter(r) {
+			return false
+		}
+		prev2, prev = prev, r
+	}
+	return true
+}
+
+// interLettres liste les signes qu'une langue de l'Ouest place légitimement
+// entre deux lettres.
+func interLettres(r rune) bool {
+	switch r {
+	case '’', '‘', '·':
+		return true
+	}
+	return false
 }
 
 // byte1252 est l'octet Windows-1252 d'un caractère, s'il en a un.

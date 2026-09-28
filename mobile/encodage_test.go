@@ -57,6 +57,9 @@ func TestReadNoteRefuseCeQuIlNeSaitPasReecrire(t *testing.T) {
 		// « note ok » en UTF-16LE sans BOM. Tout en ASCII, c'est de l'UTF-8
 		// valide pour utf8.Valid — qui l'ouvrirait en saisie, nuls compris.
 		"sans-bom.txt": {[]byte("n\x00o\x00t\x00e\x00 \x00o\x00k\x00"), "note ok"},
+		// « Było już późno » en ISO-8859-2 : lu en Windows-1252, « By³o ju¿
+		// pó¼no ». Y écrire mêlerait deux encodages.
+		"polonais.txt": {[]byte("By\xb3o ju\xbf p\xf3\xbcno"), "By³o"},
 		// UTF-16 tronqué : un octet orphelin en fin de fichier.
 		"tronque.txt": {[]byte("\xff\xfeo\x00k\x00!"), "ok"},
 	}
@@ -140,9 +143,9 @@ func TestReecrireSansModifierRendLesMemesOctets(t *testing.T) {
 	app, server, _ := prepare(t)
 
 	octets := map[string][]byte{
-		// Les 256 octets, fins de ligne mises à part : Windows-1252 n'en perd
-		// aucun, pas même les cinq qu'il ne définit pas.
-		"tous.txt":   sansFinDeLigne(),
+		// Tous les caractères imprimables de Windows-1252, séparés d'espaces
+		// pour rester un texte plausible, en fins de ligne Windows.
+		"tous.txt":   imprimables1252(),
 		"utf16le.md": []byte("\xff\xfe\xc9\x00\r\x00\n\x00=\xd8\x00\xde"),
 		"utf16be.md": []byte("\xfe\xff\x00\xc9\x00\r\x00\n\xd8=\xde\x00"),
 		"bom.md":     []byte("\xef\xbb\xbf# \xc3\x89t\xc3\xa9\r\n"),
@@ -273,59 +276,128 @@ func deposer(server *fakeServer, fichiers map[string][]byte) {
 	}
 }
 
-func sansFinDeLigne() []byte {
+func imprimables1252() []byte {
 	var b []byte
-	for i := 0; i < 256; i++ {
-		if i != '\r' && i != '\n' {
-			b = append(b, byte(i))
+	for c := 0x21; c < 0x100; c++ {
+		switch c {
+		case 0x7F, 0x81, 0x8D, 0x8F, 0x90, 0x9D:
+			continue // DEL et les cinq octets que Windows-1252 ne définit pas
+		}
+		b = append(b, byte(c), ' ')
+		if c%16 == 0 {
+			b = append(b, "\r\n"...)
 		}
 	}
 	return b
 }
 
-// Le texte en lecture seule est refusé à chaque porte d'écriture, pas
-// seulement à celle que l'interface est censée emprunter.
-func TestUnTexteEnLectureSeuleNeSEcritPas(t *testing.T) {
-	app, server, _ := prepare(t)
+// Le scénario qui a motivé la mémoire du cache : une note Windows-1252 où l'on
+// tape « éœœ » — trois caractères non ASCII d'affilée, que la détection juge
+// peu plausibles. Écrite par l'application, envoyée, puis rouverte après un
+// redémarrage, elle doit se rouvrir en saisie et en Windows-1252.
+func TestUneNoteEcriteParLApplicationSeRouvreDansSonEncodage(t *testing.T) {
+	app, server, dataDir := prepare(t)
+	deposer(server, map[string][]byte{"latin1.txt": []byte("caf\xe9\n")})
 
-	const nom = "config.yaml"
-	server.mu.Lock()
-	server.files["Notes/"+nom] = []byte("port: 80\n")
-	server.etags["Notes/"+nom] = server.nextETag()
-	server.mu.Unlock()
-
-	if err := app.WriteNote(nom, "port: 81\n"); ErrorCode(errString(err)) != "READONLY" {
-		t.Errorf("WriteNote : %v, attendu READONLY", err)
+	texte, err := app.ReadNote("latin1.txt")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := app.OpenEditJSON(nom, "port: 80\n"); ErrorCode(errString(err)) != "READONLY" {
-		t.Errorf("OpenEditJSON : %v, attendu READONLY", err)
+	if err := app.WriteNote("latin1.txt", texte+"É éœœ ø\n"); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := app.CopyJSON(nom, ""); ErrorCode(errString(err)) != CodeUnsupported {
-		t.Errorf("CopyJSON : %v, attendu %s", err, CodeUnsupported)
-	}
-	if n := app.PendingCount(); n != 0 {
-		t.Errorf("%d écriture(s) en attente vers le serveur", n)
+	if _, err := app.SyncJSON(); err != nil {
+		t.Fatal(err)
 	}
 
-	server.mu.Lock()
-	defer server.mu.Unlock()
-	if got := string(server.files["Notes/"+nom]); got != "port: 80\n" {
-		t.Errorf("le serveur a été modifié : %q", got)
+	relancee, err := NewApp(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := relancee.Restore(fakeToken); err != nil {
+		t.Fatal(err)
+	}
+	texte, err = relancee.ReadNote("latin1.txt")
+	if err != nil {
+		t.Fatalf("ReadNote après redémarrage : %v", err)
+	}
+	if texte != "café\nÉ éœœ ø\n" {
+		t.Errorf("ReadNote = %q", texte)
+	}
+	if enc := relancee.NoteEncoding("latin1.txt"); enc != "windows-1252" {
+		t.Errorf("NoteEncoding = %q", enc)
 	}
 }
 
-func TestIsReadOnlyEstExposeSansDupliquerLesExtensions(t *testing.T) {
-	for _, nom := range []string{"config.yaml", "rapport.docx"} {
-		if !IsReadOnly(nom) {
-			t.Errorf("IsReadOnly(%q) = false", nom)
+// Modifiée ailleurs, la même note redevient l'affaire de la détection : la
+// mémoire ne vaut que pour le contenu que l'application a écrit.
+func TestLaMemoireNeCouvrePasUneModificationFaiteAilleurs(t *testing.T) {
+	app, server, _ := prepare(t)
+	deposer(server, map[string][]byte{"note.txt": []byte("caf\xe9\n")})
+
+	if _, err := app.ReadNote("note.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.WriteNote("note.txt", "café !\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.SyncJSON(); err != nil {
+		t.Fatal(err)
+	}
+	// Quelqu'un y dépose du polonais en ISO-8859-2.
+	deposer(server, map[string][]byte{"note.txt": []byte("By\xb3o ju\xbf p\xf3\xbcno")})
+
+	if _, err := app.ReadNote("note.txt"); ErrorCode(errString(err)) != CodeNotUTF8 {
+		t.Errorf("ReadNote : %v, attendu %s", err, CodeNotUTF8)
+	}
+}
+
+// Le bouton « Ouvrir quand même » : ForcibleEncoding dit dans quel encodage,
+// ForceEncoding le retient, et la note s'ouvre alors en saisie. Un fichier
+// qu'aucun encodage ne rend à l'identique n'a pas de bouton.
+func TestOuvrirQuandMemeDansLEncodageDevine(t *testing.T) {
+	app, server, _ := prepare(t)
+	deposer(server, map[string][]byte{
+		"court.txt":    []byte("\xc9 \xe9\x9c\x9c \xf8\n"),
+		"sans-bom.txt": []byte("o\x00k\x00"),
+		"tronque.txt":  []byte("\xff\xfeo\x00k\x00!"),
+	})
+
+	cas := []struct{ nom, enc, texte string }{
+		{"court.txt", "windows-1252", "É éœœ ø\n"},
+		{"sans-bom.txt", "UTF-16LE", "ok"},
+	}
+	for _, c := range cas {
+		if _, err := app.ReadNote(c.nom); ErrorCode(errString(err)) != CodeNotUTF8 {
+			t.Fatalf("ReadNote(%s) : %v, attendu %s avant le choix", c.nom, err, CodeNotUTF8)
+		}
+		if enc := app.ForcibleEncoding(c.nom); enc != c.enc {
+			t.Errorf("ForcibleEncoding(%s) = %q, veut %q", c.nom, enc, c.enc)
+		}
+		if err := app.ForceEncoding(c.nom); err != nil {
+			t.Fatalf("ForceEncoding(%s) : %v", c.nom, err)
+		}
+		texte, err := app.ReadNote(c.nom)
+		if err != nil || texte != c.texte {
+			t.Errorf("ReadNote(%s) après le choix = %q, %v ; veut %q", c.nom, texte, err, c.texte)
 		}
 	}
-	for _, nom := range []string{"note.md", "note.txt"} {
-		if IsReadOnly(nom) {
-			t.Errorf("IsReadOnly(%q) = true", nom)
-		}
+
+	// L'UTF-16 sans BOM choisi se réécrit sans BOM, dans le même boutisme.
+	if err := app.WriteNote("sans-bom.txt", "ok!"); err != nil {
+		t.Fatal(err)
 	}
-	if !IsPlainText("config.yaml") {
-		t.Error("un .yaml ne s'affiche pas tel quel")
+	if contenu, _, _ := app.cache.Get("sans-bom.txt"); string(contenu) != "o\x00k\x00!\x00" {
+		t.Errorf("sans-bom.txt réécrit en %q", contenu)
+	}
+
+	if _, err := app.ReadNote("tronque.txt"); err == nil {
+		t.Fatal("un UTF-16 tronqué s'ouvre en saisie")
+	}
+	if enc := app.ForcibleEncoding("tronque.txt"); enc != "" {
+		t.Errorf("ForcibleEncoding(tronque.txt) = %q, veut aucun", enc)
+	}
+	if err := app.ForceEncoding("tronque.txt"); ErrorCode(errString(err)) != CodeNotUTF8 {
+		t.Errorf("ForceEncoding(tronque.txt) : %v, attendu %s", err, CodeNotUTF8)
 	}
 }

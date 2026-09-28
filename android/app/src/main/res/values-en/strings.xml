@@ -529,6 +529,7 @@
     <string name="apercu_texte_lecture_seule">This type of file opens in read-only mode.</string>
     <string name="apercu_autorisation_lecture_seule">You can view this note, but you do not have permission to edit it.</string>
     <string name="apercu_encodage_lecture_seule">This file\'s encoding cannot be identified with certainty. It is open in read-only mode so that it is not damaged.</string>
+    <string name="apercu_ouvrir_quand_meme">Open anyway as %1$s</string>
     <string name="sync_conflits_suppression">\n• deletion cancelled: %1$s changed remotely</string>
     <string name="sync_conflits_deplacement">\n• move cancelled; copy kept: %1$s</string>
     <string name="reglages_conflits_suppression">• Deletion cancelled: %1$s changed remotely</string>

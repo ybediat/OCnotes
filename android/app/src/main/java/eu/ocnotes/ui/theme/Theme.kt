@@ -10,10 +10,12 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.ocnotes.R
 
 // Rôles publiés par le design system OpenCloud :
 // https://docs.opencloud.eu/design-system/designTokens/colorRoles.html
@@ -113,13 +115,42 @@ val StyleEditeur = TextStyle(
     lineHeight = 24.sp,
 )
 
-private val Typographie = Typography(
-    titleLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 20.sp,
-    ),
+// Police de l'interface, hors éditeur (voir StyleEditeur ci-dessus).
+private val PoliceOCnotes = FontFamily(
+    Font(R.font.lexend_thin, FontWeight.Thin),
+    Font(R.font.lexend_extralight, FontWeight.ExtraLight),
+    Font(R.font.lexend_light, FontWeight.Light),
+    Font(R.font.lexend_regular, FontWeight.Normal),
+    Font(R.font.lexend_medium, FontWeight.Medium),
+    Font(R.font.lexend_semibold, FontWeight.SemiBold),
+    Font(R.font.lexend_bold, FontWeight.Bold),
+    Font(R.font.lexend_extrabold, FontWeight.ExtraBold),
+    Font(R.font.lexend_black, FontWeight.Black),
 )
+
+private val Typographie = Typography().let { defaut ->
+    Typography(
+        displayLarge = defaut.displayLarge.copy(fontFamily = PoliceOCnotes),
+        displayMedium = defaut.displayMedium.copy(fontFamily = PoliceOCnotes),
+        displaySmall = defaut.displaySmall.copy(fontFamily = PoliceOCnotes),
+        headlineLarge = defaut.headlineLarge.copy(fontFamily = PoliceOCnotes),
+        headlineMedium = defaut.headlineMedium.copy(fontFamily = PoliceOCnotes),
+        headlineSmall = defaut.headlineSmall.copy(fontFamily = PoliceOCnotes),
+        titleLarge = defaut.titleLarge.copy(
+            fontFamily = PoliceOCnotes,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 20.sp,
+        ),
+        titleMedium = defaut.titleMedium.copy(fontFamily = PoliceOCnotes),
+        titleSmall = defaut.titleSmall.copy(fontFamily = PoliceOCnotes),
+        bodyLarge = defaut.bodyLarge.copy(fontFamily = PoliceOCnotes),
+        bodyMedium = defaut.bodyMedium.copy(fontFamily = PoliceOCnotes),
+        bodySmall = defaut.bodySmall.copy(fontFamily = PoliceOCnotes),
+        labelLarge = defaut.labelLarge.copy(fontFamily = PoliceOCnotes),
+        labelMedium = defaut.labelMedium.copy(fontFamily = PoliceOCnotes),
+        labelSmall = defaut.labelSmall.copy(fontFamily = PoliceOCnotes),
+    )
+}
 
 // Un cran plus rond que les valeurs par défaut de Material 3 (4/8/12/16/28dp) :
 // de quoi adoucir cartes, menus et dialogues sans sombrer dans le tout-pilule.
