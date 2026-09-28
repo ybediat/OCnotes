@@ -145,12 +145,6 @@ type Store struct {
 	quota     int64
 	conflicts map[string]Conflict
 
-	// textEncodings est séparé des Entry : une entrée disparaît quand son blob
-	// est évincé par le quota, tandis que l'encodage ambigu doit survivre au
-	// retéléchargement. Les valeurs sont opaques pour store et interprétées par
-	// la façade mobile.
-	textEncodings map[string]string
-
 	// known est l'inventaire : toutes les notes de l'espace, y compris celles
 	// dont le contenu n'a jamais été téléchargé. Voir index.go — c'est ce qui
 	// permet à la liste plate de s'ouvrir hors connexion.
@@ -189,7 +183,6 @@ type persisted struct {
 	Known             map[string]*Known   `json:"known,omitempty"`
 	Indexed           bool                `json:"indexed,omitempty"`
 	Conflicts         map[string]Conflict `json:"conflicts,omitempty"`
-	TextEncodings     map[string]string   `json:"textEncodings,omitempty"`
 
 	// LocalOnly n'a pas demandé de version d'index : un champ dont la valeur
 	// nulle est le comportement d'avant ne casse aucune lecture.
@@ -214,7 +207,6 @@ func Open(dir string) (*Store, error) {
 		known:             map[string]*Known{},
 		quota:             DefaultQuotaBytes,
 		conflicts:         map[string]Conflict{},
-		textEncodings:     map[string]string{},
 	}
 
 	data, err := os.ReadFile(s.indexPath())
@@ -243,9 +235,6 @@ func Open(dir string) (*Store, error) {
 	}
 	if state.Conflicts != nil {
 		s.conflicts = state.Conflicts
-	}
-	if state.TextEncodings != nil {
-		s.textEncodings = state.TextEncodings
 	}
 	s.indexed = state.Indexed
 	s.queue = state.Queue
@@ -390,7 +379,6 @@ func (s *Store) save() error {
 		Known:             s.known,
 		Indexed:           s.indexed,
 		Conflicts:         s.conflicts,
-		TextEncodings:     s.textEncodings,
 		LocalOnly:         s.localOnly,
 	}
 	data, err := json.Marshal(state)
@@ -490,35 +478,6 @@ func (s *Store) CachedEntry(notePath string) (Entry, bool) {
 		return Entry{}, false
 	}
 	return *entry, true
-}
-
-// RememberTextEncoding associe un encodage détecté au contenu en cache.
-//
-// Cette métadonnée ne modifie ni le contenu, ni son état Dirty, ni la file de
-// synchronisation. Elle est néanmoins persistée immédiatement : sa raison
-// d'être est précisément de survivre à l'arrêt du processus.
-func (s *Store) RememberTextEncoding(notePath, encoding string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, cached := s.entries[notePath]; !cached {
-		if _, known := s.known[notePath]; !known {
-			return nil
-		}
-	}
-	if s.textEncodings[notePath] == encoding {
-		return nil
-	}
-	s.textEncodings[notePath] = encoding
-	return s.save()
-}
-
-// TextEncoding renvoie l'encodage précédemment associé à un chemin, même si
-// son contenu a depuis été évincé du cache puis retéléchargé.
-func (s *Store) TextEncoding(notePath string) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.textEncodings[notePath]
 }
 
 // Entries renvoie l'état du cache, trié par chemin.
@@ -796,11 +755,6 @@ func (s *Store) dropLocked(itemPath string) {
 			delete(s.entries, p)
 		}
 	}
-	for p := range s.textEncodings {
-		if p == itemPath || strings.HasPrefix(p, itemPath+"/") {
-			delete(s.textEncodings, p)
-		}
-	}
 	s.forgetFolderLocked(itemPath)
 	s.forgetKnownLocked(itemPath)
 }
@@ -914,12 +868,6 @@ func (s *Store) renameLocked(from, to string, enqueue, refuseTaken bool) error {
 		s.touchLocked(entry)
 		delete(s.entries, chemin)
 		s.entries[cible] = entry
-	}
-	for chemin, encoding := range s.textEncodings {
-		if suffixe, ok := sousChemin(chemin, from); ok {
-			delete(s.textEncodings, chemin)
-			s.textEncodings[to+suffixe] = encoding
-		}
 	}
 
 	// Les écritures en attente suivent aussi, et c'est le cœur du correctif.

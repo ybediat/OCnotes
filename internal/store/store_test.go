@@ -162,49 +162,6 @@ func newStore(t *testing.T) *Store {
 	return s
 }
 
-func TestEncodageTexteSurvitAuRedemarrageEtAEviction(t *testing.T) {
-	dir := t.TempDir()
-	s, err := Open(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Accept("note.txt", []byte("ete\n"), "e1"); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.RememberTextEncoding("note.txt", "windows-1252"); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Prune(); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, ok := s.Get("note.txt"); ok {
-		t.Fatal("la note propre aurait dû être évincée")
-	}
-
-	relance, err := Open(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := relance.TextEncoding("note.txt"); got != "windows-1252" {
-		t.Fatalf("encodage après éviction et redémarrage = %q", got)
-	}
-	if err := relance.RenameLocal("note.txt", "renommee.txt"); err != nil {
-		t.Fatal(err)
-	}
-	if got := relance.TextEncoding("renommee.txt"); got != "windows-1252" {
-		t.Fatalf("encodage après renommage = %q", got)
-	}
-	if got := relance.TextEncoding("note.txt"); got != "" {
-		t.Fatalf("l'ancien chemin conserve l'encodage %q", got)
-	}
-	if err := relance.Forget("renommee.txt"); err != nil {
-		t.Fatal(err)
-	}
-	if got := relance.TextEncoding("renommee.txt"); got != "" {
-		t.Fatalf("le chemin supprimé conserve l'encodage %q", got)
-	}
-}
-
 func testTime() time.Time {
 	return time.Date(2026, 8, 28, 14, 32, 5, 0, time.UTC)
 }
