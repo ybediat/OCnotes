@@ -860,13 +860,15 @@ func TestIndexIllisibleNEmpechePasLOuverture(t *testing.T) {
 		t.Fatalf("écriture de l'index corrompu: %v", err)
 	}
 
-	// Perdre le cache est bénin ; refuser de démarrer ne l'est pas.
+	// La génération immuable précédente prend le relais : corrompre le miroir
+	// courant ne doit perdre ni l'index ni le contenu.
 	again, err := Open(dir)
 	if err != nil {
 		t.Fatalf("Open sur index corrompu: %v", err)
 	}
-	if len(again.Entries()) != 0 {
-		t.Errorf("entrées = %+v, attendu un cache vide", again.Entries())
+	content, _, ok := again.Get("a.md")
+	if !ok || string(content) != "x" {
+		t.Errorf("note restaurée = %q, présente = %v", content, ok)
 	}
 }
 

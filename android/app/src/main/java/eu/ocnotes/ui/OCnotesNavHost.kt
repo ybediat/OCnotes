@@ -95,6 +95,7 @@ fun OCnotesNavHost(
         composable(Routes.NAVIGATEUR) {
             BrowserScreen(
                 onOuvrirNote = { chemin -> navController.navigate(Routes.editeur(chemin)) },
+                onOuvrirMenu = onOuvrirComptes,
             )
         }
 

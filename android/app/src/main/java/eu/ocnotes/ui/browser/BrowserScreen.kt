@@ -2,13 +2,20 @@ package eu.ocnotes.ui.browser
 
 import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,7 +27,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
+import androidx.compose.material.icons.automirrored.filled.MenuOpen
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CreateNewFolder
@@ -29,10 +39,8 @@ import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.SortByAlpha
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -63,11 +71,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -113,6 +125,7 @@ private sealed interface Dialogue {
 @Composable
 fun BrowserScreen(
     onOuvrirNote: (String) -> Unit,
+    onOuvrirMenu: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: BrowserViewModel = viewModel(
         factory = BrowserViewModel.factory(LocalContext.current.appContainer),
@@ -197,12 +210,25 @@ fun BrowserScreen(
             } else {
                 TopAppBar(
                     title = {
-                        Text(
-                            text = etat.titre,
-                            style = StyleTitrePrincipal,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text(
+                                text = etat.titre,
+                                style = StyleTitrePrincipal,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            if (!etat.modeLocal) {
+                                IndicateurSynchronisation(
+                                    enCours = etat.synchronisationEnCours,
+                                    enAttente = etat.enAttente,
+                                    attention = etat.depuisCache || etat.erreur != null,
+                                )
+                            }
+                        }
                     },
                     navigationIcon = {
                         if (etat.peutRemonter) {
@@ -212,6 +238,13 @@ fun BrowserScreen(
                                     contentDescription = stringResource(
                                         R.string.browser_dossier_parent,
                                     ),
+                                )
+                            }
+                        } else {
+                            IconButton(onClick = onOuvrirMenu) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.MenuOpen,
+                                    contentDescription = stringResource(R.string.menu_ouvrir_navigation),
                                 )
                             }
                         }
@@ -555,7 +588,12 @@ private fun ListeEntrees(
     onPartager: (FolderEntryDto) -> Unit,
     onSupprimer: (FolderEntryDto) -> Unit,
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        // Les deux boutons de création flottent au-dessus du contenu. Cette
+        // réserve permet de faire remonter la dernière ligne entièrement.
+        contentPadding = PaddingValues(bottom = 156.dp),
+    ) {
         var moisPrecedent: YearMonth? = null
 
         entrees.forEach { entree ->
@@ -671,32 +709,94 @@ private fun BarreRecherche(
     )
 }
 
-/**
- * Bouton de tri à deux états.
- *
- * L'icône **et** la description annoncent la même chose : l'ordre qu'un appui
- * donnerait, pas celui en cours. Les faire diverger — l'icône pour l'état, la
- * description pour l'action — ferait entendre à TalkBack le contraire de ce
- * que l'écran montre. L'ordre en vigueur, lui, se lit dans la liste.
- */
+/** Menu de tri explicite : la coche montre l'ordre actuellement appliqué. */
 @Composable
 private fun BoutonTri(tri: Tri, onChanger: () -> Unit) {
-    val propose = tri.suivant()
+    var ouvert by remember { mutableStateOf(false) }
 
-    IconButton(onClick = onChanger) {
-        Icon(
-            imageVector = when (propose) {
-                Tri.NOM -> Icons.Default.SortByAlpha
-                Tri.DATE -> Icons.Default.Schedule
-            },
-            contentDescription = stringResource(
-                when (propose) {
-                    Tri.NOM -> R.string.browser_tri_par_nom
-                    Tri.DATE -> R.string.browser_tri_par_date
-                },
-            ),
-        )
+    Box {
+        IconButton(onClick = { ouvert = true }) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Sort,
+                contentDescription = stringResource(R.string.browser_tri_menu),
+            )
+        }
+        DropdownMenu(expanded = ouvert, onDismissRequest = { ouvert = false }) {
+            Tri.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            stringResource(
+                                when (option) {
+                                    Tri.NOM -> R.string.browser_tri_par_nom
+                                    Tri.DATE -> R.string.browser_tri_par_date
+                                },
+                            ),
+                        )
+                    },
+                    trailingIcon = {
+                        if (option == tri) {
+                            Icon(Icons.Default.Check, contentDescription = null)
+                        }
+                    },
+                    onClick = {
+                        ouvert = false
+                        if (option != tri) onChanger()
+                    },
+                )
+            }
+        }
     }
+}
+
+/** État compact de la synchronisation, accolé au nom du dossier courant. */
+@Composable
+private fun IndicateurSynchronisation(
+    enCours: Boolean,
+    enAttente: Int,
+    attention: Boolean,
+) {
+    val orange = if (isSystemInDarkTheme()) Color(0xFFFFB45C) else Color(0xFFC75B00)
+    val vert = if (isSystemInDarkTheme()) Color(0xFF6DD58C) else Color(0xFF19753A)
+    val pulsation = if (enCours) {
+        val transition = rememberInfiniteTransition(label = "synchronisation")
+        val valeur by transition.animateFloat(
+            initialValue = 0.42f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 700),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "pulsation-synchronisation",
+        )
+        valeur
+    } else {
+        1f
+    }
+    val description = when {
+        enCours -> stringResource(R.string.browser_sync_en_cours)
+        enAttente > 0 -> pluralStringResource(
+            R.plurals.browser_sync_en_attente,
+            enAttente,
+            enAttente,
+        )
+        attention -> stringResource(R.string.browser_sync_attention)
+        else -> stringResource(R.string.browser_sync_ok)
+    }
+
+    Box(
+        modifier = Modifier
+            .size(10.dp)
+            .then(
+                if (enCours) {
+                    Modifier.scale(0.85f + pulsation * 0.15f).alpha(pulsation)
+                } else {
+                    Modifier
+                },
+            )
+            .background(if (enCours || enAttente > 0 || attention) orange else vert, CircleShape)
+            .semantics { contentDescription = description },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)

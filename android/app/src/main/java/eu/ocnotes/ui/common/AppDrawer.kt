@@ -4,9 +4,16 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
@@ -287,29 +294,102 @@ private fun adresseServeur(compte: AccountProfile): String? =
 
 @Composable
 private fun AProposDialog(onFermer: () -> Unit) {
+    val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
-    val depot = stringResource(R.string.a_propos_depot_url)
+    val version = remember(context) {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull().orEmpty()
+    }
 
     AlertDialog(
         onDismissRequest = onFermer,
         title = { Text(stringResource(R.string.a_propos_titre)) },
         text = {
-            Text(
-                listOf(
-                    stringResource(R.string.a_propos_description),
-                    stringResource(R.string.a_propos_licence),
-                ).joinToString("\n\n"),
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { uriHandler.openUri(depot) }) {
-                Text(stringResource(R.string.a_propos_depot))
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.a_propos_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = stringResource(R.string.a_propos_signature, version),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+
+                AProposSection(stringResource(R.string.a_propos_section_projet))
+                AProposLink(
+                    label = stringResource(R.string.a_propos_opencloud),
+                    url = stringResource(R.string.a_propos_opencloud_url),
+                    onOpen = uriHandler::openUri,
+                )
+                AProposLink(
+                    label = stringResource(R.string.a_propos_depot),
+                    url = stringResource(R.string.a_propos_depot_url),
+                    onOpen = uriHandler::openUri,
+                )
+                AProposLink(
+                    label = stringResource(R.string.a_propos_licence),
+                    url = stringResource(R.string.a_propos_licence_url),
+                    onOpen = uriHandler::openUri,
+                )
+
+                AProposSection(stringResource(R.string.a_propos_section_polices))
+                AProposLink(
+                    label = stringResource(R.string.a_propos_police_faune),
+                    url = stringResource(R.string.a_propos_police_faune_url),
+                    onOpen = uriHandler::openUri,
+                )
+                AProposLink(
+                    label = stringResource(R.string.a_propos_police_lexend),
+                    url = stringResource(R.string.a_propos_police_lexend_url),
+                    onOpen = uriHandler::openUri,
+                )
             }
         },
+        confirmButton = {},
         dismissButton = {
             TextButton(onClick = onFermer) {
-                Text(stringResource(R.string.action_retour))
+                Text(stringResource(R.string.action_fermer))
             }
         },
     )
+}
+
+@Composable
+private fun AProposSection(label: String) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp, start = 12.dp),
+    )
+}
+
+@Composable
+private fun AProposLink(
+    label: String,
+    url: String,
+    onOpen: (String) -> Unit,
+) {
+    TextButton(
+        onClick = { onOpen(url) },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(label)
+        }
+    }
 }

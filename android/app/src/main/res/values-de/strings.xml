@@ -285,10 +285,17 @@
     <string name="browser_liste_vide_titre">Keine Notizen</string>
     <string name="browser_liste_vide_detail">Erstellen Sie Ihre erste Notiz mit der Schaltfläche unten auf dem Bildschirm.</string>
 
-    <!-- Sortierschaltfläche: Ihr Symbol zeigt die aktuelle Sortierreihenfolge an, ihre Beschreibung gibt an,
-         was ein Druck darauf bewirken würde – das ist das, was TalkBack benötigt. -->
+    <!-- Sortiermenü: Die aktive Reihenfolge ist mit einem Häkchen markiert. -->
     <string name="browser_tri_par_nom">Nach Namen sortieren</string>
     <string name="browser_tri_par_date">Nach Datum sortieren</string>
+    <string name="browser_tri_menu">Sortierung auswählen</string>
+    <string name="browser_sync_en_cours">Synchronisierung läuft</string>
+    <plurals name="browser_sync_en_attente">
+        <item quantity="one">%1$d Änderung zu synchronisieren</item>
+        <item quantity="other">%1$d Änderungen zu synchronisieren</item>
+    </plurals>
+    <string name="browser_sync_attention">Synchronisierung prüfen</string>
+    <string name="browser_sync_ok">Synchronisierung aktuell</string>
 
     <!-- Ein leerer Ordner ist kein Fehler: Dies angeben und erklären, was zu tun ist. -->
     <string name="browser_vide_titre">Dieser Ordner ist leer</string>
@@ -325,10 +332,17 @@
          ================================================================ -->
     <string name="menu_reglages">Einstellungen</string>
     <string name="menu_a_propos">Über</string>
+    <string name="menu_ouvrir_navigation">Navigationsmenü öffnen</string>
     <string name="a_propos_titre">Über OCnotes</string>
-    <string name="a_propos_description">Manager für Markdown-Notizen auf diesem Gerät oder synchronisiert mit OpenCloud. Erstellt von Yannis Bediat. V1.0 August 2026</string>
-    <string name="a_propos_licence">Lizenz: MIT https://github.com/ybediat/OCnotes/tree/main?tab=MIT-1-ov-file</string>
-    <string name="a_propos_depot">Git-Repository</string>
+    <string name="a_propos_description">Ein Markdown-Notizmanager für dieses Gerät, optional mit OpenCloud-Synchronisierung.</string>
+    <string name="a_propos_signature">Erstellt von Yannis Bediat · Version %1$s</string>
+    <string name="a_propos_section_projet">Das Projekt</string>
+    <string name="a_propos_opencloud">OpenCloud entdecken</string>
+    <string name="a_propos_depot">Quellcode auf GitHub</string>
+    <string name="a_propos_licence">MIT-Lizenz von OCnotes</string>
+    <string name="a_propos_section_polices">Schriftangaben</string>
+    <string name="a_propos_police_faune">Faune · CNAP</string>
+    <string name="a_propos_police_lexend">Lexend · Google Fonts</string>
 
     <!-- ================================================================
          Einstellungen

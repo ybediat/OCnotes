@@ -43,6 +43,12 @@ vers un serveur permet soit d'adopter les notes locales, soit de repartir des
 notes distantes. Dans l'autre sens, l'application pousse d'abord les écritures
 en attente et rapatrie les contenus manquants avant d'oublier le serveur.
 
+Les contenus utilisent des identifiants physiques stables, indépendants de
+leur chemin logique : renommer une note ne déplace pas son blob. L'index est
+conservé sous dix générations immuables. Au démarrage, la génération valide la
+plus récente est retenue ; en mode local, tout blob non référencé est remonté à
+la racine sous un nom « Note récupérée NNN.md » plutôt que supprimé.
+
 Les écritures distantes utilisent les ETags et les préconditions HTTP. Si une
 note a été modifiée à la fois localement et sur le serveur, OCnotes n'écrase
 pas silencieusement la version distante : la situation est signalée afin que

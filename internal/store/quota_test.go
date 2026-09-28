@@ -136,6 +136,7 @@ func TestPruneMesureLesFichiersEtSurvitAuRedemarrage(t *testing.T) {
 	accepteSansQuota(t, s, "b.md", "bbbb")
 	fixeAcces(t, s, "a.md", time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC))
 	fixeAcces(t, s, "b.md", time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC))
+	cacheA := s.entries["a.md"].Cache
 
 	// Entry.Size est volontairement faux : seule la taille réelle décide.
 	s.mu.Lock()
@@ -163,7 +164,7 @@ func TestPruneMesureLesFichiersEtSurvitAuRedemarrage(t *testing.T) {
 	if content, entry, ok := reopened.Get("b.md"); !ok || string(content) != "bbbb" || entry.LastAccess.IsZero() {
 		t.Errorf("b.md après redémarrage = %q, entrée = %+v, présente = %v", content, entry, ok)
 	}
-	if _, err := os.Stat(reopened.blobPath(cacheName("a.md"))); !os.IsNotExist(err) {
+	if _, err := os.Stat(reopened.blobPath(cacheA)); !os.IsNotExist(err) {
 		t.Errorf("blob évincé encore présent: %v", err)
 	}
 }
@@ -175,7 +176,8 @@ func TestOuvertureRepareUnBlobPropreManquantEtUnOrphelin(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	accepteSansQuota(t, s, "absente.md", "contenu")
-	if err := os.Remove(s.blobPath(cacheName("absente.md"))); err != nil {
+	entry := s.entries["absente.md"]
+	if err := os.Remove(s.blobPath(entry.Cache)); err != nil {
 		t.Fatalf("suppression du blob: %v", err)
 	}
 	orphelin := s.blobPath("orphelin.md")

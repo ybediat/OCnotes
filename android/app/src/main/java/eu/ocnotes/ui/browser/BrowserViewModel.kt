@@ -44,6 +44,8 @@ data class BrowserUiState(
     val depuisCache: Boolean = false,
     val erreur: Texte? = null,
     val enAttente: Int = 0,
+    /** Une passe de synchronisation distante est en train de s'exécuter. */
+    val synchronisationEnCours: Boolean = false,
     /** Ordre des notes. Les dossiers restent en tête, toujours alphabétiques. */
     val tri: Tri = Tri.DEFAUT,
     /** Filtre sur les noms affichés : ce dossier, ou toute la bibliothèque. */
@@ -272,6 +274,11 @@ class BrowserViewModel(
 
         viewModelScope.launch {
             repository.pendingCount.collect { n -> _uiState.update { it.copy(enAttente = n) } }
+        }
+        viewModelScope.launch {
+            repository.syncInProgress.collect { active ->
+                _uiState.update { it.copy(synchronisationEnCours = active) }
+            }
         }
 
         // Le premier listing peut venir du cache : `Restore` ouvre la session

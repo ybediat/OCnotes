@@ -134,8 +134,7 @@ func TestModeLocalSurvitAuRedemarrage(t *testing.T) {
 }
 
 // Un index écrit avant l'existence du champ s'ouvre en mode serveur : la
-// valeur nulle du champ est le comportement d'avant, c'est ce qui a permis de
-// ne pas changer indexVersion.
+// valeur nulle du champ est le comportement d'avant.
 func TestIndexSansChampLocalOnlyOuvreEnModeServeur(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "notes"), 0o700); err != nil {

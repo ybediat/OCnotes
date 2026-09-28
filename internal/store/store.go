@@ -9,13 +9,16 @@ package store
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -44,9 +47,15 @@ const CodeTargetExists = "TARGET_EXISTS"
 const CodeQuotaProtected = "QUOTA_PROTECTED"
 
 // indexVersion permet de reconnaître un index écrit par une version
-// antérieure du format. Un index d'une version inconnue est ignoré plutôt que
-// mal interprété : le cache se reconstruit depuis le serveur.
-const indexVersion = 3
+// antérieure du format. Une génération inconnue est écartée au profit d'une
+// génération comprise ; si aucune ne l'est, l'ouverture refuse de faire
+// passer silencieusement un stockage local pour un cache vide.
+const indexVersion = 4
+
+// indexRetention est le nombre de générations immuables conservées. Un index
+// cassé ne condamne ainsi pas le stockage local : Open remonte jusqu'à la
+// génération valide la plus récente.
+const indexRetention = 10
 
 // DefaultQuotaBytes est la limite appliquée tant que l'interface n'a pas
 // chargé la préférence de l'appareil.
@@ -167,6 +176,11 @@ type Store struct {
 	// cache mais le stockage. Voir SetLocalOnly pour ce que cela change.
 	localOnly bool
 
+	// indexGeneration augmente à chaque sauvegarde. Contrairement à index.json,
+	// les fichiers du dossier indexes ne sont jamais remplacés : une écriture
+	// interrompue ne peut donc pas abîmer une génération déjà validée.
+	indexGeneration uint64
+
 	// gen alimente Entry.gen ; epoch change à chaque purge, pour qu'aucune
 	// réponse arrivée après une déconnexion ne réécrive le cache vidé.
 	gen   uint64
@@ -176,6 +190,7 @@ type Store struct {
 // persisted est la forme sérialisée de l'état du cache.
 type persisted struct {
 	Version           int                 `json:"version"`
+	Generation        uint64              `json:"generation,omitempty"`
 	Entries           map[string]*Entry   `json:"entries"`
 	Queue             []Operation         `json:"queue"`
 	Folders           map[string]bool     `json:"folders,omitempty"`
@@ -191,9 +206,10 @@ type persisted struct {
 
 // Open ouvre — ou crée — un cache dans le dossier indiqué.
 //
-// Un index illisible ou d'une version inconnue n'est pas une erreur fatale :
-// le cache repart vide et se reconstruira depuis le serveur. Perdre le cache
-// est bénin ; refuser de démarrer ne l'est pas.
+// Les générations d'index sont essayées de la plus récente à la plus ancienne.
+// Un stockage neuf s'ouvre vide ; un stockage qui possède des index mais plus
+// aucune génération lisible refuse en revanche de démarrer, afin de préserver
+// ses blobs pour une récupération au lieu de les déclarer orphelins.
 func Open(dir string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Join(dir, "notes"), 0o700); err != nil {
 		return nil, fmt.Errorf("store: [%s] création du cache dans %s: %w", CodeStorageIO, dir, err)
@@ -209,16 +225,11 @@ func Open(dir string) (*Store, error) {
 		conflicts:         map[string]Conflict{},
 	}
 
-	data, err := os.ReadFile(s.indexPath())
+	state, found, err := s.loadNewestIndex()
 	if err != nil {
-		if os.IsNotExist(err) {
-			return s, nil
-		}
-		return nil, fmt.Errorf("store: [%s] lecture de l'index: %w", CodeStorageIO, err)
+		return nil, err
 	}
-
-	var state persisted
-	if err := json.Unmarshal(data, &state); err != nil || (state.Version != 1 && state.Version != 2 && state.Version != indexVersion) {
+	if !found {
 		return s, nil
 	}
 	if state.Entries != nil {
@@ -239,6 +250,7 @@ func Open(dir string) (*Store, error) {
 	s.indexed = state.Indexed
 	s.queue = state.Queue
 	s.localOnly = state.LocalOnly
+	s.indexGeneration = state.Generation
 	migrated := state.Version != indexVersion
 	for _, entry := range s.entries {
 		// Les index de la version 1 ne portaient pas LastAccess. LocalMod est
@@ -268,8 +280,84 @@ func Open(dir string) (*Store, error) {
 }
 
 func (s *Store) indexPath() string        { return filepath.Join(s.dir, "index.json") }
+func (s *Store) indexesDir() string       { return filepath.Join(s.dir, "indexes") }
 func (s *Store) notesDir() string         { return filepath.Join(s.dir, "notes") }
 func (s *Store) blobPath(n string) string { return filepath.Join(s.notesDir(), n) }
+
+func indexGenerationName(generation uint64) string {
+	return fmt.Sprintf("index-%020d.json", generation)
+}
+
+// loadNewestIndex choisit la génération valide la plus récente, index.json
+// compris pour les installations d'avant l'historisation. Si des index sont
+// présents mais qu'aucun n'est lisible, les blobs sont laissés intacts et
+// l'ouverture échoue : repartir vide serait acceptable pour un cache serveur,
+// jamais pour un stockage qui peut être l'unique copie.
+func (s *Store) loadNewestIndex() (persisted, bool, error) {
+	type candidate struct {
+		path       string
+		generation uint64
+		primary    bool
+	}
+	candidates := make([]candidate, 0, indexRetention+1)
+	hadIndex := false
+
+	if _, err := os.Stat(s.indexPath()); err == nil {
+		candidates = append(candidates, candidate{path: s.indexPath(), primary: true})
+		hadIndex = true
+	} else if !os.IsNotExist(err) {
+		return persisted{}, false, fmt.Errorf("store: [%s] lecture de l'index: %w", CodeStorageIO, err)
+	}
+
+	files, err := os.ReadDir(s.indexesDir())
+	if err != nil && !os.IsNotExist(err) {
+		return persisted{}, false, fmt.Errorf("store: [%s] lecture des générations d'index: %w", CodeStorageIO, err)
+	}
+	for _, file := range files {
+		name := file.Name()
+		if file.IsDir() || !strings.HasPrefix(name, "index-") || !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		number := strings.TrimSuffix(strings.TrimPrefix(name, "index-"), ".json")
+		generation, parseErr := strconv.ParseUint(number, 10, 64)
+		if parseErr != nil {
+			continue
+		}
+		candidates = append(candidates, candidate{path: filepath.Join(s.indexesDir(), name), generation: generation})
+		hadIndex = true
+	}
+	var newest persisted
+	found := false
+	for _, item := range candidates {
+		data, readErr := os.ReadFile(item.path)
+		if readErr != nil {
+			continue
+		}
+		var state persisted
+		if json.Unmarshal(data, &state) != nil || !supportedIndexVersion(state.Version) {
+			continue
+		}
+		if !item.primary && state.Generation != item.generation {
+			continue
+		}
+		if !found || state.Generation > newest.Generation {
+			newest = state
+			found = true
+		}
+	}
+	if found {
+		return newest, true, nil
+	}
+
+	if hadIndex {
+		return persisted{}, false, fmt.Errorf("store: [%s] aucun index valide ; les notes ont été conservées sur le disque", CodeStorageIO)
+	}
+	return persisted{}, false, nil
+}
+
+func supportedIndexVersion(version int) bool {
+	return version == 1 || version == 2 || version == 3 || version == indexVersion
+}
 
 // SetLocalOnly dit au cache qu'aucun serveur ne le double.
 //
@@ -308,16 +396,25 @@ func (s *Store) LocalOnly() bool {
 }
 
 // repairBlobsLocked remet l'index en accord avec le dossier de blobs au
-// démarrage. Un contenu propre manquant redevient un simple Known, tandis que
-// tout blob orphelin est supprimé seulement après avoir vérifié qu'aucune
-// entrée ne le référence. Une entrée protégée et illisible est conservée : la
-// supprimer ferait perdre la trace d'un travail local à récupérer.
+// démarrage. Un contenu propre manquant redevient un simple Known. En mode
+// local, un blob orphelin est au contraire récupéré à la racine : il peut être
+// la note créée juste avant une interruption, et il n'existe aucune copie
+// distante permettant de décider qu'il est jetable.
 func (s *Store) repairBlobsLocked() bool {
 	changed := false
 	referenced := make(map[string]bool, len(s.entries))
 	for notePath, entry := range s.entries {
 		referenced[entry.Cache] = true
-		if _, err := os.Stat(s.blobPath(entry.Cache)); err == nil || !os.IsNotExist(err) || s.protectedLocked(notePath, entry) {
+		info, err := os.Stat(s.blobPath(entry.Cache))
+		if err == nil {
+			if s.localOnly && entry.Size != info.Size() {
+				entry.Size = info.Size()
+				s.touchLocked(entry)
+				changed = true
+			}
+			continue
+		}
+		if !os.IsNotExist(err) || s.protectedLocked(notePath, entry) {
 			continue
 		}
 		if _, known := s.known[notePath]; !known {
@@ -335,6 +432,11 @@ func (s *Store) repairBlobsLocked() bool {
 		if file.IsDir() || filepath.Ext(file.Name()) != ".md" || referenced[file.Name()] {
 			continue
 		}
+		if s.localOnly {
+			s.recoverOrphanLocked(file)
+			changed = true
+			continue
+		}
 		if os.Remove(s.blobPath(file.Name())) == nil {
 			changed = true
 		}
@@ -342,18 +444,70 @@ func (s *Store) repairBlobsLocked() bool {
 	return changed
 }
 
-// cacheName dérive le nom du fichier de cache d'un chemin de note.
+func (s *Store) recoverOrphanLocked(file os.DirEntry) {
+	name := s.availableRecoveredNameLocked()
+	info, _ := file.Info()
+	modified := time.Now().UTC()
+	var size int64
+	if info != nil {
+		size = info.Size()
+		modified = info.ModTime().UTC()
+	}
+	entry := &Entry{
+		Path:       name,
+		Cache:      file.Name(),
+		Size:       size,
+		LocalMod:   modified,
+		LastAccess: modified,
+	}
+	s.touchLocked(entry)
+	s.entries[name] = entry
+	s.known[name] = &Known{Path: name, Size: size, ModTime: modified}
+}
+
+func (s *Store) availableRecoveredNameLocked() string {
+	for number := 1; ; number++ {
+		name := fmt.Sprintf("Note récupérée %03d.md", number)
+		if !s.takenLocked(name) {
+			return name
+		}
+	}
+}
+
+// cacheName dérive l'ancien nom de cache d'un chemin de note.
 //
-// Le nom du serveur n'est délibérément pas réutilisé. Le test d'intégration a
-// montré qu'OpenCloud accepte « ? », « * » ou « : » dans un nom de fichier,
-// alors que Windows les refuse et que « / » est interdit partout. Recopier les
-// noms ferait échouer le cache sur des notes pourtant parfaitement valides.
-//
-// L'empreinte porte sur le chemin plutôt que sur l'identifiant serveur, car
-// une note créée hors connexion n'a pas encore d'identifiant.
+// Les index des versions 1 à 3 le portent encore, et les identifiants de
+// conflits en utilisent un préfixe stable. Les nouvelles notes passent par
+// newCacheName : leur fichier ne dépend plus du chemin logique.
 func cacheName(notePath string) string {
 	sum := sha256.Sum256([]byte(notePath))
 	return hex.EncodeToString(sum[:16]) + ".md"
+}
+
+// newCacheName produit l'identifiant physique stable d'une nouvelle note. Le
+// chemin logique n'en fait volontairement pas partie : renommer ou déplacer la
+// note ne touche plus au blob et ne crée plus de fenêtre où les anciens index
+// désignent un fichier qui vient d'être déplacé.
+func newCacheName() (string, error) {
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(id[:]) + ".md", nil
+}
+
+func (s *Store) newCacheNameLocked() (string, error) {
+	for {
+		name, err := newCacheName()
+		if err != nil {
+			return "", err
+		}
+		if _, err := os.Stat(s.blobPath(name)); os.IsNotExist(err) {
+			return name, nil
+		} else if err != nil {
+			return "", err
+		}
+	}
 }
 
 // contentHash est l'empreinte d'un contenu, telle qu'elle est retenue dans
@@ -370,8 +524,10 @@ func contentHash(content []byte) string {
 // L'écriture passe par un fichier temporaire renommé : une coupure de courant
 // au mauvais moment laisserait sinon un index tronqué, donc un cache perdu.
 func (s *Store) save() error {
+	nextGeneration := s.indexGeneration + 1
 	state := persisted{
 		Version:           indexVersion,
+		Generation:        nextGeneration,
 		Entries:           s.entries,
 		Queue:             s.queue,
 		Folders:           s.folders,
@@ -386,12 +542,86 @@ func (s *Store) save() error {
 		return fmt.Errorf("store: [%s] sérialisation de l'index: %w", CodeStorageIO, err)
 	}
 
-	tmp := s.indexPath() + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return fmt.Errorf("store: [%s] écriture de l'index: %w", CodeStorageIO, err)
+	if err := os.MkdirAll(s.indexesDir(), 0o700); err != nil {
+		return fmt.Errorf("store: [%s] création des générations d'index: %w", CodeStorageIO, err)
 	}
-	if err := os.Rename(tmp, s.indexPath()); err != nil {
+	generationPath := filepath.Join(s.indexesDir(), indexGenerationName(nextGeneration))
+	if err := writeAtomic(generationPath, data); err != nil {
+		return fmt.Errorf("store: [%s] écriture de la génération d'index: %w", CodeStorageIO, err)
+	}
+	committed, err := os.ReadFile(generationPath)
+	if err != nil || !bytes.Equal(committed, data) {
+		if err == nil {
+			err = fmt.Errorf("contenu relu différent")
+		}
+		return fmt.Errorf("store: [%s] validation de la génération d'index: %w", CodeStorageIO, err)
+	}
+	// La génération immuable est déjà durable : même si le miroir historique
+	// index.json échoue, le prochain Open saura reprendre celle-ci.
+	s.indexGeneration = nextGeneration
+	if err := writeAtomic(s.indexPath(), data); err != nil {
 		return fmt.Errorf("store: [%s] remplacement de l'index: %w", CodeStorageIO, err)
+	}
+	return s.pruneIndexGenerations()
+}
+
+func writeAtomic(target string, data []byte) error {
+	tmp := target + ".tmp"
+	file, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err = file.Write(data); err == nil {
+		err = file.Sync()
+	}
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, target); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	// fsync du fichier ne rend pas forcément son nouveau nom durable. Android
+	// repose sur des systèmes de fichiers Unix où synchroniser le dossier ferme
+	// cette dernière fenêtre. Windows refuse couramment Sync sur un dossier ; le
+	// renommage y garde le comportement testé jusque-là.
+	if runtime.GOOS != "windows" {
+		dir, err := os.Open(filepath.Dir(target))
+		if err != nil {
+			return err
+		}
+		err = dir.Sync()
+		if closeErr := dir.Close(); err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) pruneIndexGenerations() error {
+	files, err := os.ReadDir(s.indexesDir())
+	if err != nil {
+		return err
+	}
+	names := make([]string, 0, len(files))
+	for _, file := range files {
+		if !file.IsDir() && strings.HasPrefix(file.Name(), "index-") && strings.HasSuffix(file.Name(), ".json") {
+			names = append(names, file.Name())
+		}
+	}
+	sort.Strings(names)
+	for len(names) > indexRetention {
+		if err := os.Remove(filepath.Join(s.indexesDir(), names[0])); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		names = names[1:]
 	}
 	return nil
 }
@@ -650,12 +880,23 @@ func (s *Store) AcceptIfUnchanged(notePath string, obs Observation, content []by
 }
 
 func (s *Store) acceptLocked(notePath string, content []byte, etag string) error {
-	if err := s.writeBlob(notePath, content); err != nil {
+	cache := ""
+	if old, ok := s.entries[notePath]; ok {
+		cache = old.Cache
+	}
+	if cache == "" {
+		var err error
+		cache, err = s.newCacheNameLocked()
+		if err != nil {
+			return fmt.Errorf("store: [%s] génération de l'identifiant de %s: %w", CodeStorageIO, notePath, err)
+		}
+	}
+	if err := s.writeBlob(cache, notePath, content); err != nil {
 		return err
 	}
 	entry := &Entry{
 		Path:       notePath,
-		Cache:      cacheName(notePath),
+		Cache:      cache,
 		ETag:       etag,
 		Dirty:      false,
 		BaseHash:   contentHash(content),
@@ -676,13 +917,18 @@ func (s *Store) acceptLocked(notePath string, content []byte, etag string) error
 }
 
 func (s *Store) putLocked(notePath string, content []byte, encoding string, enqueue bool) error {
-	if err := s.writeBlob(notePath, content); err != nil {
-		return err
-	}
-
 	entry, ok := s.entries[notePath]
 	if !ok {
-		entry = &Entry{Path: notePath, Cache: cacheName(notePath)}
+		cache, err := s.newCacheNameLocked()
+		if err != nil {
+			return fmt.Errorf("store: [%s] génération de l'identifiant de %s: %w", CodeStorageIO, notePath, err)
+		}
+		entry = &Entry{Path: notePath, Cache: cache}
+	}
+	if err := s.writeBlob(entry.Cache, notePath, content); err != nil {
+		return err
+	}
+	if !ok {
 		s.entries[notePath] = entry
 	}
 	// En mode local, une note n'est jamais « en attente d'envoi » : il n'y a
@@ -702,17 +948,11 @@ func (s *Store) putLocked(notePath string, content []byte, encoding string, enqu
 	return s.save()
 }
 
-func (s *Store) writeBlob(notePath string, content []byte) error {
+func (s *Store) writeBlob(cache, notePath string, content []byte) error {
 	if err := s.ensureSpaceLocked(notePath, int64(len(content))); err != nil {
 		return err
 	}
-	name := cacheName(notePath)
-	tmp := s.blobPath(name) + ".tmp"
-	defer os.Remove(tmp)
-	if err := os.WriteFile(tmp, content, 0o600); err != nil {
-		return fmt.Errorf("store: [%s] écriture du cache de %s: %w", CodeStorageIO, notePath, err)
-	}
-	if err := os.Rename(tmp, s.blobPath(name)); err != nil {
+	if err := writeAtomic(s.blobPath(cache), content); err != nil {
 		return fmt.Errorf("store: [%s] remplacement du cache de %s: %w", CodeStorageIO, notePath, err)
 	}
 	return nil
@@ -848,23 +1088,15 @@ func (s *Store) renameLocked(from, to string, enqueue, refuseTaken bool) error {
 	}
 	sort.Strings(deplacees)
 
-	// Le blob est déplacé, pas recopié. Un déplacement ne change pas
-	// l'occupation, et la copie passait par writeBlob, donc par le quota, qui
-	// comptait la source en plus de la copie : dans un cache plein, elle
-	// évinçait une note sans rapport, voire une sœur que cette boucle n'avait
-	// pas encore traitée — dont l'entrée disparue était ensuite déréférencée.
+	// Le nom physique est désormais stable : un déplacement ne touche jamais au
+	// blob. Si le processus s'arrête avant la sauvegarde de l'index, une ancienne
+	// génération désigne encore le contenu sous son ancien chemin au lieu de le
+	// perdre parce que le fichier a déjà changé de nom.
 	for _, chemin := range deplacees {
 		suffixe, _ := sousChemin(chemin, from)
 		cible := to + suffixe
 		entry := s.entries[chemin]
-		nom := cacheName(cible)
-		// Un blob déjà absent n'empêche pas l'entrée de suivre : Get le
-		// traitera comme un contenu manquant, comme avant.
-		if err := os.Rename(s.blobPath(entry.Cache), s.blobPath(nom)); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("store: [%s] déplacement du cache de %s: %w", CodeStorageIO, chemin, err)
-		}
 		entry.Path = cible
-		entry.Cache = nom
 		s.touchLocked(entry)
 		delete(s.entries, chemin)
 		s.entries[cible] = entry

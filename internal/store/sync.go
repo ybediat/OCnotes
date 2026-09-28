@@ -875,6 +875,15 @@ func (s *Store) Clear() error {
 	if err := os.MkdirAll(s.notesDir(), 0o700); err != nil {
 		return fmt.Errorf("store: [%s] recréation du cache: %w", CodeStorageIO, err)
 	}
+	// Les générations portent encore les noms et l'état de l'ancien profil.
+	// Une purge doit les retirer elles aussi, sinon un index courant abîmé
+	// pourrait ressusciter une bibliothèque que l'utilisateur a supprimée.
+	if err := os.RemoveAll(s.indexesDir()); err != nil {
+		return fmt.Errorf("store: [%s] purge des générations d'index: %w", CodeStorageIO, err)
+	}
+	if err := os.Remove(s.indexPath()); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("store: [%s] purge de l'index courant: %w", CodeStorageIO, err)
+	}
 
 	s.entries = map[string]*Entry{}
 	s.folders = map[string]bool{}
@@ -883,6 +892,7 @@ func (s *Store) Clear() error {
 	s.known = map[string]*Known{}
 	s.conflicts = map[string]Conflict{}
 	s.indexed = false
+	s.indexGeneration = 0
 	// Une réponse du serveur encore en route ne doit rien réécrire ici.
 	s.epoch++
 	return s.save()

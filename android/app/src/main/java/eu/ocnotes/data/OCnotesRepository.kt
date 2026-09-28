@@ -123,6 +123,11 @@ class OCnotesRepository(
     /** Nombre d'opérations en attente, observable par les écrans. */
     val pendingCount: StateFlow<Int> = _pendingCount.asStateFlow()
 
+    private val _syncInProgress = MutableStateFlow(false)
+
+    /** Vrai uniquement pendant une passe de synchronisation réellement exécutée. */
+    val syncInProgress: StateFlow<Boolean> = _syncInProgress.asStateFlow()
+
     private val _lastSync = MutableStateFlow<SyncResultDto?>(null)
 
     /** Résultat de la dernière passe de synchronisation, quelle qu'en soit l'issue. */
@@ -651,11 +656,16 @@ class OCnotesRepository(
      */
     suspend fun sync(): SyncResultDto {
         return operationMutex.withLock {
-            refreshOidcToken(allowStaleOnFailure = true)
-            val result: SyncResultDto = callJson { it.syncJSON() }
-            _lastSync.value = result
-            _pendingCount.value = result.remaining
-            result
+            _syncInProgress.value = true
+            try {
+                refreshOidcToken(allowStaleOnFailure = true)
+                val result: SyncResultDto = callJson { it.syncJSON() }
+                _lastSync.value = result
+                _pendingCount.value = result.remaining
+                result
+            } finally {
+                _syncInProgress.value = false
+            }
         }
     }
 

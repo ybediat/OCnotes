@@ -302,10 +302,17 @@
     <string name="browser_liste_vide_titre">Aucune note</string>
     <string name="browser_liste_vide_detail">Créez votre première note avec le bouton en bas de l\'écran.</string>
 
-    <!-- Bouton de tri : son icône montre l'ordre en cours, sa description dit
-         ce qu'un appui ferait — c'est ce dont TalkBack a besoin. -->
+    <!-- Menu de tri : l'ordre actif est identifié par une coche. -->
     <string name="browser_tri_par_nom">Trier par nom</string>
     <string name="browser_tri_par_date">Trier par date</string>
+    <string name="browser_tri_menu">Choisir le tri</string>
+    <string name="browser_sync_en_cours">Synchronisation en cours</string>
+    <plurals name="browser_sync_en_attente">
+        <item quantity="one">%1$d modification à synchroniser</item>
+        <item quantity="other">%1$d modifications à synchroniser</item>
+    </plurals>
+    <string name="browser_sync_attention">Synchronisation à vérifier</string>
+    <string name="browser_sync_ok">Synchronisation à jour</string>
 
     <!-- Un dossier vide n'est pas une panne : le dire, et dire quoi faire. -->
     <string name="browser_vide_titre">Ce dossier est vide</string>
@@ -344,11 +351,22 @@
          ================================================================ -->
     <string name="menu_reglages">Réglages</string>
     <string name="menu_a_propos">À propos</string>
+    <string name="menu_ouvrir_navigation">Ouvrir le menu de navigation</string>
     <string name="a_propos_titre">À propos d\'OCnotes</string>
-    <string name="a_propos_description">Gestionnaire de notes Markdown, sur cet appareil ou synchronisées avec OpenCloud. Créé par Yannis Bediat. V1.0 Août 2026</string>
-    <string name="a_propos_licence">Licence : MIT https://github.com/ybediat/OCnotes/tree/main?tab=MIT-1-ov-file</string>
-    <string name="a_propos_depot">Dépôt Git</string>
+    <string name="a_propos_description">Un gestionnaire de notes Markdown, utilisable sur cet appareil ou synchronisé avec OpenCloud.</string>
+    <string name="a_propos_signature">Créé par Yannis Bediat · version %1$s</string>
+    <string name="a_propos_section_projet">Le projet</string>
+    <string name="a_propos_opencloud">Découvrir OpenCloud</string>
+    <string name="a_propos_depot">Code source sur GitHub</string>
+    <string name="a_propos_licence">Licence MIT d’OCnotes</string>
+    <string name="a_propos_section_polices">Crédits typographiques</string>
+    <string name="a_propos_police_faune">Faune · CNAP</string>
+    <string name="a_propos_police_lexend">Lexend · Google Fonts</string>
     <string name="a_propos_depot_url" translatable="false">https://github.com/ybediat/OCnotes</string>
+    <string name="a_propos_licence_url" translatable="false">https://github.com/ybediat/OCnotes/blob/main/LICENSE.txt</string>
+    <string name="a_propos_opencloud_url" translatable="false">https://opencloud.eu/en</string>
+    <string name="a_propos_police_faune_url" translatable="false">https://www.cnap.fr/sites/faune/</string>
+    <string name="a_propos_police_lexend_url" translatable="false">https://fonts.google.com/specimen/Lexend/license?preview.script=Latn</string>
 
     <!-- ================================================================
          Réglages

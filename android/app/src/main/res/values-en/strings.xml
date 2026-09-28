@@ -325,10 +325,17 @@
     <string name="browser_liste_vide_titre">No notes</string>
     <string name="browser_liste_vide_detail">Create your first note with the button at the bottom of the screen.</string>
 
-    <!-- Bouton de tri : son icône montre l'ordre en cours, sa description dit
-         ce qu'un appui ferait — c'est ce dont TalkBack a besoin. -->
+    <!-- Sorting menu: the active order is identified by a check mark. -->
     <string name="browser_tri_par_nom">Sort by name</string>
     <string name="browser_tri_par_date">Sort by date</string>
+    <string name="browser_tri_menu">Choose sorting</string>
+    <string name="browser_sync_en_cours">Sync in progress</string>
+    <plurals name="browser_sync_en_attente">
+        <item quantity="one">%1$d change to sync</item>
+        <item quantity="other">%1$d changes to sync</item>
+    </plurals>
+    <string name="browser_sync_attention">Sync needs attention</string>
+    <string name="browser_sync_ok">Sync up to date</string>
 
     <!-- Un dossier vide n'est pas une panne : le dire, et dire quoi faire. -->
     <string name="browser_vide_titre">This folder is empty</string>
@@ -367,10 +374,17 @@
          ================================================================ -->
     <string name="menu_reglages">Settings</string>
     <string name="menu_a_propos">About</string>
+    <string name="menu_ouvrir_navigation">Open navigation menu</string>
     <string name="a_propos_titre">About OCnotes</string>
-    <string name="a_propos_description">A Markdown notes manager, stored on this device or synchronized with OpenCloud. Created by Yannis Bediat. v1.0 August 2026</string>
-    <string name="a_propos_licence">License: MIT https://github.com/ybediat/OCnotes/tree/main?tab=MIT-1-ov-file</string>
-    <string name="a_propos_depot">Git repository</string>
+    <string name="a_propos_description">A Markdown notes manager for this device, with optional OpenCloud synchronization.</string>
+    <string name="a_propos_signature">Created by Yannis Bediat · version %1$s</string>
+    <string name="a_propos_section_projet">The project</string>
+    <string name="a_propos_opencloud">Discover OpenCloud</string>
+    <string name="a_propos_depot">Source code on GitHub</string>
+    <string name="a_propos_licence">OCnotes MIT license</string>
+    <string name="a_propos_section_polices">Type credits</string>
+    <string name="a_propos_police_faune">Faune · CNAP</string>
+    <string name="a_propos_police_lexend">Lexend · Google Fonts</string>
 
     <!-- ================================================================
          Réglages
