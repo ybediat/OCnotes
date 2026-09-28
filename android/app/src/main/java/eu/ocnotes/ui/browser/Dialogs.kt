@@ -139,6 +139,7 @@ fun NouvelleNoteDialog(
                     nomRacine = nomRacine,
                     valeur = dossier,
                     onValeur = { dossier = it },
+                    label = stringResource(R.string.browser_note_dossier),
                     modifier = Modifier.padding(top = 12.dp),
                 )
 
@@ -157,6 +158,58 @@ fun NouvelleNoteDialog(
                     onFermer()
                 },
                 enabled = titre.isNotBlank() && choix.any { it.path == dossier },
+            ) {
+                Text(stringResource(R.string.action_creer))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onFermer) { Text(stringResource(R.string.action_annuler)) }
+        },
+    )
+}
+
+/** Création d'un sous-dossier depuis la liste plate : un nom et son parent. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NouveauDossierDialog(
+    dossiers: List<FolderRefDto>,
+    nomRacine: String,
+    onValider: (nom: String, dossierParent: String) -> Unit,
+    onFermer: () -> Unit,
+) {
+    val choix = remember(dossiers) { dossiers.filter { it.canCreateFolder } }
+    var nom by remember { mutableStateOf("") }
+    var parent by remember(choix) { mutableStateOf(choix.firstOrNull()?.path.orEmpty()) }
+
+    AlertDialog(
+        onDismissRequest = onFermer,
+        title = { Text(stringResource(R.string.browser_nouveau_dossier)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = nom,
+                    onValueChange = { nom = it },
+                    label = { Text(stringResource(R.string.browser_dossier_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                SelecteurDossier(
+                    dossiers = choix,
+                    nomRacine = nomRacine,
+                    valeur = parent,
+                    onValeur = { parent = it },
+                    label = stringResource(R.string.browser_dossier_parent),
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onValider(nom, parent)
+                    onFermer()
+                },
+                enabled = nom.isNotBlank() && choix.any { it.path == parent },
             ) {
                 Text(stringResource(R.string.action_creer))
             }
@@ -202,6 +255,7 @@ fun DeplacerDialog(
                 nomRacine = nomRacine,
                 valeur = dossier,
                 onValeur = { dossier = it },
+                label = stringResource(R.string.browser_note_dossier),
             )
         },
         confirmButton = {
@@ -255,6 +309,7 @@ fun DossierCibleLotDialog(
                 nomRacine = nomRacine,
                 valeur = dossier,
                 onValeur = { dossier = it },
+                label = stringResource(R.string.browser_note_dossier),
             )
         },
         confirmButton = {
@@ -288,6 +343,7 @@ private fun SelecteurDossier(
     nomRacine: String,
     valeur: String,
     onValeur: (String) -> Unit,
+    label: String,
     modifier: Modifier = Modifier,
 ) {
     var deroule by remember { mutableStateOf(false) }
@@ -305,7 +361,7 @@ private fun SelecteurDossier(
             value = libelleCourant,
             onValueChange = {},
             readOnly = true,
-            label = { Text(stringResource(R.string.browser_note_dossier)) },
+            label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = deroule) },
             modifier = Modifier
                 .menuAnchor(MenuAnchorType.PrimaryNotEditable)

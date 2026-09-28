@@ -5,6 +5,7 @@ import eu.ocnotes.data.FolderEntryDto
 import eu.ocnotes.data.FolderRefDto
 import eu.ocnotes.data.categorieDuCode
 import eu.ocnotes.ui.browser.BrowserUiState
+import eu.ocnotes.ui.browser.ModeAffichage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -38,5 +39,24 @@ class PermissionsTest {
         )
         assertFalse(avecDestination.peutDeplacerSelection)
         assertTrue(avecDestination.peutCopierSelection)
+    }
+
+    @Test
+    fun creationDeDossierEnListePlateRespecteLesPermissionsDesParents() {
+        val sansDestination = BrowserUiState(mode = ModeAffichage.LISTE)
+        assertFalse(sansDestination.peutCreerDossier)
+
+        val lectureSeule = sansDestination.copy(
+            dossiers = listOf(FolderRefDto(path = "archives", canCreateFolder = false)),
+        )
+        assertFalse(lectureSeule.peutCreerDossier)
+
+        val avecDestination = lectureSeule.copy(
+            dossiers = lectureSeule.dossiers + FolderRefDto(
+                path = "projets",
+                canCreateFolder = true,
+            ),
+        )
+        assertTrue(avecDestination.peutCreerDossier)
     }
 }

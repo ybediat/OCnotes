@@ -16,9 +16,10 @@ import (
 // traverser la frontière obligerait à choisir un nom en Go pour un libellé qui
 // est déjà connu de Kotlin.
 type folderRef struct {
-	Path          string `json:"path"`
-	Name          string `json:"name"`
-	CanCreateFile bool   `json:"canCreateFile"`
+	Path            string `json:"path"`
+	Name            string `json:"name"`
+	CanCreateFile   bool   `json:"canCreateFile"`
+	CanCreateFolder bool   `json:"canCreateFolder"`
 }
 
 // ListAllJSON renvoie l'inventaire complet du dossier de notes, à plat.
@@ -123,10 +124,20 @@ func (a *App) FoldersJSON() (string, error) {
 	}
 
 	root := permissionsFields(a.cache.FolderPermissions(""))
-	out := []folderRef{{Path: "", Name: "", CanCreateFile: root.CanCreateFile}}
+	out := []folderRef{{
+		Path:            "",
+		Name:            "",
+		CanCreateFile:   root.CanCreateFile,
+		CanCreateFolder: root.CanCreateFolder,
+	}}
 	for _, d := range a.cache.Folders() {
 		caps := permissionsFields(a.cache.FolderPermissions(d))
-		out = append(out, folderRef{Path: d, Name: lastSegment(d), CanCreateFile: caps.CanCreateFile})
+		out = append(out, folderRef{
+			Path:            d,
+			Name:            lastSegment(d),
+			CanCreateFile:   caps.CanCreateFile,
+			CanCreateFolder: caps.CanCreateFolder,
+		})
 	}
 	return toJSON(out)
 }

@@ -285,12 +285,12 @@ fun BrowserScreen(
         floatingActionButton = {
             // Rien à créer pendant une sélection : la barre contextuelle a la
             // main, le bouton d'ajout n'y a pas sa place.
-            if (!etat.modeSelection && (etat.peutCreerNote || etat.canCreateFolder)) {
+            if (!etat.modeSelection && (etat.peutCreerNote || etat.peutCreerDossier)) {
                 Column(
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    if (etat.canCreateFolder && !etat.enListePlate) {
+                    if (etat.peutCreerDossier) {
                         FloatingActionButton(
                             onClick = { dialogue = Dialogue.NouveauDossier },
                             containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -412,14 +412,23 @@ fun BrowserScreen(
             onFermer = { dialogue = null },
         )
 
-        Dialogue.NouveauDossier -> SaisieDialog(
-            titre = stringResource(R.string.browser_nouveau_dossier),
-            label = stringResource(R.string.browser_dossier_label),
-            valeurInitiale = "",
-            libelleValidation = stringResource(R.string.action_creer),
-            onValider = viewModel::creerDossier,
-            onFermer = { dialogue = null },
-        )
+        Dialogue.NouveauDossier -> if (etat.enListePlate) {
+            NouveauDossierDialog(
+                dossiers = etat.dossiers,
+                nomRacine = etat.nomRacine,
+                onValider = viewModel::creerDossier,
+                onFermer = { dialogue = null },
+            )
+        } else {
+            SaisieDialog(
+                titre = stringResource(R.string.browser_nouveau_dossier),
+                label = stringResource(R.string.browser_dossier_label),
+                valeurInitiale = "",
+                libelleValidation = stringResource(R.string.action_creer),
+                onValider = { nom -> viewModel.creerDossier(nom, etat.cheminCourant) },
+                onFermer = { dialogue = null },
+            )
+        }
 
         is Dialogue.Renommer -> SaisieDialog(
             titre = stringResource(R.string.action_renommer),

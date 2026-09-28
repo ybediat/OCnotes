@@ -127,6 +127,9 @@ data class BrowserUiState(
     val peutCreerNote: Boolean
         get() = if (enListePlate) dossiers.any { it.canCreateFile } else canCreateFile
 
+    val peutCreerDossier: Boolean
+        get() = if (enListePlate) dossiers.any { it.canCreateFolder } else canCreateFolder
+
     /** Au moins un dossier peut recevoir une note copiée ou déplacée. */
     val peutRecevoirNote: Boolean get() = dossiers.any { it.canCreateFile }
 
@@ -491,10 +494,10 @@ class BrowserViewModel(
         }
     }
 
-    fun creerDossier(nom: String) {
+    fun creerDossier(nom: String, dossierParent: String) {
         viewModelScope.launch {
             try {
-                repository.createFolder(_uiState.value.cheminCourant, nom.trim())
+                repository.createFolder(dossierParent, nom.trim())
                 recharger()
                 syncScheduler.syncAfterLocalChange()
             } catch (e: OCnotesException) {

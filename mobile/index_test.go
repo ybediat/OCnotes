@@ -267,8 +267,9 @@ func TestFoldersJSONContientLaRacine(t *testing.T) {
 	}
 
 	var dossiers []struct {
-		Path string `json:"path"`
-		Name string `json:"name"`
+		Path            string `json:"path"`
+		Name            string `json:"name"`
+		CanCreateFolder bool   `json:"canCreateFolder"`
 	}
 	decodeJSON(t, raw, &dossiers)
 
@@ -281,5 +282,10 @@ func TestFoldersJSONContientLaRacine(t *testing.T) {
 	attendu := []string{"", "Projets", "Projets/Archives"}
 	if !memesChemins(chemins, attendu) {
 		t.Errorf("dossiers = %v, attendu %v", chemins, attendu)
+	}
+	for _, d := range dossiers {
+		if !d.CanCreateFolder {
+			t.Errorf("dossier %q devrait accepter un sous-dossier", d.Path)
+		}
 	}
 }

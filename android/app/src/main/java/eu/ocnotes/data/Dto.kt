@@ -121,6 +121,7 @@ data class FolderRefDto(
     val path: String = "",
     val name: String = "",
     val canCreateFile: Boolean = true,
+    val canCreateFolder: Boolean = true,
 )
 
 /** Capacités WebDAV effectives du compte courant sur une ressource. */
