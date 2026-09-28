@@ -68,7 +68,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -87,7 +86,7 @@ import eu.ocnotes.ui.common.partagerFichiers
 import eu.ocnotes.ui.common.resoudre
 import eu.ocnotes.ui.theme.CouleurSignatureClaire
 import eu.ocnotes.ui.theme.CouleurSignatureSombre
-import eu.ocnotes.ui.theme.PoliceTitresPrincipaux
+import eu.ocnotes.ui.theme.StyleTitrePrincipal
 import java.time.Instant
 import java.time.YearMonth
 import java.time.ZoneId
@@ -200,10 +199,7 @@ fun BrowserScreen(
                     title = {
                         Text(
                             text = etat.titre,
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontFamily = PoliceTitresPrincipaux,
-                                fontWeight = FontWeight.Black,
-                            ),
+                            style = StyleTitrePrincipal,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )

@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import eu.ocnotes.data.ConflictDto
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -388,64 +389,31 @@ fun SettingsScreen(
     }
 
     if (choixPolice) {
-        AlertDialog(
-            onDismissRequest = { choixPolice = false },
-            title = { Text(stringResource(R.string.reglages_police_choix_titre)) },
-            text = {
-                Column {
-                    PoliceInterface.entries.forEach { police ->
-                        TextButton(
-                            onClick = {
-                                choixPolice = false
-                                viewModel.definirPoliceInterface(police)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            RadioButton(selected = etat.policeInterface == police, onClick = null)
-                            Text(
-                                text = libellePolice(police),
-                                modifier = Modifier.padding(start = 8.dp),
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontFamily = familleDePolice(police),
-                                ),
-                            )
-                        }
-                    }
-                }
+        DialogueChoixRadio(
+            titre = stringResource(R.string.reglages_police_choix_titre),
+            options = PoliceInterface.entries,
+            selectionne = { it == etat.policeInterface },
+            libelle = { libellePolice(it) },
+            style = { MaterialTheme.typography.bodyLarge.copy(fontFamily = familleDePolice(it)) },
+            onChoisi = {
+                choixPolice = false
+                viewModel.definirPoliceInterface(it)
             },
-            confirmButton = {
-                TextButton(onClick = { choixPolice = false }) {
-                    Text(stringResource(R.string.action_annuler))
-                }
-            },
+            onFermer = { choixPolice = false },
         )
     }
 
     if (choixQuota) {
-        AlertDialog(
-            onDismissRequest = { choixQuota = false },
-            title = { Text(stringResource(R.string.reglages_cache_choix_titre)) },
-            text = {
-                Column {
-                    QuotaCache.choix.forEach { quota ->
-                        TextButton(
-                            onClick = {
-                                choixQuota = false
-                                viewModel.definirQuotaCache(quota)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            RadioButton(selected = etat.cache.quota == quota, onClick = null)
-                            Text(libelleQuota(quota), modifier = Modifier.padding(start = 8.dp))
-                        }
-                    }
-                }
+        DialogueChoixRadio(
+            titre = stringResource(R.string.reglages_cache_choix_titre),
+            options = QuotaCache.choix,
+            selectionne = { it == etat.cache.quota },
+            libelle = { libelleQuota(it) },
+            onChoisi = {
+                choixQuota = false
+                viewModel.definirQuotaCache(it)
             },
-            confirmButton = {
-                TextButton(onClick = { choixQuota = false }) {
-                    Text(stringResource(R.string.action_annuler))
-                }
-            },
+            onFermer = { choixQuota = false },
         )
     }
 
@@ -694,6 +662,45 @@ private fun Ligne(libelle: String, valeur: String) {
             Text(text = valeur, style = MaterialTheme.typography.bodyLarge)
         }
     }
+}
+
+/** Dialogue à choix unique, partagé par la police et le quota de cache. */
+@Composable
+private fun <T> DialogueChoixRadio(
+    titre: String,
+    options: List<T>,
+    selectionne: (T) -> Boolean,
+    libelle: @Composable (T) -> String,
+    style: @Composable (T) -> TextStyle = { MaterialTheme.typography.bodyLarge },
+    onChoisi: (T) -> Unit,
+    onFermer: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onFermer,
+        title = { Text(titre) },
+        text = {
+            Column {
+                options.forEach { option ->
+                    TextButton(
+                        onClick = { onChoisi(option) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        RadioButton(selected = selectionne(option), onClick = null)
+                        Text(
+                            text = libelle(option),
+                            modifier = Modifier.padding(start = 8.dp),
+                            style = style(option),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onFermer) {
+                Text(stringResource(R.string.action_annuler))
+            }
+        },
+    )
 }
 
 @Composable

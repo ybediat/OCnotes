@@ -8,6 +8,7 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -142,6 +143,13 @@ val PoliceTitresPrincipaux = FontFamily(
     Font(R.font.faune_display_black, FontWeight.Black),
 )
 
+/** Style qui porte [PoliceTitresPrincipaux], partagé par le tiroir et la barre de navigation. */
+val StyleTitrePrincipal: TextStyle
+    @Composable get() = MaterialTheme.typography.titleLarge.copy(
+        fontFamily = PoliceTitresPrincipaux,
+        fontWeight = FontWeight.Black,
+    )
+
 fun familleDePolice(police: PoliceInterface): FontFamily = when (police) {
     PoliceInterface.LEXEND -> PoliceOCnotes
     PoliceInterface.OPENDYSLEXIC -> PoliceOpenDyslexic
@@ -190,10 +198,11 @@ fun OCnotesTheme(
     content: @Composable () -> Unit,
 ) {
     val colorScheme = if (darkTheme) PaletteSombre else PaletteClaire
+    val typography = remember(police) { typographie(police) }
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = typographie(police),
+        typography = typography,
         shapes = Formes,
         content = content,
     )

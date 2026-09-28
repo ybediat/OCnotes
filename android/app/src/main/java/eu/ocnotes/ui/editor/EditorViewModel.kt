@@ -309,7 +309,11 @@ class EditorViewModel(
                 val prepare = repository.openEdit(nom, contenu)
                 sessionEdition = prepare.session
                 val encodage = repository.noteEncoding(chemin).takeUnless { it == ENCODAGE_UTF8 }
-                val encodageForce = repository.encodingOverridden(chemin)
+                // Un choix retenu contre l'avis de la détection ne peut se
+                // lire qu'en dehors de l'UTF-8 : inutile de redemander à Go de
+                // redécoder et de revérifier le contenu pour une note qui
+                // s'affiche déjà en UTF-8.
+                val encodageForce = encodage != null && repository.encodingOverridden(chemin)
 
                 // `update` prend une lambda non suspendue : tout appel à la
                 // façade se fait avant, jamais dedans.
@@ -396,10 +400,19 @@ class EditorViewModel(
      */
     private suspend fun recharger() {
         val session = sessionEdition
-        if (session.isNotEmpty()) {
-            sessionEdition = ""
-            verrouEcriture.withLock { runCatching { repository.closeEdit(session) } }
+        verrouEcriture.withLock {
+            if (session.isNotEmpty()) {
+                sessionEdition = ""
+                runCatching { repository.closeEdit(session) }
+            }
+            // La session native qui va suivre repart de la révision 0
+            // (EditeurNatif.attacher). Sans cette remise à zéro, ces deux
+            // filigranes resteraient au-dessus des révisions de la nouvelle
+            // session et `ecrire` rejetterait en silence tout enregistrement
+            // jusqu'à ce que la révision les rattrape.
+            revisionEcrite = Long.MIN_VALUE
         }
+        revisionNativeDeSortie = null
         instantaneNatifConserve = null
         _uiState.update {
             it.copy(
@@ -409,6 +422,7 @@ class EditorViewModel(
                 encodage = null,
                 encodageForce = false,
                 encodageForcable = null,
+                revision = 0,
                 chargements = it.chargements + 1,
             )
         }

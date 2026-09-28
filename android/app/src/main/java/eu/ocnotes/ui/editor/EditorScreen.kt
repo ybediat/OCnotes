@@ -204,23 +204,27 @@ fun EditorScreen(
                 actions = {
                     // Rien à basculer sur une note en lecture seule : un
                     // bouton qui ne fait rien vaut moins que pas de bouton.
-                    if (!etat.modifiable) return@TopAppBar
-
-                    // Emplacement provisoire : ce geste rejoindra le menu
-                    // latéral, où il sera nommé plutôt que dessiné.
-                    IconButton(
-                        onClick = { viewModel.basculerApercu(sessionNative.instantane()) },
-                    ) {
-                        if (etat.apercu) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = stringResource(R.string.apercu_quitter),
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Visibility,
-                                contentDescription = stringResource(R.string.apercu_activer),
-                            )
+                    // Le menu d'encodage, lui, reste utile même en lecture
+                    // seule : c'est justement là qu'un choix forcé peut
+                    // laisser une note coincée, sans aucun champ pour en
+                    // sortir autrement.
+                    if (etat.modifiable) {
+                        // Emplacement provisoire : ce geste rejoindra le menu
+                        // latéral, où il sera nommé plutôt que dessiné.
+                        IconButton(
+                            onClick = { viewModel.basculerApercu(sessionNative.instantane()) },
+                        ) {
+                            if (etat.apercu) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = stringResource(R.string.apercu_quitter),
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Visibility,
+                                    contentDescription = stringResource(R.string.apercu_activer),
+                                )
+                            }
                         }
                     }
 
