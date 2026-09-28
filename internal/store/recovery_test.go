@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -271,6 +272,16 @@ func TestMigrationEcritLesDoublesEtRetireLesGenerations(t *testing.T) {
 	reopened := rouvre(t, dir)
 	if content, _, ok := reopened.Get("Avant/note.md"); !ok || string(content) != "ancien format" {
 		t.Fatalf("note migrée après perte de l'index = %q, présente = %v", content, ok)
+	}
+}
+
+func TestErreurDeLectureIndexEstPropagee(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "index.json"), 0o700); err != nil {
+		t.Fatalf("création du faux index: %v", err)
+	}
+	if _, err := Open(dir); err == nil || !strings.Contains(err.Error(), CodeStorageIO) {
+		t.Fatalf("Open avec index illisible = %v, erreur de stockage attendue", err)
 	}
 }
 

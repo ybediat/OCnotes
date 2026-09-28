@@ -230,14 +230,21 @@ func Open(dir string) (*Store, error) {
 		conflicts:         map[string]Conflict{},
 	}
 
-	state, found := s.loadIndex()
+	state, found, err := s.loadIndex()
+	if err != nil {
+		return nil, err
+	}
 	if !found {
 		// Un stockage neuf n'a aucun blob : rien n'est reconstruit, et rien
 		// n'est écrit tant que rien n'est à retenir.
-		if !s.repairBlobsLocked(true) {
+		changed, err := s.repairBlobsLocked(true)
+		if err != nil {
+			return nil, err
+		}
+		if !changed {
 			return s, nil
 		}
-		s.removeLegacyGenerations()
+		_ = s.removeLegacyGenerations()
 		if err := s.save(); err != nil {
 			return nil, err
 		}
@@ -277,9 +284,13 @@ func Open(dir string) (*Store, error) {
 		for _, entry := range s.entries {
 			s.writeSidecarLocked(entry)
 		}
-		s.removeLegacyGenerations()
+		_ = s.removeLegacyGenerations()
 	}
-	if s.repairBlobsLocked(false) {
+	changed, err := s.repairBlobsLocked(false)
+	if err != nil {
+		return nil, err
+	}
+	if changed {
 		migrated = true
 	}
 
@@ -302,26 +313,26 @@ func (s *Store) notesDir() string                { return filepath.Join(s.dir, "
 func (s *Store) blobPath(n string) string        { return filepath.Join(s.notesDir(), n) }
 func (s *Store) sidecarPath(cache string) string { return s.blobPath(cache) + sidecarExt }
 
-// loadIndex lit l'index. Absent, illisible ou d'une version inconnue, il est
-// perdu au même titre : l'erreur de lecture elle-même n'est pas remontée,
-// puisque la reconstruction répond à tous ces cas et qu'aucun ne doit
-// empêcher de démarrer.
-func (s *Store) loadIndex() (persisted, bool) {
+// loadIndex lit l'index principal. Un fichier absent ou un JSON invalide peut
+// être reconstruit ; une vraie erreur d'E/S doit en revanche être remontée,
+// sans quoi une bibliothèque inaccessible apparaîtrait comme vide.
+func (s *Store) loadIndex() (persisted, bool, error) {
 	data, err := os.ReadFile(s.indexPath())
 	if err != nil {
-		return persisted{}, false
+		if os.IsNotExist(err) {
+			return persisted{}, false, nil
+		}
+		return persisted{}, false, fmt.Errorf("store: [%s] lecture de l'index: %w", CodeStorageIO, err)
 	}
 	var state persisted
 	if json.Unmarshal(data, &state) != nil || state.Version < 1 || state.Version > indexVersion {
-		return persisted{}, false
+		return persisted{}, false, nil
 	}
-	return state, true
+	return state, true, nil
 }
 
-// removeLegacyGenerations retire les générations d'index de la version 4. Un
-// échec ne gêne rien : plus aucun code ne les lit.
-func (s *Store) removeLegacyGenerations() {
-	_ = os.RemoveAll(filepath.Join(s.dir, "indexes"))
+func (s *Store) removeLegacyGenerations() error {
+	return os.RemoveAll(filepath.Join(s.dir, "indexes"))
 }
 
 // SetLocalOnly dit au cache qu'aucun serveur ne le double.
@@ -367,7 +378,7 @@ func (s *Store) LocalOnly() bool {
 // d'un téléchargement sont jetables, puisque le serveur en porte la copie —
 // sauf en reconstruction : l'index perdu, rien ne dit plus s'ils ont été
 // modifiés depuis, ni même si l'appareil est encore relié à un serveur.
-func (s *Store) repairBlobsLocked(rebuilding bool) bool {
+func (s *Store) repairBlobsLocked(rebuilding bool) (bool, error) {
 	changed := false
 	referenced := make(map[string]bool, len(s.entries))
 	for notePath, entry := range s.entries {
@@ -379,7 +390,10 @@ func (s *Store) repairBlobsLocked(rebuilding bool) bool {
 			}
 			continue
 		}
-		if !os.IsNotExist(err) || s.protectedLocked(notePath, entry) {
+		if !os.IsNotExist(err) {
+			return changed, fmt.Errorf("store: [%s] lecture du cache de %s: %w", CodeStorageIO, notePath, err)
+		}
+		if s.protectedLocked(notePath, entry) {
 			continue
 		}
 		if _, known := s.known[notePath]; !known {
@@ -391,7 +405,7 @@ func (s *Store) repairBlobsLocked(rebuilding bool) bool {
 
 	files, err := os.ReadDir(s.notesDir())
 	if err != nil {
-		return changed
+		return changed, fmt.Errorf("store: [%s] lecture du dossier des notes: %w", CodeStorageIO, err)
 	}
 	blobs := make(map[string]bool, len(files))
 	for _, file := range files {
@@ -425,7 +439,7 @@ func (s *Store) repairBlobsLocked(rebuilding bool) bool {
 			changed = true
 		}
 	}
-	return changed
+	return changed, nil
 }
 
 // catchUpBlobLocked rattrape un blob plus récent que ce que l'index en dit.

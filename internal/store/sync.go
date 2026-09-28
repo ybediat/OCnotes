@@ -877,7 +877,9 @@ func (s *Store) Clear() error {
 	if err := os.MkdirAll(s.notesDir(), 0o700); err != nil {
 		return fmt.Errorf("store: [%s] recréation du cache: %w", CodeStorageIO, err)
 	}
-	s.removeLegacyGenerations()
+	if err := s.removeLegacyGenerations(); err != nil {
+		return fmt.Errorf("store: [%s] purge des générations d'index: %w", CodeStorageIO, err)
+	}
 
 	s.entries = map[string]*Entry{}
 	s.folders = map[string]bool{}
