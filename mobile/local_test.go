@@ -2,6 +2,8 @@ package mobile
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -258,6 +260,35 @@ func TestModeLocalSurvitAuRedemarrageSansRestore(t *testing.T) {
 	}
 	if content != "# Persistante\n" {
 		t.Errorf("contenu = %q", content)
+	}
+}
+
+// Un index perdu se reconstruit sans connaître le mode, donc du côté prudent :
+// tout est à confronter au serveur. C'est la configuration qui ramène ensuite le
+// cache en mode local, et rien ne doit rester « en attente d'envoi ».
+func TestModeLocalIndexPerduSeReconstruitSansFile(t *testing.T) {
+	app, dataDir := prepareLocal(t)
+	if _, err := app.CreateFolderJSON("", "Carnets"); err != nil {
+		t.Fatalf("CreateFolderJSON: %v", err)
+	}
+	if _, err := app.CreateNoteJSON("Carnets", "Dedans", "texte rangé"); err != nil {
+		t.Fatalf("CreateNoteJSON: %v", err)
+	}
+	index := filepath.Join(dataDir, "cache", "index.json")
+	if err := os.WriteFile(index, []byte("{cassé"), 0o600); err != nil {
+		t.Fatalf("corruption de l'index: %v", err)
+	}
+
+	rouverte, err := NewApp(dataDir)
+	if err != nil {
+		t.Fatalf("NewApp sur index perdu: %v", err)
+	}
+	content, err := rouverte.ReadNote("Carnets/Dedans.md")
+	if err != nil || content != "texte rangé" {
+		t.Fatalf("note après reconstruction = %q, erreur = %v", content, err)
+	}
+	if n := rouverte.PendingCount(); n != 0 {
+		t.Errorf("PendingCount = %d, attendu 0 en mode local", n)
 	}
 }
 

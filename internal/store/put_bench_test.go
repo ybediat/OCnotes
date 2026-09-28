@@ -65,3 +65,57 @@ func bancGet(b *testing.B, notes int) {
 
 func BenchmarkGet10Notes(b *testing.B)   { bancGet(b, 10) }
 func BenchmarkGet1000Notes(b *testing.B) { bancGet(b, 1000) }
+
+// bancRenommageDossier mesure le renommage d'un dossier de n notes sur
+// l'appareil. C'est le seul geste qui réécrit un double par note : il doit
+// rester du même ordre que l'écriture d'un index.
+func bancRenommageDossier(b *testing.B, notes int) {
+	s, err := Open(b.TempDir())
+	if err != nil {
+		b.Fatal(err)
+	}
+	s.localOnly = true
+	s.quota = UnlimitedQuota
+	petite := []byte(strings.Repeat("x", 2000))
+	for i := 0; i < notes; i++ {
+		if err := s.Put(fmt.Sprintf("A/n%04d.md", i), petite); err != nil {
+			b.Fatal(err)
+		}
+	}
+	noms := [2]string{"A", "B"}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := s.RenameOnDevice(noms[i%2], noms[(i+1)%2]); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkRenommageDossier500Notes(b *testing.B) { bancRenommageDossier(b, 500) }
+
+// bancOuverture mesure le démarrage d'un cache de n notes de 20 ko. Open est
+// sur le chemin de Restore : il ne doit pas lire le contenu des notes.
+func bancOuverture(b *testing.B, notes int) {
+	dir := b.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		b.Fatal(err)
+	}
+	s.quota = UnlimitedQuota
+	contenu := []byte(strings.Repeat("abcdefghij", 2000))
+	for i := 0; i < notes; i++ {
+		if err := s.Accept(fmt.Sprintf("n%04d.md", i), contenu, `"e"`); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := Open(dir); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkOuverture1000Notes(b *testing.B) { bancOuverture(b, 1000) }

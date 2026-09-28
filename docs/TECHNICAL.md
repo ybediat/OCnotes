@@ -44,16 +44,26 @@ notes distantes. Dans l'autre sens, l'application pousse d'abord les écritures
 en attente et rapatrie les contenus manquants avant d'oublier le serveur.
 
 Les contenus utilisent des identifiants physiques stables, indépendants de
-leur chemin logique : renommer une note ne déplace pas son blob. L'index est
-conservé sous dix générations immuables. Au démarrage, la génération valide la
-plus récente est retenue ; en mode local, tout blob non référencé est remonté à
-la racine sous un nom « Note récupérée NNN.md » plutôt que supprimé.
+leur chemin logique : renommer une note ne déplace pas son blob. Chaque blob
+porte à côté de lui un double `<blob>.meta` qui contient le chemin de sa note,
+écrit à la création et au renommage seulement. L'index `index.json` reste
+l'unique fichier écrit à chaque enregistrement ; s'il est absent, illisible ou
+d'une version inconnue, il se reconstruit depuis les blobs et leurs doubles.
+Une note sans double lisible revient à la racine sous un nom
+« Note récupérée NNN.md » ; aucun blob n'est jeté faute d'index.
 
-En mode synchronisé, le préfixe physique distingue une création locale d'un
-téléchargement serveur. Après repli sur un ancien index, un blob dont le contenu
-diffère de `BaseHash` redevient automatiquement une écriture en attente. Une
-création locale orpheline est récupérée et synchronisée ; un téléchargement
-orphelin peut être supprimé puisque le serveur en conserve la référence.
+Une reconstruction perd ce que seul l'index porte : la file d'attente, les
+ETags et les dossiers vides. Toute note est alors confrontée au serveur au
+passage suivant, qui règle en silence celles qui n'ont pas bougé ; en mode
+local, la configuration ramène le cache à son rôle de stockage unique.
+
+Un arrêt entre l'écriture d'un blob et celle de l'index est rattrapé à
+l'ouverture sans relire le cache : un blob plus récent que la date retenue par
+l'index est seul relu, et redevient une écriture en attente si son contenu
+diffère de `BaseHash`. En mode synchronisé, le préfixe physique distingue une
+création locale d'un téléchargement serveur : une création orpheline est
+récupérée et synchronisée, un téléchargement orphelin supprimé puisque le
+serveur en conserve la copie.
 
 Les écritures distantes utilisent les ETags et les préconditions HTTP. Si une
 note a été modifiée à la fois localement et sur le serveur, OCnotes n'écrase

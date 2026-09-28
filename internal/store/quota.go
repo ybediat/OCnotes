@@ -263,6 +263,9 @@ func (s *Store) evictLocked(entry *Entry) error {
 	if err := os.Remove(staged); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("store: [%s] suppression du cache évincé de %s: %w", CodeStorageIO, entry.Path, err)
 	}
+	// Un double resté seul serait retiré à l'ouverture suivante : l'échec ici
+	// ne mérite pas d'interrompre l'éviction.
+	_ = os.Remove(s.sidecarPath(entry.Cache))
 	return nil
 }
 

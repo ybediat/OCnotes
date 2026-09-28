@@ -860,8 +860,8 @@ func TestIndexIllisibleNEmpechePasLOuverture(t *testing.T) {
 		t.Fatalf("écriture de l'index corrompu: %v", err)
 	}
 
-	// La génération immuable précédente prend le relais : corrompre le miroir
-	// courant ne doit perdre ni l'index ni le contenu.
+	// L'index se reconstruit depuis les doubles : le perdre ne doit coûter ni
+	// le contenu ni le nom d'une note.
 	again, err := Open(dir)
 	if err != nil {
 		t.Fatalf("Open sur index corrompu: %v", err)
