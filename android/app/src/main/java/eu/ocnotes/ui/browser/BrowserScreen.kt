@@ -210,25 +210,12 @@ fun BrowserScreen(
             } else {
                 TopAppBar(
                     title = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            Text(
-                                text = etat.titre,
-                                style = StyleTitrePrincipal,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false),
-                            )
-                            if (!etat.modeLocal) {
-                                IndicateurSynchronisation(
-                                    enCours = etat.synchronisationEnCours,
-                                    enAttente = etat.enAttente,
-                                    attention = etat.depuisCache || etat.erreur != null,
-                                )
-                            }
-                        }
+                        Text(
+                            text = etat.titre,
+                            style = StyleTitrePrincipal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     },
                     navigationIcon = {
                         if (etat.peutRemonter) {
@@ -254,6 +241,14 @@ fun BrowserScreen(
                     // ce qui agit sur la liste affichée.
                     actions = {
                         BoutonTri(tri = etat.tri, onChanger = viewModel::changerTri)
+                        if (!etat.modeLocal) {
+                            IndicateurSynchronisation(
+                                enCours = etat.synchronisationEnCours,
+                                enAttente = etat.enAttente,
+                                attention = etat.depuisCache || etat.erreur != null,
+                                modifier = Modifier.padding(start = 6.dp, end = 2.dp),
+                            )
+                        }
                         // En mode local il n'y a personne à qui pousser : le
                         // geste ne relit que le disque, et le dire autrement
                         // laisserait croire à une synchronisation qui n'existe
@@ -764,6 +759,7 @@ private fun IndicateurSynchronisation(
     enCours: Boolean,
     enAttente: Int,
     attention: Boolean,
+    modifier: Modifier = Modifier,
 ) {
     val orange = if (isSystemInDarkTheme()) Color(0xFFFFB45C) else Color(0xFFC75B00)
     val vert = if (isSystemInDarkTheme()) Color(0xFF6DD58C) else Color(0xFF19753A)
@@ -794,7 +790,7 @@ private fun IndicateurSynchronisation(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(10.dp)
             .then(
                 if (enCours) {
