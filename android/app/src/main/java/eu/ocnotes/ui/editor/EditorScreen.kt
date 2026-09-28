@@ -26,6 +26,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -279,7 +280,13 @@ fun EditorScreen(
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.surface),
                 ) {
-                    if (!etat.modifiable) BandeauLectureSeule(etat.raisonLectureSeule)
+                    if (!etat.modifiable) {
+                        BandeauLectureSeule(
+                            raison = etat.raisonLectureSeule,
+                            encodageForcable = etat.encodageForcable,
+                            onOuvrirQuandMeme = viewModel::ouvrirQuandMeme,
+                        )
+                    }
                     VueMarkdown(blocs = etat.blocs, modifier = Modifier.weight(1f))
                 }
             }
@@ -389,7 +396,11 @@ private fun ZoneSaisie(
  * dont l'utilisateur n'a rien à faire.
  */
 @Composable
-private fun BandeauLectureSeule(raison: RaisonLectureSeule) {
+private fun BandeauLectureSeule(
+    raison: RaisonLectureSeule,
+    encodageForcable: String?,
+    onOuvrirQuandMeme: () -> Unit,
+) {
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
         modifier = Modifier.fillMaxWidth(),
@@ -404,19 +415,29 @@ private fun BandeauLectureSeule(raison: RaisonLectureSeule) {
                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
                 modifier = Modifier.padding(end = 12.dp),
             )
-            Text(
-                text = stringResource(
-                    when (raison) {
-                        RaisonLectureSeule.MOT_TROP_LONG -> R.string.apercu_lecture_seule
-                        RaisonLectureSeule.DOCUMENT -> R.string.apercu_document_lecture_seule
-                        RaisonLectureSeule.FORMAT_TEXTE -> R.string.apercu_texte_lecture_seule
-                        RaisonLectureSeule.AUTORISATION -> R.string.apercu_autorisation_lecture_seule
-                        RaisonLectureSeule.ENCODAGE -> R.string.apercu_encodage_lecture_seule
-                    },
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
+            Column {
+                Text(
+                    text = stringResource(
+                        when (raison) {
+                            RaisonLectureSeule.MOT_TROP_LONG -> R.string.apercu_lecture_seule
+                            RaisonLectureSeule.DOCUMENT -> R.string.apercu_document_lecture_seule
+                            RaisonLectureSeule.FORMAT_TEXTE -> R.string.apercu_texte_lecture_seule
+                            RaisonLectureSeule.AUTORISATION -> R.string.apercu_autorisation_lecture_seule
+                            RaisonLectureSeule.ENCODAGE -> R.string.apercu_encodage_lecture_seule
+                        },
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                // La détection doute parfois à tort ; l'utilisateur, lui, sait
+                // ce que contient son fichier. Aucun bouton quand aucun
+                // encodage ne rend le fichier à l'identique.
+                if (raison == RaisonLectureSeule.ENCODAGE && encodageForcable != null) {
+                    TextButton(onClick = onOuvrirQuandMeme) {
+                        Text(stringResource(R.string.apercu_ouvrir_quand_meme, encodageForcable))
+                    }
+                }
+            }
         }
     }
 }
