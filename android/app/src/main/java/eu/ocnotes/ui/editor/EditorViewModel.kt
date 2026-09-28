@@ -103,6 +103,15 @@ data class EditorUiState(
     val encodage: String? = null,
 
     /**
+     * L'encodage dans lequel une note ouverte en aperçu pour [RaisonLectureSeule.ENCODAGE]
+     * peut s'ouvrir quand même, sur un geste explicite ; `null` sinon.
+     *
+     * La détection doute parfois à tort — une note courte, trois accents
+     * d'affilée. C'est l'utilisateur qui sait ce que contient son fichier.
+     */
+    val encodageForcable: String? = null,
+
+    /**
      * Vrai quand les notes ne vivent que sur cet appareil.
      *
      * Décide de la formulation d'un contenu introuvable : « rouvrez-la une
@@ -241,70 +250,94 @@ class EditorViewModel(
     private var revisionEcrite = Long.MIN_VALUE
 
     init {
-        viewModelScope.launch {
-            try {
-                val lectureSeule = lectureSeuleFormat ?: repository.capabilities(chemin)
-                    .takeUnless { it.canWrite }
-                    ?.let { RaisonLectureSeule.AUTORISATION }
-                if (lectureSeule != null) {
-                    ouvrirEnApercu(lectureSeule)
-                } else {
-                    val contenu = try {
-                        repository.readNote(chemin)
-                    } catch (e: OCnotesException) {
-                        // Go refuse de livrer en chaîne un contenu qui n'est
-                        // pas de l'UTF-8 : ses accents deviendraient des « � »,
-                        // et le premier enregistrement les écrirait sur le
-                        // serveur. L'aperçu, lu en octets côté Go, n'a pas ce
-                        // risque.
-                        if (e.code != CODE_NON_UTF8) throw e
-                        ouvrirEnApercu(RaisonLectureSeule.ENCODAGE)
-                        return@launch
-                    }
-
-                    // Les images en ligne sortent du texte avant qu'il n'atteigne
-                    // le champ de saisie, et n'y reviennent qu'à l'écriture. Sans
-                    // cette étape, une note contenant une photo insérée depuis
-                    // l'interface web fait tuer l'application par le système.
-                    // Les images restent côté Go, sous `sessionEdition`.
-                    val prepare = repository.openEdit(nom, contenu)
-                    sessionEdition = prepare.session
-                    val encodage = repository.noteEncoding(chemin).takeUnless { it == ENCODAGE_UTF8 }
-
-                    // `update` prend une lambda non suspendue : tout appel à la
-                    // façade se fait avant, jamais dedans.
-                    val titre = prepare.title
-                    val blocs = if (prepare.editable) {
-                        emptyList()
-                    } else {
-                        repository.renderNote(nom, prepare.text)
-                    }
-                    _uiState.update {
-                        it.copy(
-                            chargement = false,
-                            charge = true,
-                            document = prepare.text,
-                            titre = titre,
-                            modifiable = prepare.editable,
-                            raisonLectureSeule = RaisonLectureSeule.MOT_TROP_LONG,
-                            encodage = encodage,
-                            // Une note inaffichable en saisie s'ouvre directement
-                            // en lecture : c'est le seul mode qui tienne.
-                            apercu = !prepare.editable,
-                            blocs = blocs,
-                        )
-                    }
-                }
-            } catch (e: OCnotesException) {
-                _uiState.update { it.copy(chargement = false, erreur = e.texte()) }
-            }
-        }
+        viewModelScope.launch { charger() }
 
         // La barre d'outils est construite à partir de la liste renvoyée par
         // Go : ajouter une action côté cœur suffit à la faire apparaître ici.
         viewModelScope.launch {
             val actions = runCatching { repository.formatActions() }.getOrDefault(emptyList())
             _uiState.update { it.copy(actions = actions) }
+        }
+    }
+
+    /**
+     * Lit la note et prépare l'écran : en saisie si elle peut l'être, en aperçu
+     * sinon. Relancé par [ouvrirQuandMeme] une fois l'encodage choisi.
+     */
+    private suspend fun charger() {
+        try {
+            val lectureSeule = lectureSeuleFormat ?: repository.capabilities(chemin)
+                .takeUnless { it.canWrite }
+                ?.let { RaisonLectureSeule.AUTORISATION }
+            if (lectureSeule != null) {
+                ouvrirEnApercu(lectureSeule)
+            } else {
+                val contenu = try {
+                    repository.readNote(chemin)
+                } catch (e: OCnotesException) {
+                    // Go refuse de livrer en saisie un contenu dont il ne
+                    // reconnaît pas l'encodage avec certitude : le réécrire
+                    // pourrait l'abîmer. L'aperçu, lu en octets côté Go, n'a
+                    // pas ce risque, et le bandeau propose d'ouvrir quand même.
+                    if (e.code != CODE_NON_UTF8) throw e
+                    ouvrirEnApercu(RaisonLectureSeule.ENCODAGE)
+                    return
+                }
+
+                // Les images en ligne sortent du texte avant qu'il n'atteigne
+                // le champ de saisie, et n'y reviennent qu'à l'écriture. Sans
+                // cette étape, une note contenant une photo insérée depuis
+                // l'interface web fait tuer l'application par le système.
+                // Les images restent côté Go, sous `sessionEdition`.
+                val prepare = repository.openEdit(nom, contenu)
+                sessionEdition = prepare.session
+                val encodage = repository.noteEncoding(chemin).takeUnless { it == ENCODAGE_UTF8 }
+
+                // `update` prend une lambda non suspendue : tout appel à la
+                // façade se fait avant, jamais dedans.
+                val titre = prepare.title
+                val blocs = if (prepare.editable) {
+                    emptyList()
+                } else {
+                    repository.renderNote(nom, prepare.text)
+                }
+                _uiState.update {
+                    it.copy(
+                        chargement = false,
+                        charge = true,
+                        document = prepare.text,
+                        titre = titre,
+                        modifiable = prepare.editable,
+                        raisonLectureSeule = RaisonLectureSeule.MOT_TROP_LONG,
+                        encodage = encodage,
+                        // Une note inaffichable en saisie s'ouvre directement
+                        // en lecture : c'est le seul mode qui tienne.
+                        apercu = !prepare.editable,
+                        blocs = blocs,
+                    )
+                }
+            }
+        } catch (e: OCnotesException) {
+            _uiState.update { it.copy(chargement = false, erreur = e.texte()) }
+        }
+    }
+
+    /**
+     * Ouvre en saisie, dans l'encodage deviné, une note que la détection
+     * n'osait pas affirmer. Le choix est retenu par le cache pour ce contenu :
+     * il vaut aux ouvertures suivantes, jusqu'à ce que le fichier change
+     * ailleurs.
+     */
+    fun ouvrirQuandMeme() {
+        viewModelScope.launch {
+            try {
+                repository.forceEncoding(chemin)
+            } catch (e: OCnotesException) {
+                _uiState.update { it.copy(erreur = e.texte()) }
+                return@launch
+            }
+            _uiState.update { it.copy(chargement = true, charge = false, encodageForcable = null) }
+            charger()
         }
     }
 
@@ -319,6 +352,11 @@ class EditorViewModel(
     private suspend fun ouvrirEnApercu(raison: RaisonLectureSeule) {
         val blocs = repository.renderFile(chemin)
         val titre = repository.titleOf(nom, "")
+        val encodageForcable = if (raison == RaisonLectureSeule.ENCODAGE) {
+            repository.forcibleEncoding(chemin)
+        } else {
+            null
+        }
         _uiState.update {
             it.copy(
                 chargement = false,
@@ -328,6 +366,7 @@ class EditorViewModel(
                 raisonLectureSeule = raison,
                 apercu = true,
                 blocs = blocs,
+                encodageForcable = encodageForcable,
             )
         }
     }

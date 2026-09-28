@@ -177,3 +177,107 @@ func TestRoundTripsSignaleUnContenuAbime(t *testing.T) {
 		}
 	}
 }
+
+// De vrais textes étrangers, dans leur encodage d'origine, lus de travers en
+// Windows-1252 : aucun ne doit passer pour un texte de l'Ouest. Les octets
+// viennent des codecs de Python, pas d'une recopie à la main.
+func TestPlausible1252RefuseLesAutresEncodages(t *testing.T) {
+	cas := map[string][]byte{
+		// « Zażółć gęślą jaźń. Było już późno. »
+		"polonais ISO-8859-2": []byte("Za\xbf\xf3\xb3\xe6 g\xea\xb6l\xb1 ja\xbc\xf1. By\xb3o ju\xbf p\xf3\xbcno."),
+		// « Příliš žluťoučký kůň » : le « ť » est un octet que Windows-1252 ne définit pas.
+		"tchèque Windows-1250": []byte("P\xf8\xedli\x9a \x9elu\x9dou\xe8k\xfd k\xf9\xf2"),
+		// « Ťapka » : le « Ť » en tête de mot n'est entouré d'aucune lettre, seul
+		// son octet indéfini en Windows-1252 le trahit.
+		"tchèque, Ť initial": []byte("\x8dapka"),
+		// « Привет, мир »
+		"russe Windows-1251": []byte("\xcf\xf0\xe8\xe2\xe5\xf2, \xec\xe8\xf0"),
+		// « Καλημέρα »
+		"grec Windows-1253": []byte("\xca\xe1\xeb\xe7\xec\xdd\xf1\xe1"),
+		// « 日本語のテキスト »
+		"japonais Shift-JIS": []byte("\x93\xfa\x96{\x8c\xea\x82\xcc\x83e\x83L\x83X\x83g"),
+		// « Résumé de l'été » écrit sous DOS
+		"français CP850": []byte("R\x82sum\x82 de l'\x82t\x82"),
+		// Une image renommée en .txt
+		"binaire": []byte("\x89PNG\r\n\x1a\n"),
+	}
+	for nom, brut := range cas {
+		texte, enc := Decode(brut)
+		if enc.Name != Windows1252 {
+			t.Fatalf("%s : lu en %s, le test suppose Windows-1252", nom, enc.Name)
+		}
+		if Plausible1252(texte) {
+			t.Errorf("%s : %q passe pour un texte de l'Ouest", nom, texte)
+		}
+	}
+}
+
+// Les langues de l'Ouest passent, y compris ce qui frôle les règles : une
+// apostrophe typographique entre deux lettres, deux accents d'affilée, un
+// symbole collé à un chiffre, une note de trois lettres dont deux accentuées.
+func TestPlausible1252AccepteLesLanguesDeLOuest(t *testing.T) {
+	for _, texte := range []string{
+		"Résumé de l’été, aujourd’hui : 5 € — « œuvre » naïve. Ça !\r\n",
+		"Grüße aus Köln, Straße 12.",
+		"¿Qué tal? ¡Mañana, señor!",
+		"Atenção, não há ações.",
+		"Col·lecció d’art català.",
+		"Température : 20 °C, 3 m², ½ litre, § 4, © 2026.",
+		"Blåbærsyltetøj på Ærø.",
+		"été",
+		"“Prix” : 5 € — une œuvre…",
+		"\tcolonne\tsuivante\f",
+	} {
+		if !Plausible1252(texte) {
+			t.Errorf("%q refusé", texte)
+		}
+	}
+}
+
+func TestEtiquetteDEncodageAllerRetour(t *testing.T) {
+	for _, enc := range []Encoding{
+		{Name: UTF8}, {Name: UTF8, BOM: true},
+		{Name: UTF16LE}, {Name: UTF16LE, BOM: true},
+		{Name: UTF16BE}, {Name: UTF16BE, BOM: true},
+		{Name: Windows1252},
+	} {
+		if got, ok := ParseEncoding(enc.String()); !ok || got != enc {
+			t.Errorf("ParseEncoding(%q) = %v, %v", enc.String(), got, ok)
+		}
+	}
+	for _, label := range []string{"", "latin1", "ISO-8859-2", "windows-1252+bom"} {
+		if got, ok := ParseEncoding(label); ok {
+			t.Errorf("ParseEncoding(%q) accepte : %v", label, got)
+		}
+	}
+}
+
+// DecodeAs lit un contenu dans l'encodage qu'on lui impose, même contre la
+// détection, mais seulement si l'aller-retour reste exact.
+func TestDecodeAs(t *testing.T) {
+	win := Encoding{Name: Windows1252}
+	cas := []struct {
+		nom   string
+		brut  []byte
+		enc   Encoding
+		texte string
+		ok    bool
+	}{
+		// Ce que Plausible1252 refuse, l'utilisateur peut l'imposer.
+		{"trois accents d'affilée", []byte("\xc9 \xe9\x9c\x9c \xf8\n"), win, "É éœœ ø\n", true},
+		{"UTF-16 sans BOM imposé", []byte("o\x00k\x00"), Encoding{Name: UTF16LE}, "ok", true},
+		{"UTF-16 à BOM", []byte("\xff\xfeo\x00k\x00"), Encoding{Name: UTF16LE, BOM: true}, "ok", true},
+		{"BOM annoncée mais absente", []byte("o\x00k\x00"), Encoding{Name: UTF16LE, BOM: true}, "", false},
+		{"BOM de l'autre boutisme", []byte("\xfe\xff\x00o"), Encoding{Name: UTF16LE, BOM: true}, "", false},
+		{"UTF-16 tronqué", []byte("o\x00k"), Encoding{Name: UTF16LE}, "", false},
+		{"UTF-8 à BOM", []byte("\xef\xbb\xbf\xc3\xa9"), Encoding{Name: UTF8, BOM: true}, "é", true},
+		{"UTF-8 invalide", []byte("\xe9t\xe9"), Encoding{Name: UTF8}, "", false},
+		{"encodage inconnu", []byte("abc"), Encoding{Name: "ISO-8859-2"}, "", false},
+	}
+	for _, c := range cas {
+		texte, ok := DecodeAs(c.brut, c.enc)
+		if ok != c.ok || texte != c.texte {
+			t.Errorf("%s : DecodeAs = %q, %v ; veut %q, %v", c.nom, texte, ok, c.texte, c.ok)
+		}
+	}
+}

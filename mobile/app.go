@@ -1322,6 +1322,9 @@ func indexByte(s string, b byte) int {
 //
 //   - l'UTF-16 sans BOM, reconnu à ses octets nuls par une heuristique : on ne
 //     réécrit pas un fichier sur une supposition qui peut être fausse ;
+//   - un texte qui, lu en Windows-1252, ne ressemble pas à une langue de
+//     l'Ouest : c'est sans doute un autre encodage sur 8 bits (polonais,
+//     russe, japonais…), qu'y écrire mêlerait au Windows-1252 ;
 //   - un contenu que décoder puis réencoder ne rend pas à l'identique — un
 //     UTF-16 tronqué, par exemple. L'écrire, même sans rien y changer, en
 //     perdrait des octets.
@@ -1333,20 +1336,100 @@ func (a *App) ReadNote(notePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	text, enc := charset.Decode(content)
-	if !rewritable(enc) || !charset.RoundTrips(content) {
-		return "", fmt.Errorf("mobile: [%s] l'encodage de %s n'est pas reconnu avec certitude : il ne s'ouvre qu'en lecture", CodeNotUTF8, notePath)
+	text, enc, err := a.decodeNote(notePath, content)
+	if err != nil {
+		return "", err
 	}
 	a.rememberFormat(notePath, noteFormat{encoding: enc, ending: notes.DetectLineEnding(text)})
 	return notes.NormalizeLineEndings(text), nil
 }
 
+// decodeNote décode le contenu d'une note pour l'éditeur.
+//
+// L'encodage retenu par le cache passe avant la détection : pour ce contenu
+// précis, l'application l'a écrit elle-même, ou l'utilisateur l'a choisi
+// (ForceEncoding). La détection, elle, devine — et un texte Windows-1252 tapé
+// dans l'éditeur peut ne plus lui paraître plausible à la réouverture, trois
+// accents d'affilée suffisent.
+func (a *App) decodeNote(notePath string, content []byte) (string, charset.Encoding, error) {
+	if enc, ok := a.rememberedEncoding(notePath, content); ok {
+		if text, ok := charset.DecodeAs(content, enc); ok {
+			return text, enc, nil
+		}
+	}
+	text, enc := charset.Decode(content)
+	if !rewritable(enc, text) || !charset.RoundTrips(content) {
+		return "", enc, fmt.Errorf("mobile: [%s] l'encodage de %s n'est pas reconnu avec certitude : il ne s'ouvre qu'en lecture", CodeNotUTF8, notePath)
+	}
+	return text, enc, nil
+}
+
+// rememberedEncoding renvoie l'encodage que le cache a retenu pour ce contenu.
+func (a *App) rememberedEncoding(notePath string, content []byte) (charset.Encoding, bool) {
+	label, ok := a.cache.EncodingOf(notePath, content)
+	if !ok {
+		return charset.Encoding{}, false
+	}
+	return charset.ParseEncoding(label)
+}
+
+// encodingLabel est l'étiquette à retenir dans le cache : vide pour de
+// l'UTF-8 simple, que la détection reconnaît sans erreur possible.
+func encodingLabel(enc charset.Encoding) string {
+	if enc == (charset.Encoding{Name: charset.UTF8}) {
+		return ""
+	}
+	return enc.String()
+}
+
+// ForcibleEncoding renvoie l'encodage dans lequel une note refusée par
+// ReadNote (NOT_UTF8) peut tout de même s'ouvrir en saisie si l'utilisateur
+// le demande, ou "" si aucun ne la rend à l'identique — un fichier tronqué.
+// Sans réseau : la note doit être en cache, ce qu'a fait son aperçu.
+//
+// C'est l'encodage que la détection avait deviné sans oser l'affirmer : du
+// Windows-1252 qui ne ressemble pas à une langue de l'Ouest, de l'UTF-16 sans
+// BOM.
+func (a *App) ForcibleEncoding(notePath string) string {
+	content, _, cached := a.cache.Get(notePath)
+	if !cached {
+		return ""
+	}
+	enc := charset.Detect(content)
+	if _, ok := charset.DecodeAs(content, enc); !ok {
+		return ""
+	}
+	return string(enc.Name)
+}
+
+// ForceEncoding retient, pour le contenu actuel de la note, l'encodage que
+// propose ForcibleEncoding : le prochain ReadNote l'ouvre en saisie. C'est le
+// geste explicite de l'utilisateur qui tranche là où la détection doutait ;
+// il vaut jusqu'à ce que le contenu change ailleurs que dans l'application.
+func (a *App) ForceEncoding(notePath string) error {
+	content, _, cached := a.cache.Get(notePath)
+	if !cached {
+		return contentNotCachedError(notePath)
+	}
+	enc := charset.Detect(content)
+	if _, ok := charset.DecodeAs(content, enc); !ok {
+		return fmt.Errorf("mobile: [%s] %s ne se relit à l'identique dans aucun encodage connu", CodeNotUTF8, notePath)
+	}
+	return a.cache.RememberEncoding(notePath, enc.String())
+}
+
 // rewritable dit si un encodage détecté est assez sûr pour réécrire le
-// fichier. Seul l'UTF-16 sans BOM ne l'est pas : c'est une supposition.
-func rewritable(enc charset.Encoding) bool {
+// fichier. Deux détections sont des suppositions : l'UTF-16 sans BOM, et le
+// Windows-1252, qui reçoit tout ce qui n'est ni UTF-8 ni UTF-16. Le premier
+// n'est jamais réécrit ; le second seulement si le texte ressemble à une
+// langue de l'Ouest (charset.Plausible1252) — un fichier polonais en
+// ISO-8859-2 lu en Windows-1252 reste en aperçu.
+func rewritable(enc charset.Encoding, text string) bool {
 	switch enc.Name {
 	case charset.UTF16LE, charset.UTF16BE:
 		return enc.BOM
+	case charset.Windows1252:
+		return charset.Plausible1252(text)
 	default:
 		return true
 	}
@@ -1386,6 +1469,11 @@ func (a *App) formatFor(notePath string) noteFormat {
 		return f
 	}
 	if content, _, cached := a.cache.Get(notePath); cached {
+		if enc, ok := a.rememberedEncoding(notePath, content); ok {
+			if text, ok := charset.DecodeAs(content, enc); ok {
+				return noteFormat{encoding: enc, ending: notes.DetectLineEnding(text)}
+			}
+		}
 		text, enc := charset.Decode(content)
 		return noteFormat{encoding: enc, ending: notes.DetectLineEnding(text)}
 	}
@@ -1532,7 +1620,10 @@ func (a *App) WriteNote(notePath, content string) error {
 		// plutôt que le remplacer par « ? », qui serait une perte sans message.
 		return fmt.Errorf("mobile: %s : %w", notePath, err)
 	}
-	return a.cache.Put(notePath, encoded)
+	// L'encodage est retenu avec le contenu : à la réouverture, c'est lui qui
+	// décide, et non une détection qui pourrait douter du texte qu'on vient
+	// d'écrire.
+	return a.cache.PutEncoded(notePath, encoded, encodingLabel(f.encoding))
 }
 
 // RefreshNote force la relecture d'une note depuis le serveur.

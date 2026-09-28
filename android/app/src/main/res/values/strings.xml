@@ -538,6 +538,7 @@
     <string name="apercu_texte_lecture_seule">Ce type de fichier s\'ouvre en lecture seule.</string>
     <string name="apercu_autorisation_lecture_seule">Vous pouvez consulter cette note, mais vous n’avez pas l’autorisation de la modifier.</string>
     <string name="apercu_encodage_lecture_seule">L\'encodage de ce fichier n\'est pas reconnu avec certitude. Il est ouvert en lecture seule pour ne pas l\'abîmer.</string>
+    <string name="apercu_ouvrir_quand_meme">Ouvrir quand même en %1$s</string>
     <string name="sync_conflits_suppression">\n• suppression annulée : %1$s a changé à distance</string>
     <string name="sync_conflits_deplacement">\n• déplacement annulé ; copie conservée : %1$s</string>
     <string name="reglages_conflits_suppression">• Suppression annulée : %1$s a changé à distance</string>
