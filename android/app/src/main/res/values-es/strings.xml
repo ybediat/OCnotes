@@ -368,6 +368,13 @@
     <string name="reglages_dossier">Carpeta</string>
     <string name="reglages_racine_espace">raíz del espacio</string>
 
+    <string name="reglages_apparence_titre">Apariencia</string>
+    <string name="reglages_police_titre">Fuente de la interfaz</string>
+    <string name="reglages_police_choix_titre">Elegir una fuente</string>
+    <string name="reglages_police_lexend">Lexend</string>
+    <string name="reglages_police_opendyslexic">OpenDyslexic</string>
+    <string name="reglages_police_systeme">Fuente del sistema</string>
+
     <string name="reglages_edition_titre">Edición</string>
 
     <string name="reglages_sync_titre">Sincronización</string>
@@ -446,6 +453,8 @@
          à une perte. -->
     <string name="editeur_brouillon">Borrador local, envío programado</string>
     <string name="editeur_encodage">Codificación %1$s</string>
+    <string name="editeur_plus_actions">Más acciones</string>
+    <string name="editeur_detection_automatique">Volver a la detección automática</string>
     <string name="editeur_saisie_vide">Escriba aquí…</string>
     <string name="editeur_illisible_titre">Nota no cargada</string>
     <string name="editeur_illisible_detail">No se ha podido leer su contenido. No se ha modificado nada: vuelva a abrirla cuando se restablezca la conexión.</string>

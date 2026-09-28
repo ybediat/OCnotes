@@ -876,6 +876,19 @@ class OCnotesRepository(
         call { it.forceEncoding(notePath) }
     }
 
+    /**
+     * Vrai quand l'encodage de la note vient d'un choix retenu par le cache que
+     * la détection seule ne ferait pas — la condition pour proposer
+     * [resetEncoding]. Sans réseau.
+     */
+    suspend fun encodingOverridden(notePath: String): Boolean =
+        call { it.encodingOverridden(notePath) }
+
+    /** Oublie l'encodage retenu : [readNote] s'en remet de nouveau à la détection. */
+    suspend fun resetEncoding(notePath: String) {
+        call { it.resetEncoding(notePath) }
+    }
+
     /** Libère les images d'une session, **après** sa dernière écriture. */
     suspend fun closeEdit(session: String) {
         if (session.isNotEmpty()) call { it.closeEdit(session) }

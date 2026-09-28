@@ -112,6 +112,23 @@ data class EditorUiState(
     val encodageForcable: String? = null,
 
     /**
+     * Vrai quand [encodage] vient d'un choix retenu par le cache contre l'avis
+     * de la détection — « Ouvrir quand même », ou un texte écrit ici que la
+     * détection ne reconnaîtrait plus. Le menu propose alors d'y revenir.
+     */
+    val encodageForce: Boolean = false,
+
+    /**
+     * Nombre de rechargements de la note ([ouvrirQuandMeme],
+     * [EditorViewModel.revenirALaDetection]).
+     *
+     * L'écran en fait la clé de ce qu'il retient du champ natif : sans elle, le
+     * champ recréé restaurerait la photo du texte d'avant, décodé dans l'autre
+     * encodage.
+     */
+    val chargements: Int = 0,
+
+    /**
      * Vrai quand les notes ne vivent que sur cet appareil.
      *
      * Décide de la formulation d'un contenu introuvable : « rouvrez-la une
@@ -292,6 +309,7 @@ class EditorViewModel(
                 val prepare = repository.openEdit(nom, contenu)
                 sessionEdition = prepare.session
                 val encodage = repository.noteEncoding(chemin).takeUnless { it == ENCODAGE_UTF8 }
+                val encodageForce = repository.encodingOverridden(chemin)
 
                 // `update` prend une lambda non suspendue : tout appel à la
                 // façade se fait avant, jamais dedans.
@@ -310,6 +328,7 @@ class EditorViewModel(
                         modifiable = prepare.editable,
                         raisonLectureSeule = RaisonLectureSeule.MOT_TROP_LONG,
                         encodage = encodage,
+                        encodageForce = encodageForce,
                         // Une note inaffichable en saisie s'ouvre directement
                         // en lecture : c'est le seul mode qui tienne.
                         apercu = !prepare.editable,
@@ -336,9 +355,65 @@ class EditorViewModel(
                 _uiState.update { it.copy(erreur = e.texte()) }
                 return@launch
             }
-            _uiState.update { it.copy(chargement = true, charge = false, encodageForcable = null) }
-            charger()
+            recharger()
         }
+    }
+
+    /**
+     * Défait [ouvrirQuandMeme] : la note s'en remet de nouveau à la détection,
+     * et rouvre en aperçu si celle-ci doutait.
+     *
+     * Les modifications en cours partent d'abord, dans l'encodage choisi :
+     * recharger sans les écrire les perdrait. Si leur écriture est refusée —
+     * un caractère que cet encodage ne sait pas écrire —, on s'arrête là, avec
+     * le message ; rien n'est oublié.
+     */
+    fun revenirALaDetection(instantane: InstantaneEditeurNatif?) {
+        viewModelScope.launch {
+            if (instantane != null && doitEnregistrerInstantaneNatif(_uiState.value, instantane)) {
+                enregistrement?.cancel()
+                ecrire(instantane.texte, instantane.revision)
+                if (_uiState.value.modifie) return@launch
+                syncScheduler.syncAfterLocalChange()
+            }
+            try {
+                repository.resetEncoding(chemin)
+            } catch (e: OCnotesException) {
+                _uiState.update { it.copy(erreur = e.texte()) }
+                return@launch
+            }
+            recharger()
+        }
+    }
+
+    /**
+     * Relit la note depuis le début, après un changement d'encodage.
+     *
+     * La session d'images est fermée d'abord : le texte relu en ouvrira une
+     * neuve, et l'ancienne ne servirait plus à rien. La photo du champ est
+     * oubliée avant et après le rechargement — le détachement de l'ancien
+     * champ, qui a lieu entre les deux, la reposerait sinon.
+     */
+    private suspend fun recharger() {
+        val session = sessionEdition
+        if (session.isNotEmpty()) {
+            sessionEdition = ""
+            verrouEcriture.withLock { runCatching { repository.closeEdit(session) } }
+        }
+        instantaneNatifConserve = null
+        _uiState.update {
+            it.copy(
+                chargement = true,
+                charge = false,
+                modifie = false,
+                encodage = null,
+                encodageForce = false,
+                encodageForcable = null,
+                chargements = it.chargements + 1,
+            )
+        }
+        charger()
+        instantaneNatifConserve = null
     }
 
     /**

@@ -387,6 +387,13 @@
     <string name="reglages_dossier">Folder</string>
     <string name="reglages_racine_espace">space root</string>
 
+    <string name="reglages_apparence_titre">Appearance</string>
+    <string name="reglages_police_titre">Interface font</string>
+    <string name="reglages_police_choix_titre">Choose a font</string>
+    <string name="reglages_police_lexend">Lexend</string>
+    <string name="reglages_police_opendyslexic">OpenDyslexic</string>
+    <string name="reglages_police_systeme">System font</string>
+
     <string name="reglages_edition_titre">Editing</string>
 
     <string name="reglages_sync_titre">Synchronization</string>
@@ -461,6 +468,8 @@
          à une perte. -->
     <string name="editeur_brouillon">Local draft, upload scheduled</string>
     <string name="editeur_encodage">Encoding %1$s</string>
+    <string name="editeur_plus_actions">More actions</string>
+    <string name="editeur_detection_automatique">Back to automatic detection</string>
     <string name="editeur_saisie_vide">Write here…</string>
     <string name="editeur_illisible_titre">Note not loaded</string>
     <string name="editeur_illisible_detail">Its contents could not be read. Nothing was changed: reopen it once the connection is back.</string>

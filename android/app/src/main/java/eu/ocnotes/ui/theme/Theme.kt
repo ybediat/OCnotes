@@ -12,10 +12,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.ocnotes.R
+import eu.ocnotes.data.PoliceInterface
 
 // Rôles publiés par le design system OpenCloud :
 // https://docs.opencloud.eu/design-system/designTokens/colorRoles.html
@@ -128,27 +130,46 @@ private val PoliceOCnotes = FontFamily(
     Font(R.font.lexend_black, FontWeight.Black),
 )
 
-private val Typographie = Typography().let { defaut ->
+private val PoliceOpenDyslexic = FontFamily(
+    Font(R.font.opendyslexic_regular, FontWeight.Normal, FontStyle.Normal),
+    Font(R.font.opendyslexic_italic, FontWeight.Normal, FontStyle.Italic),
+    Font(R.font.opendyslexic_bold, FontWeight.Bold, FontStyle.Normal),
+    Font(R.font.opendyslexic_bold_italic, FontWeight.Bold, FontStyle.Italic),
+)
+
+/** Police d'accent réservée au nom de l'application et au dossier courant. */
+val PoliceTitresPrincipaux = FontFamily(
+    Font(R.font.faune_display_black, FontWeight.Black),
+)
+
+fun familleDePolice(police: PoliceInterface): FontFamily = when (police) {
+    PoliceInterface.LEXEND -> PoliceOCnotes
+    PoliceInterface.OPENDYSLEXIC -> PoliceOpenDyslexic
+    PoliceInterface.SYSTEME -> FontFamily.Default
+}
+
+private fun typographie(police: PoliceInterface) = Typography().let { defaut ->
+    val famille = familleDePolice(police)
     Typography(
-        displayLarge = defaut.displayLarge.copy(fontFamily = PoliceOCnotes),
-        displayMedium = defaut.displayMedium.copy(fontFamily = PoliceOCnotes),
-        displaySmall = defaut.displaySmall.copy(fontFamily = PoliceOCnotes),
-        headlineLarge = defaut.headlineLarge.copy(fontFamily = PoliceOCnotes),
-        headlineMedium = defaut.headlineMedium.copy(fontFamily = PoliceOCnotes),
-        headlineSmall = defaut.headlineSmall.copy(fontFamily = PoliceOCnotes),
+        displayLarge = defaut.displayLarge.copy(fontFamily = famille),
+        displayMedium = defaut.displayMedium.copy(fontFamily = famille),
+        displaySmall = defaut.displaySmall.copy(fontFamily = famille),
+        headlineLarge = defaut.headlineLarge.copy(fontFamily = famille),
+        headlineMedium = defaut.headlineMedium.copy(fontFamily = famille),
+        headlineSmall = defaut.headlineSmall.copy(fontFamily = famille),
         titleLarge = defaut.titleLarge.copy(
-            fontFamily = PoliceOCnotes,
+            fontFamily = famille,
             fontWeight = FontWeight.SemiBold,
             fontSize = 20.sp,
         ),
-        titleMedium = defaut.titleMedium.copy(fontFamily = PoliceOCnotes),
-        titleSmall = defaut.titleSmall.copy(fontFamily = PoliceOCnotes),
-        bodyLarge = defaut.bodyLarge.copy(fontFamily = PoliceOCnotes),
-        bodyMedium = defaut.bodyMedium.copy(fontFamily = PoliceOCnotes),
-        bodySmall = defaut.bodySmall.copy(fontFamily = PoliceOCnotes),
-        labelLarge = defaut.labelLarge.copy(fontFamily = PoliceOCnotes),
-        labelMedium = defaut.labelMedium.copy(fontFamily = PoliceOCnotes),
-        labelSmall = defaut.labelSmall.copy(fontFamily = PoliceOCnotes),
+        titleMedium = defaut.titleMedium.copy(fontFamily = famille),
+        titleSmall = defaut.titleSmall.copy(fontFamily = famille),
+        bodyLarge = defaut.bodyLarge.copy(fontFamily = famille),
+        bodyMedium = defaut.bodyMedium.copy(fontFamily = famille),
+        bodySmall = defaut.bodySmall.copy(fontFamily = famille),
+        labelLarge = defaut.labelLarge.copy(fontFamily = famille),
+        labelMedium = defaut.labelMedium.copy(fontFamily = famille),
+        labelSmall = defaut.labelSmall.copy(fontFamily = famille),
     )
 }
 
@@ -165,13 +186,14 @@ private val Formes = Shapes(
 @Composable
 fun OCnotesTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    police: PoliceInterface = PoliceInterface.LEXEND,
     content: @Composable () -> Unit,
 ) {
     val colorScheme = if (darkTheme) PaletteSombre else PaletteClaire
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typographie,
+        typography = typographie(police),
         shapes = Formes,
         content = content,
     )

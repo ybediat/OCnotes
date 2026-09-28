@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.ocnotes.R
@@ -45,6 +46,7 @@ import eu.ocnotes.data.AuthMode
 import eu.ocnotes.ui.browser.ModeAffichage
 import eu.ocnotes.ui.theme.CouleurSignatureClaire
 import eu.ocnotes.ui.theme.CouleurSignatureSombre
+import eu.ocnotes.ui.theme.PoliceTitresPrincipaux
 import kotlinx.coroutines.launch
 
 /**
@@ -102,7 +104,10 @@ fun TiroirApplication(
             ModalDrawerSheet {
                 Text(
                     text = stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontFamily = PoliceTitresPrincipaux,
+                        fontWeight = FontWeight.Black,
+                    ),
                     color = couleurTitre,
                     modifier = Modifier.padding(horizontal = 28.dp, vertical = 20.dp),
                 )

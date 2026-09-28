@@ -15,8 +15,11 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -73,7 +76,9 @@ fun EditorScreen(
     val etat by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val sessionNative = remember(chemin) { SessionEditeurNatif() }
-    var dernierInstantaneNatif by remember(chemin, viewModel) {
+    // `chargements` en clé : une note rechargée dans un autre encodage ne doit
+    // pas retrouver la photo du champ d'avant, décodée autrement.
+    var dernierInstantaneNatif by remember(chemin, viewModel, etat.chargements) {
         mutableStateOf(viewModel.instantaneNatifConserve())
     }
     val vueLocale = LocalView.current
@@ -110,7 +115,7 @@ fun EditorScreen(
     // Mémorisée pour que `EditeurNatif` reste « skippable » : recréée à chaque
     // frappe, cette lambda forcerait la recomposition de l'`AndroidView` natif
     // et le réglage des styles qu'elle porte, alors que le champ se suffit.
-    val onDetachementNatif: (InstantaneEditeurNatif) -> Unit = remember(chemin, viewModel) {
+    val onDetachementNatif: (InstantaneEditeurNatif) -> Unit = remember(chemin, viewModel, etat.chargements) {
         { instantane ->
             dernierInstantaneNatif = instantane
             viewModel.enregistrerInstantaneNatif(instantane, survivreEcran = true)
@@ -122,8 +127,8 @@ fun EditorScreen(
     // layout de la note : ça se lit comme un plantage. Aucune clé sur
     // `apercu` : le champ survit à l'aperçu, il ne redessine pas « une
     // première fois » au retour, et l'overlay ne se lèverait plus.
-    var natifPret by remember(chemin) { mutableStateOf(false) }
-    val onPretNatif = remember(chemin) { { natifPret = true } }
+    var natifPret by remember(chemin, etat.chargements) { mutableStateOf(false) }
+    val onPretNatif = remember(chemin, etat.chargements) { { natifPret = true } }
 
     // Rédigé hors du `LaunchedEffect` : une coroutine n'est pas un contexte
     // de composition, elle ne peut pas lire de ressource.
@@ -217,6 +222,18 @@ fun EditorScreen(
                                 contentDescription = stringResource(R.string.apercu_activer),
                             )
                         }
+                    }
+
+                    // Seulement quand l'encodage a été choisi contre l'avis de
+                    // la détection : c'est l'annulation de « Ouvrir quand même ».
+                    if (etat.encodageForce) {
+                        MenuEncodage(
+                            onRevenirALaDetection = {
+                                viewModel.revenirALaDetection(
+                                    sessionNative.instantane() ?: dernierInstantaneNatif,
+                                )
+                            },
+                        )
                     }
                 },
             )
@@ -439,6 +456,27 @@ private fun BandeauLectureSeule(
                 }
             }
         }
+    }
+}
+
+/** Menu de l'éditeur, réduit pour l'instant au retour à la détection d'encodage. */
+@Composable
+private fun MenuEncodage(onRevenirALaDetection: () -> Unit) {
+    var ouvert by remember { mutableStateOf(false) }
+    IconButton(onClick = { ouvert = true }) {
+        Icon(
+            imageVector = Icons.Default.MoreVert,
+            contentDescription = stringResource(R.string.editeur_plus_actions),
+        )
+    }
+    DropdownMenu(expanded = ouvert, onDismissRequest = { ouvert = false }) {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.editeur_detection_automatique)) },
+            onClick = {
+                ouvert = false
+                onRevenirALaDetection()
+            },
+        )
     }
 }
 

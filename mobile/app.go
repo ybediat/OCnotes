@@ -1357,11 +1357,55 @@ func (a *App) decodeNote(notePath string, content []byte) (string, charset.Encod
 			return text, enc, nil
 		}
 	}
-	text, enc := charset.Decode(content)
-	if !rewritable(enc, text) || !charset.RoundTrips(content) {
+	text, enc, ok := detectRewritable(content)
+	if !ok {
 		return "", enc, fmt.Errorf("mobile: [%s] l'encodage de %s n'est pas reconnu avec certitude : il ne s'ouvre qu'en lecture", CodeNotUTF8, notePath)
 	}
 	return text, enc, nil
+}
+
+// detectRewritable est la décision de la détection seule, sans mémoire :
+// l'encodage deviné, et s'il est assez sûr pour réécrire le fichier.
+func detectRewritable(content []byte) (string, charset.Encoding, bool) {
+	text, enc := charset.Decode(content)
+	return text, enc, rewritable(enc, text) && charset.RoundTrips(content)
+}
+
+// EncodingOverridden dit si l'encodage d'une note vient de la mémoire du
+// cache contre l'avis de la détection : un choix « Ouvrir quand même », ou un
+// texte écrit par l'application que la détection ne reconnaîtrait plus. Sans
+// réseau.
+//
+// C'est la condition pour proposer ResetEncoding : quand la détection seule
+// arrive au même encodage, y revenir ne changerait rien.
+func (a *App) EncodingOverridden(notePath string) bool {
+	content, _, cached := a.cache.Get(notePath)
+	if !cached {
+		return false
+	}
+	remembered, ok := a.rememberedEncoding(notePath, content)
+	if !ok {
+		return false
+	}
+	if _, ok := charset.DecodeAs(content, remembered); !ok {
+		return false // la mémoire ne s'applique pas : decodeNote l'ignore aussi
+	}
+	_, detected, ok := detectRewritable(content)
+	return !ok || detected != remembered
+}
+
+// ResetEncoding oublie l'encodage retenu pour une note : le prochain ReadNote
+// s'en remet de nouveau à la détection. C'est l'annulation de ForceEncoding,
+// sans réécrire le fichier. Sans effet sur une note hors du cache.
+func (a *App) ResetEncoding(notePath string) error {
+	a.editsMu.Lock()
+	delete(a.formats, notePath)
+	a.editsMu.Unlock()
+
+	if _, _, cached := a.cache.Get(notePath); !cached {
+		return nil
+	}
+	return a.cache.RememberEncoding(notePath, "")
 }
 
 // rememberedEncoding renvoie l'encodage que le cache a retenu pour ce contenu.

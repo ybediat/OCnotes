@@ -401,3 +401,82 @@ func TestOuvrirQuandMemeDansLEncodageDevine(t *testing.T) {
 		t.Errorf("ForceEncoding(tronque.txt) : %v, attendu %s", err, CodeNotUTF8)
 	}
 }
+
+// « Revenir à la détection automatique » : un choix forcé se défait, sans
+// réécrire le fichier ni rien mettre en file, et la note retrouve l'aperçu où
+// la détection la plaçait.
+func TestRevenirALaDetectionAnnuleUnChoixForce(t *testing.T) {
+	app, server, _ := prepare(t)
+	russe := []byte("\xcf\xf0\xe8\xe2\xe5\xf2, \xec\xe8\xf0!\n")
+	deposer(server, map[string][]byte{"russe.txt": russe})
+
+	if _, err := app.ReadNote("russe.txt"); ErrorCode(errString(err)) != CodeNotUTF8 {
+		t.Fatalf("ReadNote avant le choix : %v", err)
+	}
+	if app.EncodingOverridden("russe.txt") {
+		t.Error("EncodingOverridden avant tout choix")
+	}
+	if err := app.ForceEncoding("russe.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if !app.EncodingOverridden("russe.txt") {
+		t.Error("EncodingOverridden faux après ForceEncoding")
+	}
+
+	if err := app.ResetEncoding("russe.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if app.EncodingOverridden("russe.txt") {
+		t.Error("EncodingOverridden encore vrai après ResetEncoding")
+	}
+	if _, err := app.ReadNote("russe.txt"); ErrorCode(errString(err)) != CodeNotUTF8 {
+		t.Errorf("ReadNote après ResetEncoding : %v, attendu %s", err, CodeNotUTF8)
+	}
+	if contenu, entree, _ := app.cache.Get("russe.txt"); string(contenu) != string(russe) || entree.Dirty {
+		t.Errorf("ResetEncoding a touché la note : %q, modifiée %v", contenu, entree.Dirty)
+	}
+	if n := app.PendingCount(); n != 0 {
+		t.Errorf("%d écriture(s) en attente après ResetEncoding", n)
+	}
+}
+
+// L'entrée n'est proposée que si la détection seule déciderait autrement. Un
+// texte Latin-1 ordinaire écrit par l'application n'en a pas besoin ; un
+// texte qu'elle ne reconnaîtrait plus — trois accents d'affilée, ou plus un
+// seul accent — si.
+func TestEncodingOverriddenSeulementContreLaDetection(t *testing.T) {
+	app, server, _ := prepare(t)
+	deposer(server, map[string][]byte{
+		"ordinaire.txt": []byte("caf\xe9\n"),
+		"accents.txt":   []byte("caf\xe9\n"),
+		"ascii.txt":     []byte("caf\xe9\n"),
+	})
+	ecrits := map[string]struct {
+		texte   string
+		propose bool
+	}{
+		"ordinaire.txt": {"café crème\n", false},
+		"accents.txt":   {"É éœœ ø\n", true},
+		"ascii.txt":     {"cafe\n", true},
+	}
+	for nom, e := range ecrits {
+		if _, err := app.ReadNote(nom); err != nil {
+			t.Fatal(err)
+		}
+		if err := app.WriteNote(nom, e.texte); err != nil {
+			t.Fatal(err)
+		}
+		if got := app.EncodingOverridden(nom); got != e.propose {
+			t.Errorf("EncodingOverridden(%s) = %v, veut %v", nom, got, e.propose)
+		}
+	}
+
+	// Revenir à la détection sur le fichier devenu ASCII le rend à l'UTF-8,
+	// et oublie aussi le format retenu en mémoire vive à la lecture.
+	if err := app.ResetEncoding("ascii.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if enc := app.NoteEncoding("ascii.txt"); enc != "UTF-8" {
+		t.Errorf("NoteEncoding après ResetEncoding = %q, veut UTF-8", enc)
+	}
+}

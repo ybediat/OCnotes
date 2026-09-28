@@ -5,6 +5,18 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+/** Police utilisée par l'interface et le contenu de lecture. */
+enum class PoliceInterface(val valeur: String) {
+    LEXEND("lexend"),
+    OPENDYSLEXIC("opendyslexic"),
+    SYSTEME("systeme");
+
+    companion object {
+        fun depuis(valeur: String?): PoliceInterface =
+            entries.firstOrNull { it.valeur == valeur } ?: LEXEND
+    }
+}
+
 /**
  * Préférences d'affichage : ce qui décrit un écran, pas une session.
  *
@@ -58,6 +70,9 @@ class PreferencesAffichage internal constructor(
     private val _saisieAutomatiqueEdition = MutableStateFlow(
         stockage.lireBooleen(CLE_SAISIE_AUTOMATIQUE_EDITION, true),
     )
+    private val _policeInterface = MutableStateFlow(
+        PoliceInterface.depuis(stockage.lireChaine(CLE_POLICE_INTERFACE)),
+    )
 
     /**
      * Ordre de tri retenu, sous sa forme brute.
@@ -100,6 +115,9 @@ class PreferencesAffichage internal constructor(
      */
     val saisieAutomatiqueEdition: StateFlow<Boolean> = _saisieAutomatiqueEdition.asStateFlow()
 
+    /** Police de l'interface ; Lexend reste le choix par défaut des installations existantes. */
+    val policeInterface: StateFlow<PoliceInterface> = _policeInterface.asStateFlow()
+
     fun definirTri(valeur: String) = ecrire(CLE_TRI, valeur, _tri)
 
     fun definirMode(valeur: String) = ecrire(CLE_MODE, valeur, _mode)
@@ -126,6 +144,11 @@ class PreferencesAffichage internal constructor(
         stockage.ecrireBooleen(CLE_SAISIE_AUTOMATIQUE_EDITION, valeur)
     }
 
+    fun definirPoliceInterface(valeur: PoliceInterface) {
+        _policeInterface.value = valeur
+        stockage.ecrireChaine(CLE_POLICE_INTERFACE, valeur.valeur)
+    }
+
     /**
      * Le flux est mis à jour avant l'écriture disque, et `apply()` diffère
      * celle-ci : l'écran se redessine sans attendre le stockage, et un disque
@@ -145,6 +168,7 @@ class PreferencesAffichage internal constructor(
         const val CLE_GARDER_ECRAN_ALLUME_LECTURE = "garder_ecran_allume_lecture"
         const val CLE_GARDER_ECRAN_ALLUME_EDITION = "garder_ecran_allume_edition"
         const val CLE_SAISIE_AUTOMATIQUE_EDITION = "saisie_automatique_edition"
+        const val CLE_POLICE_INTERFACE = "police_interface"
         const val QUOTA_CACHE_DEFAUT = 250L * 1024 * 1024
     }
 }

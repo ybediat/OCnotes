@@ -44,8 +44,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.ocnotes.R
 import eu.ocnotes.appContainer
+import eu.ocnotes.data.PoliceInterface
 import eu.ocnotes.ui.common.Bandeau
 import eu.ocnotes.ui.common.resoudre
+import eu.ocnotes.ui.theme.familleDePolice
 import android.text.format.Formatter
 
 private object QuotaCache {
@@ -70,6 +72,7 @@ fun SettingsScreen(
     val etat by viewModel.uiState.collectAsStateWithLifecycle()
     var confirmation by remember { mutableStateOf(false) }
     var choixQuota by remember { mutableStateOf(false) }
+    var choixPolice by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     LaunchedEffect(etat.deconnecte) {
@@ -156,6 +159,18 @@ fun SettingsScreen(
                     },
                 )
             }
+
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+
+            Text(
+                text = stringResource(R.string.reglages_apparence_titre),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            OptionChoix(
+                titre = stringResource(R.string.reglages_police_titre),
+                valeur = libellePolice(etat.policeInterface),
+                onClick = { choixPolice = true },
+            )
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
@@ -370,6 +385,40 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+
+    if (choixPolice) {
+        AlertDialog(
+            onDismissRequest = { choixPolice = false },
+            title = { Text(stringResource(R.string.reglages_police_choix_titre)) },
+            text = {
+                Column {
+                    PoliceInterface.entries.forEach { police ->
+                        TextButton(
+                            onClick = {
+                                choixPolice = false
+                                viewModel.definirPoliceInterface(police)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            RadioButton(selected = etat.policeInterface == police, onClick = null)
+                            Text(
+                                text = libellePolice(police),
+                                modifier = Modifier.padding(start = 8.dp),
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontFamily = familleDePolice(police),
+                                ),
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { choixPolice = false }) {
+                    Text(stringResource(R.string.action_annuler))
+                }
+            },
+        )
     }
 
     if (choixQuota) {
@@ -620,6 +669,13 @@ private fun libelleQuota(quota: Long): String = when (quota) {
 }
 
 @Composable
+private fun libellePolice(police: PoliceInterface): String = when (police) {
+    PoliceInterface.LEXEND -> stringResource(R.string.reglages_police_lexend)
+    PoliceInterface.OPENDYSLEXIC -> stringResource(R.string.reglages_police_opendyslexic)
+    PoliceInterface.SYSTEME -> stringResource(R.string.reglages_police_systeme)
+}
+
+@Composable
 private fun ligneConflit(conflit: ConflictDto): String = when (conflit.operation) {
     "delete" -> stringResource(R.string.reglages_conflits_suppression, conflit.path.substringAfterLast('/'))
     "move" -> stringResource(R.string.reglages_conflits_deplacement, conflit.copyPath.substringAfterLast('/'))
@@ -636,6 +692,24 @@ private fun Ligne(libelle: String, valeur: String) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(text = valeur, style = MaterialTheme.typography.bodyLarge)
+        }
+    }
+}
+
+@Composable
+private fun OptionChoix(
+    titre: String,
+    valeur: String,
+    onClick: () -> Unit,
+) {
+    Surface(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            Text(titre, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = valeur,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }

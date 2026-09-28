@@ -14,6 +14,7 @@ import eu.ocnotes.data.ConflictDto
 import eu.ocnotes.data.DetachPlanDto
 import eu.ocnotes.data.OCnotesException
 import eu.ocnotes.data.OCnotesRepository
+import eu.ocnotes.data.PoliceInterface
 import eu.ocnotes.data.PreferencesAffichage
 import eu.ocnotes.data.SyncResultDto
 import eu.ocnotes.ui.common.Texte
@@ -56,6 +57,7 @@ data class SettingsUiState(
     val garderEcranAllumeLecture: Boolean = false,
     val garderEcranAllumeEdition: Boolean = false,
     val saisieAutomatiqueEdition: Boolean = true,
+    val policeInterface: PoliceInterface = PoliceInterface.LEXEND,
     val preparationModeLocal: Boolean = false,
     val planModeLocal: DetachPlanDto? = null,
     val rapatriementEnCours: Boolean = false,
@@ -79,6 +81,7 @@ class SettingsViewModel(
             garderEcranAllumeLecture = preferences.garderEcranAllumeLecture.value,
             garderEcranAllumeEdition = preferences.garderEcranAllumeEdition.value,
             saisieAutomatiqueEdition = preferences.saisieAutomatiqueEdition.value,
+            policeInterface = preferences.policeInterface.value,
         ),
     )
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -104,6 +107,11 @@ class SettingsViewModel(
         viewModelScope.launch {
             preferences.saisieAutomatiqueEdition.collect { v ->
                 _uiState.update { it.copy(saisieAutomatiqueEdition = v) }
+            }
+        }
+        viewModelScope.launch {
+            preferences.policeInterface.collect { v ->
+                _uiState.update { it.copy(policeInterface = v) }
             }
         }
     }
@@ -361,6 +369,10 @@ class SettingsViewModel(
 
     fun definirSaisieAutomatiqueEdition(valeur: Boolean) {
         preferences.definirSaisieAutomatiqueEdition(valeur)
+    }
+
+    fun definirPoliceInterface(valeur: PoliceInterface) {
+        preferences.definirPoliceInterface(valeur)
     }
 
     fun libererEspace() {

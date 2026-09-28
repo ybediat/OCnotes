@@ -64,10 +64,12 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            OCnotesTheme {
+            val container = LocalContext.current.appContainer
+            val policeInterface by container.preferencesAffichage.policeInterface
+                .collectAsStateWithLifecycle()
+            OCnotesTheme(police = policeInterface) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     CrashReportGate(appContainer.crashReporter) {
-                        val container = LocalContext.current.appContainer
                         val activeSession by container.activeSession.collectAsStateWithLifecycle()
                         key(activeSession.generation) {
                             SessionViewModelScope(activeSession.generation) {

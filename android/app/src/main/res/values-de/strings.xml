@@ -348,6 +348,13 @@
     <!-- ================================================================
          Bearbeitung
          ================================================================ -->
+    <string name="reglages_apparence_titre">Darstellung</string>
+    <string name="reglages_police_titre">Schriftart der Benutzeroberfläche</string>
+    <string name="reglages_police_choix_titre">Schriftart auswählen</string>
+    <string name="reglages_police_lexend">Lexend</string>
+    <string name="reglages_police_opendyslexic">OpenDyslexic</string>
+    <string name="reglages_police_systeme">Systemschriftart</string>
+
     <string name="reglages_edition_titre">Bearbeitung</string>
 
     <string name="reglages_sync_titre">Synchronisation</string>
@@ -440,6 +447,8 @@
          dass etwas verloren geht. -->
     <string name="editeur_brouillon">Lokaler Entwurf, Senden geplant</string>
     <string name="editeur_encodage">Kodierung %1$s</string>
+    <string name="editeur_plus_actions">Weitere Aktionen</string>
+    <string name="editeur_detection_automatique">Zur automatischen Erkennung zurückkehren</string>
     <string name="editeur_saisie_vide">Hier schreiben…</string>
     <string name="editeur_illisible_titre">Notiz nicht geladen</string>
     <string name="editeur_illisible_detail">Ihr Inhalt konnte nicht gelesen werden. Nichts wurde geändert: Öffnen Sie sie erneut, sobald die Verbindung wiederhergestellt ist.</string>

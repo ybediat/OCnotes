@@ -365,6 +365,13 @@
     <string name="reglages_dossier">Dossier</string>
     <string name="reglages_racine_espace">racine de l\'espace</string>
 
+    <string name="reglages_apparence_titre">Apparence</string>
+    <string name="reglages_police_titre">Police de l\'interface</string>
+    <string name="reglages_police_choix_titre">Choisir une police</string>
+    <string name="reglages_police_lexend">Lexend</string>
+    <string name="reglages_police_opendyslexic">OpenDyslexic</string>
+    <string name="reglages_police_systeme">Police du système</string>
+
     <string name="reglages_edition_titre">Édition</string>
     <string name="reglages_garder_ecran_lecture_titre">Garder l\'écran allumé en lecture</string>
     <string name="reglages_garder_ecran_lecture_explication">Empêche l\'écran de s\'éteindre lors de la consultation d\'une note en aperçu.</string>
@@ -464,6 +471,8 @@
          à une perte. -->
     <string name="editeur_brouillon">Brouillon local, envoi programmé</string>
     <string name="editeur_encodage">Encodage %1$s</string>
+    <string name="editeur_plus_actions">Plus d\'actions</string>
+    <string name="editeur_detection_automatique">Revenir à la détection automatique</string>
     <string name="separateur_sous_titre" translatable="false">" · "</string>
     <string name="editeur_saisie_vide">Écrivez ici…</string>
     <string name="editeur_illisible_titre">Note non chargée</string>
