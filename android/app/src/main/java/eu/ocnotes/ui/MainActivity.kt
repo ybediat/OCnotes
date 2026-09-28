@@ -102,7 +102,7 @@ private fun OCnotesApp(
 
     LaunchedEffect(container, accountId) {
         container.repository.mode.collect { mode ->
-            container.syncScheduler.setLocalOnly(mode == AppMode.LOCAL)
+            container.syncScheduler.setServerEnabled(mode == AppMode.SERVER)
         }
     }
 

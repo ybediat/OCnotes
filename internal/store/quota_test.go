@@ -169,7 +169,7 @@ func TestPruneMesureLesFichiersEtSurvitAuRedemarrage(t *testing.T) {
 	}
 }
 
-func TestOuvertureRepareUnBlobPropreManquantEtUnOrphelin(t *testing.T) {
+func TestOuvertureRepareUnBlobPropreManquantEtRecupereUnOrphelin(t *testing.T) {
 	dir := t.TempDir()
 	s, err := Open(dir)
 	if err != nil {
@@ -195,8 +195,12 @@ func TestOuvertureRepareUnBlobPropreManquantEtUnOrphelin(t *testing.T) {
 	if !indexContains(reopened.Index(), "absente.md") {
 		t.Error("la note sans blob a disparu de l'inventaire")
 	}
-	if _, err := os.Stat(orphelin); !os.IsNotExist(err) {
-		t.Errorf("orphelin encore présent: %v", err)
+	content, recovered, ok := reopened.Get("Note récupérée 001.md")
+	if !ok || string(content) != "inutile" {
+		t.Fatalf("orphelin non récupéré: contenu=%q, présent=%v", content, ok)
+	}
+	if recovered.Cache != "orphelin.md" || !recovered.Dirty {
+		t.Errorf("entrée récupérée = %+v", recovered)
 	}
 }
 

@@ -1,11 +1,37 @@
 package mobile
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/ybediat/OpenNote/internal/config"
 	"github.com/ybediat/OpenNote/internal/store"
 )
+
+func TestStartLocalEchecDuCommitRevientAUneInstallationNeuve(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	app.saveConfig = func(config.Config) error { return errors.New("disque refusé") }
+
+	if err := app.StartLocal(); err == nil {
+		t.Fatal("StartLocal devrait propager l'échec du commit")
+	}
+	if app.cache.LocalOnly() {
+		t.Error("le cache est resté local malgré l'échec de la configuration")
+	}
+	var state appState
+	raw, err := app.StateJSON()
+	if err != nil {
+		t.Fatalf("StateJSON: %v", err)
+	}
+	decodeJSON(t, raw, &state)
+	if state.Mode != "" || state.Connected {
+		t.Errorf("état après rollback = %+v", state)
+	}
+}
 
 // prepareLocal monte une application sans serveur, comme au premier lancement
 // quand l'utilisateur répond qu'il n'en a pas.

@@ -10,6 +10,20 @@ import kotlinx.coroutines.runBlocking
 class AccountRegistryTest {
 
     @Test
+    fun `seul un profil serveur configure autorise la synchronisation`() {
+        assertFalse(AccountProfile("local", "local").syncEnabled)
+        assertFalse(AccountProfile("vierge", "server").syncEnabled)
+        assertFalse(AccountProfile("inconnu", "inconnu", "https://cloud.test").syncEnabled)
+        assertTrue(
+            AccountProfile(
+                id = "serveur",
+                kind = "server",
+                serverUrl = "https://cloud.test",
+            ).syncEnabled,
+        )
+    }
+
+    @Test
     fun `une installation serveur conserve son cache et son compte`() {
         val root = Files.createTempDirectory("ocnotes-accounts").toFile()
         try {

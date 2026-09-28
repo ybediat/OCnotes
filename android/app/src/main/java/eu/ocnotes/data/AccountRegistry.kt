@@ -35,6 +35,10 @@ data class AccountProfile(
     val displayName: String = "",
 )
 
+/** Un profil ne doit réveiller WorkManager que s'il désigne un serveur utilisable. */
+internal val AccountProfile.syncEnabled: Boolean
+    get() = kind == "server" && serverUrl.isNotBlank()
+
 data class AccountRegistryState(
     val active: AccountProfile,
     val accounts: List<AccountProfile>,

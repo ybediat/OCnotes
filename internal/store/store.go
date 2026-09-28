@@ -264,6 +264,9 @@ func Open(dir string) (*Store, error) {
 	if s.repairBlobsLocked() {
 		migrated = true
 	}
+	if s.reconcileBlobsLocked() {
+		migrated = true
+	}
 
 	// Après la réparation des blobs : elle peut supprimer des entrées, et une
 	// entrée disparue n'a rien à envoyer.
@@ -396,10 +399,10 @@ func (s *Store) LocalOnly() bool {
 }
 
 // repairBlobsLocked remet l'index en accord avec le dossier de blobs au
-// démarrage. Un contenu propre manquant redevient un simple Known. En mode
-// local, un blob orphelin est au contraire récupéré à la racine : il peut être
-// la note créée juste avant une interruption, et il n'existe aucune copie
-// distante permettant de décider qu'il est jetable.
+// démarrage. Un contenu propre manquant redevient un simple Known. Un blob
+// local orphelin est récupéré à la racine : il peut être la note créée juste
+// avant une interruption. En mode serveur, seuls les blobs explicitement issus
+// d'un téléchargement sont jetables, puisque le serveur en porte la copie.
 func (s *Store) repairBlobsLocked() bool {
 	changed := false
 	referenced := make(map[string]bool, len(s.entries))
@@ -432,8 +435,8 @@ func (s *Store) repairBlobsLocked() bool {
 		if file.IsDir() || filepath.Ext(file.Name()) != ".md" || referenced[file.Name()] {
 			continue
 		}
-		if s.localOnly {
-			s.recoverOrphanLocked(file)
+		if s.localOnly || !strings.HasPrefix(file.Name(), remoteCachePrefix) {
+			s.recoverOrphanLocked(file, !s.localOnly)
 			changed = true
 			continue
 		}
@@ -444,7 +447,7 @@ func (s *Store) repairBlobsLocked() bool {
 	return changed
 }
 
-func (s *Store) recoverOrphanLocked(file os.DirEntry) {
+func (s *Store) recoverOrphanLocked(file os.DirEntry, dirty bool) {
 	name := s.availableRecoveredNameLocked()
 	info, _ := file.Info()
 	modified := time.Now().UTC()
@@ -456,6 +459,7 @@ func (s *Store) recoverOrphanLocked(file os.DirEntry) {
 	entry := &Entry{
 		Path:       name,
 		Cache:      file.Name(),
+		Dirty:      dirty,
 		Size:       size,
 		LocalMod:   modified,
 		LastAccess: modified,
@@ -463,6 +467,40 @@ func (s *Store) recoverOrphanLocked(file os.DirEntry) {
 	s.touchLocked(entry)
 	s.entries[name] = entry
 	s.known[name] = &Known{Path: name, Size: size, ModTime: modified}
+	if dirty {
+		s.enqueueLocked(Operation{Kind: OpWrite, Path: name})
+	}
+}
+
+// reconcileBlobsLocked rattrape le cas où Open a dû revenir à une génération
+// antérieure de l'index alors que le blob, écrit avant elle, porte déjà le
+// contenu plus récent. BaseHash décrit la dernière version acceptée par le
+// serveur : toute divergence jusque-là marquée propre redevient une écriture
+// locale et repart dans la file au lieu d'être écrasée au prochain refresh.
+func (s *Store) reconcileBlobsLocked() bool {
+	if s.localOnly {
+		return false
+	}
+	changed := false
+	for notePath, entry := range s.entries {
+		content, err := os.ReadFile(s.blobPath(entry.Cache))
+		if err != nil {
+			continue
+		}
+		if entry.Size != int64(len(content)) {
+			entry.Size = int64(len(content))
+			s.touchLocked(entry)
+			changed = true
+		}
+		if entry.BaseHash == "" || entry.Dirty || contentHash(content) == entry.BaseHash {
+			continue
+		}
+		entry.Dirty = true
+		s.touchLocked(entry)
+		s.enqueueLocked(Operation{Kind: OpWrite, Path: notePath})
+		changed = true
+	}
+	return changed
 }
 
 func (s *Store) availableRecoveredNameLocked() string {
@@ -485,20 +523,26 @@ func cacheName(notePath string) string {
 }
 
 // newCacheName produit l'identifiant physique stable d'une nouvelle note. Le
-// chemin logique n'en fait volontairement pas partie : renommer ou déplacer la
-// note ne touche plus au blob et ne crée plus de fenêtre où les anciens index
-// désignent un fichier qui vient d'être déplacé.
-func newCacheName() (string, error) {
+// préfixe dit si un blob devenu orphelin vient d'une écriture locale à sauver
+// ou d'un téléchargement que le serveur peut refaire. Le chemin logique n'en
+// fait volontairement pas partie : renommer ou déplacer la note ne touche plus
+// au blob.
+const (
+	localCachePrefix  = "local-"
+	remoteCachePrefix = "remote-"
+)
+
+func newCacheName(prefix string) (string, error) {
 	var id [16]byte
 	if _, err := rand.Read(id[:]); err != nil {
 		return "", err
 	}
-	return hex.EncodeToString(id[:]) + ".md", nil
+	return prefix + hex.EncodeToString(id[:]) + ".md", nil
 }
 
-func (s *Store) newCacheNameLocked() (string, error) {
+func (s *Store) newCacheNameLocked(prefix string) (string, error) {
 	for {
-		name, err := newCacheName()
+		name, err := newCacheName(prefix)
 		if err != nil {
 			return "", err
 		}
@@ -886,7 +930,7 @@ func (s *Store) acceptLocked(notePath string, content []byte, etag string) error
 	}
 	if cache == "" {
 		var err error
-		cache, err = s.newCacheNameLocked()
+		cache, err = s.newCacheNameLocked(remoteCachePrefix)
 		if err != nil {
 			return fmt.Errorf("store: [%s] génération de l'identifiant de %s: %w", CodeStorageIO, notePath, err)
 		}
@@ -919,7 +963,7 @@ func (s *Store) acceptLocked(notePath string, content []byte, etag string) error
 func (s *Store) putLocked(notePath string, content []byte, encoding string, enqueue bool) error {
 	entry, ok := s.entries[notePath]
 	if !ok {
-		cache, err := s.newCacheNameLocked()
+		cache, err := s.newCacheNameLocked(localCachePrefix)
 		if err != nil {
 			return fmt.Errorf("store: [%s] génération de l'identifiant de %s: %w", CodeStorageIO, notePath, err)
 		}

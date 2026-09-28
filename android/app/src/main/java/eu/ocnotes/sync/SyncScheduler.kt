@@ -29,6 +29,7 @@ import java.util.concurrent.TimeUnit
 class SyncScheduler(
     context: Context,
     private val accountId: String,
+    initialServerEnabled: Boolean,
 ) {
 
     private val workManager = WorkManager.getInstance(context.applicationContext)
@@ -46,7 +47,7 @@ class SyncScheduler(
     }
 
     @Volatile
-    private var localOnly = false
+    private var serverEnabled = initialServerEnabled
 
     private val networkRequired = Constraints.Builder()
         .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -60,7 +61,7 @@ class SyncScheduler(
      * exécution et la synchronisation périodique n'aurait jamais lieu.
      */
     fun schedulePeriodic() {
-        if (localOnly) return
+        if (!serverEnabled) return
         val request = PeriodicWorkRequestBuilder<SyncWorker>(PERIOD_HOURS, TimeUnit.HOURS)
             .setConstraints(networkRequired)
             .setInputData(workDataOf(KEY_ACCOUNT_ID to accountId))
@@ -81,7 +82,7 @@ class SyncScheduler(
      * sur le même cache.
      */
     fun syncNow() {
-        if (localOnly) return
+        if (!serverEnabled) return
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(networkRequired)
             .setInputData(workDataOf(KEY_ACCOUNT_ID to accountId))
@@ -101,7 +102,7 @@ class SyncScheduler(
      * **dernière** écriture.
      */
     fun syncAfterLocalChange() {
-        if (localOnly) return
+        if (!serverEnabled) return
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(networkRequired)
             .setInputData(workDataOf(KEY_ACCOUNT_ID to accountId))
@@ -121,8 +122,16 @@ class SyncScheduler(
 
     /** Désactive tout travail serveur tant que les notes vivent sur l'appareil seul. */
     fun setLocalOnly(local: Boolean) {
-        localOnly = local
-        if (local) cancelAll() else schedulePeriodic()
+        setServerEnabled(!local)
+    }
+
+    /**
+     * Autorise les travaux uniquement quand le profil possède une cible serveur.
+     * Un profil local ou encore vierge reste ainsi silencieux dès sa construction.
+     */
+    fun setServerEnabled(enabled: Boolean) {
+        serverEnabled = enabled
+        if (enabled) schedulePeriodic() else cancelAll()
     }
 
     private fun workName(base: String): String = "$base-$accountId"

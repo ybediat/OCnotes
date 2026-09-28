@@ -67,11 +67,14 @@ type App struct {
 	mu       sync.Mutex
 	syncPass chan struct{}
 	dataDir  string
-	cfg      config.Config
-	client   *opencloud.Client
-	oidcAuth *opencloud.BearerAuth
-	lib      *notes.Library
-	cache    *store.Store
+	// saveConfig est injectable dans les tests pour provoquer une panne disque
+	// exactement au point de commit d'une transition de mode.
+	saveConfig func(config.Config) error
+	cfg        config.Config
+	client     *opencloud.Client
+	oidcAuth   *opencloud.BearerAuth
+	lib        *notes.Library
+	cache      *store.Store
 
 	// offlineUntil retient qu'un appel réseau vient d'échouer, pour éviter de
 	// réessayer à chaque geste.
@@ -113,7 +116,20 @@ func NewApp(dataDir string) (*App, error) {
 	if err := alignCacheOnMode(cache, cfg); err != nil {
 		return nil, err
 	}
-	return &App{dataDir: dataDir, cfg: cfg, cache: cache, syncPass: make(chan struct{}, 1)}, nil
+	return &App{
+		dataDir:    dataDir,
+		cfg:        cfg,
+		cache:      cache,
+		syncPass:   make(chan struct{}, 1),
+		saveConfig: func(next config.Config) error { return config.Save(dataDir, next) },
+	}, nil
+}
+
+func (a *App) persistConfig(next config.Config) error {
+	if a.saveConfig != nil {
+		return a.saveConfig(next)
+	}
+	return config.Save(a.dataDir, next)
 }
 
 // alignCacheOnMode remet le cache d'accord avec le mode enregistré.
@@ -203,7 +219,7 @@ func (a *App) rememberLastPath(dir string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.cfg.LastPath = dir
-	_ = config.Save(a.dataDir, a.cfg)
+	_ = a.persistConfig(a.cfg)
 }
 
 // --- État -------------------------------------------------------------------
@@ -308,10 +324,21 @@ func (a *App) StartLocal() error {
 	if a.cfg.IsConnected() {
 		return fmt.Errorf("mobile: [%s] un serveur est déjà enregistré, passer par le débranchement", CodeLocalMode)
 	}
+	wasLocal := a.cache.LocalOnly()
 	if err := a.cache.SetLocalOnly(true); err != nil {
 		return err
 	}
 	if err := a.raiseLocalQuota(); err != nil {
+		if !wasLocal {
+			return errors.Join(err, a.cache.SetLocalOnly(false))
+		}
+		return err
+	}
+	next := config.Config{Mode: config.ModeLocal, LastPath: a.cfg.LastPath}
+	if err := a.persistConfig(next); err != nil {
+		if !wasLocal {
+			return errors.Join(err, a.cache.SetLocalOnly(false))
+		}
 		return err
 	}
 
@@ -322,8 +349,8 @@ func (a *App) StartLocal() error {
 	// suivant en mode local trouverait un client vivant que plus rien
 	// n'attend, avec un token qu'on croyait abandonné.
 	a.client, a.oidcAuth, a.lib = nil, nil, nil
-	a.cfg = config.Config{Mode: config.ModeLocal, LastPath: a.cfg.LastPath}
-	return config.Save(a.dataDir, a.cfg)
+	a.cfg = next
+	return nil
 }
 
 // raiseLocalQuota relève le seuil au plancher du mode local.
@@ -474,7 +501,7 @@ func (a *App) connectClient(serverURL, username, authMode string, client *opencl
 		return errSessionChanged()
 	}
 	nouvelle.LastPath = a.cfg.LastPath
-	if err := config.Save(a.dataDir, nouvelle); err != nil {
+	if err := a.persistConfig(nouvelle); err != nil {
 		return err
 	}
 	a.client, a.oidcAuth, a.lib, a.cfg = client, oidcAuth, nouvelleBibliotheque, nouvelle
@@ -667,7 +694,7 @@ func (a *App) SelectWorkspace(driveID, root string) error {
 		if err := a.openWorkspaceLocked(ctx, d, root); err != nil {
 			return err
 		}
-		return config.Save(a.dataDir, a.cfg)
+		return a.persistConfig(a.cfg)
 	}
 	return fmt.Errorf("mobile: espace %q introuvable", driveID)
 }
@@ -752,11 +779,22 @@ func (a *App) AttachJSON(requestJSON string) (string, error) {
 	// défaut ferait évincer, sitôt synchronisées, des notes qu'il détenait
 	// jusque-là. Et rien ne distingue ce plancher d'un gigaoctet choisi par
 	// l'utilisateur, qui garde la main dans les réglages.
-	a.cfg.Mode = config.ModeServer
-	result.Root = a.cfg.Root
-	if err := config.Save(a.dataDir, a.cfg); err != nil {
-		return "", err
+	serverConfig := a.cfg
+	serverConfig.Mode = config.ModeServer
+	result.Root = serverConfig.Root
+	if err := a.persistConfig(serverConfig); err != nil {
+		// La configuration est le commit. Tant qu'elle n'est pas durable, le
+		// processus courant doit lui aussi rester local et permettre un nouvel
+		// essai sans imposer un redémarrage.
+		var rollback error
+		if req.Adopt {
+			_, rollback = a.cache.GoLocal()
+		} else {
+			rollback = a.cache.SetLocalOnly(true)
+		}
+		return "", errors.Join(err, rollback)
 	}
+	a.cfg = serverConfig
 	return toJSON(result)
 }
 
@@ -949,6 +987,12 @@ func (a *App) DetachJSON() (string, error) {
 			CodePendingChanges, n)
 	}
 
+	// Le relèvement du seuil est une préparation réversible du point de vue des
+	// données. Le faire avant GoLocal évite qu'une erreur d'E/S laisse le cache
+	// local alors que la configuration et la session sont encore serveur.
+	if err := a.raiseLocalQuota(); err != nil {
+		return "", err
+	}
 	abandonnees, err := a.cache.GoLocal()
 	if err != nil {
 		return "", err
@@ -958,16 +1002,16 @@ func (a *App) DetachJSON() (string, error) {
 	defer a.mu.Unlock()
 
 	// Le token n'a jamais été écrit ici ; c'est Android qui le retire du
-	// Keystore de son côté.
+	// Keystore de son côté. La configuration est le point de commit : en cas
+	// d'échec, le cache revient immédiatement en mode serveur et cette instance
+	// reste utilisable sans redémarrage.
+	localConfig := config.Config{Mode: config.ModeLocal, LastPath: a.cfg.LastPath}
+	if err := a.persistConfig(localConfig); err != nil {
+		return "", errors.Join(err, a.cache.SetLocalOnly(false))
+	}
 	a.couperPassesLocked()
 	a.client, a.oidcAuth, a.lib = nil, nil, nil
-	a.cfg = config.Config{Mode: config.ModeLocal, LastPath: a.cfg.LastPath}
-	if err := config.Save(a.dataDir, a.cfg); err != nil {
-		return "", err
-	}
-	if err := a.raiseLocalQuota(); err != nil {
-		return "", err
-	}
+	a.cfg = localConfig
 
 	return toJSON(detachResult{
 		Kept:      len(a.cache.Entries()),

@@ -11,6 +11,7 @@ import eu.ocnotes.data.AccountProfile
 import eu.ocnotes.data.OCnotesRepository
 import eu.ocnotes.data.PreferencesAffichage
 import eu.ocnotes.data.TokenStore
+import eu.ocnotes.data.syncEnabled
 import eu.ocnotes.data.auth.OidcManager
 import eu.ocnotes.diagnostic.CrashReporter
 import eu.ocnotes.sync.SyncNotifier
@@ -84,6 +85,7 @@ class AppContainer(
      * appel du dépôt.
      */
     private fun runtimeFor(id: String): AccountRuntime = runtimes.computeIfAbsent(id) {
+        val profile = accountRegistry.accounts.firstOrNull { profile -> profile.id == id }
         val tokenStore = TokenStore(context, id)
         AccountRuntime(
             tokenStore = tokenStore,
@@ -95,7 +97,11 @@ class AppContainer(
                 oidcManager = oidcManager,
                 preferences = preferencesAffichage,
             ),
-            syncScheduler = SyncScheduler(context, id),
+            syncScheduler = SyncScheduler(
+                context,
+                id,
+                initialServerEnabled = profile?.syncEnabled == true,
+            ),
         )
     }
 
@@ -115,7 +121,7 @@ class AppContainer(
     /** Installe le travail périodique de chaque compte serveur enregistré. */
     fun scheduleAllAccounts() {
         accountRegistry.accounts
-            .filter { it.kind != "local" && it.serverUrl.isNotBlank() }
+            .filter { it.syncEnabled }
             .forEach { runtimeFor(it.id).syncScheduler.schedulePeriodic() }
     }
 
@@ -167,7 +173,7 @@ class AppContainer(
     /** Fait du profil celui de l'interface. Appelé sous [switchMutex]. */
     private fun afficher(profile: AccountProfile) {
         activeId = profile.id
-        runtimeFor(profile.id).syncScheduler.schedulePeriodic()
+        runtimeFor(profile.id).syncScheduler.setServerEnabled(profile.syncEnabled)
         generation += 1
         mutableActiveSession.value = ActiveSession(profile, generation)
     }

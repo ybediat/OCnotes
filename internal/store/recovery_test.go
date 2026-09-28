@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -178,5 +179,89 @@ func TestAucunIndexValideConserveLesBlobsEtRefuseLOuverture(t *testing.T) {
 	content, err := os.ReadFile(s.blobPath(cache))
 	if err != nil || string(content) != "irremplaçable" {
 		t.Fatalf("blob après refus = %q, erreur = %v", content, err)
+	}
+}
+
+func TestRepliResynchroniseUnBlobPlusRecentQueLIndex(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := s.Accept("note.md", []byte("version serveur"), `"e1"`); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+	if err := s.Put("note.md", []byte("version locale récente")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	generations := indexGenerations(t, s)
+	if len(generations) < 2 {
+		t.Fatalf("générations = %d, attendu au moins deux", len(generations))
+	}
+	for _, path := range []string{s.indexPath(), generations[len(generations)-1]} {
+		if err := os.WriteFile(path, []byte("cassé"), 0o600); err != nil {
+			t.Fatalf("corruption de %s: %v", path, err)
+		}
+	}
+
+	reopened, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open avec repli: %v", err)
+	}
+	content, entry, ok := reopened.Get("note.md")
+	if !ok || string(content) != "version locale récente" {
+		t.Fatalf("note après repli = %q, présente = %v", content, ok)
+	}
+	if !entry.Dirty {
+		t.Fatal("le contenu plus récent que BaseHash n'a pas été marqué à synchroniser")
+	}
+	pending := reopened.Pending()
+	if len(pending) != 1 || pending[0].Kind != OpWrite || pending[0].Path != "note.md" {
+		t.Fatalf("file reconstruite = %+v", pending)
+	}
+	remote := newFakeRemote()
+	remote.files["note.md"] = "version serveur"
+	remote.etags["note.md"] = `"e1"`
+	if _, err := reopened.Push(context.Background(), remote); err != nil {
+		t.Fatalf("Push après réconciliation: %v", err)
+	}
+	if remote.files["note.md"] != "version locale récente" {
+		t.Fatalf("serveur après réconciliation = %q", remote.files["note.md"])
+	}
+}
+
+func TestModeServeurRecupereUnOrphelinLocalEtJetteUnTelechargementOrphelin(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := s.Accept("serveur.md", []byte("référence"), `"e1"`); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+	localOrphan := localCachePrefix + "0123456789abcdef0123456789abcdef.md"
+	remoteOrphan := remoteCachePrefix + "fedcba9876543210fedcba9876543210.md"
+	if err := os.WriteFile(s.blobPath(localOrphan), []byte("brouillon interrompu"), 0o600); err != nil {
+		t.Fatalf("écriture de l'orphelin local: %v", err)
+	}
+	if err := os.WriteFile(s.blobPath(remoteOrphan), []byte("copie serveur"), 0o600); err != nil {
+		t.Fatalf("écriture de l'orphelin distant: %v", err)
+	}
+
+	reopened, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open de récupération: %v", err)
+	}
+	content, entry, ok := reopened.Get("Note récupérée 001.md")
+	if !ok || string(content) != "brouillon interrompu" || !entry.Dirty {
+		t.Fatalf("orphelin local = %q, entrée = %+v, présent = %v", content, entry, ok)
+	}
+	if _, err := os.Stat(reopened.blobPath(remoteOrphan)); !os.IsNotExist(err) {
+		t.Fatalf("téléchargement serveur orphelin encore présent: %v", err)
+	}
+	pending := reopened.Pending()
+	if len(pending) != 1 || pending[0].Path != "Note récupérée 001.md" {
+		t.Fatalf("file de récupération = %+v", pending)
 	}
 }

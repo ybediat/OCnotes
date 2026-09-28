@@ -2,7 +2,10 @@ package mobile
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
+
+	"github.com/ybediat/OpenNote/internal/config"
 )
 
 // seedRemote pose un fichier sur le serveur factice, comme s'il y était déjà
@@ -204,6 +207,44 @@ func TestAttachBasculeLeModeDurablement(t *testing.T) {
 	}
 	if !etat.HasWorkspace {
 		t.Error("l'espace de travail devrait être monté")
+	}
+}
+
+func TestAttachEchecDuCommitResteLocalEtPeutReessayer(t *testing.T) {
+	app, _ := prepareBranchement(t)
+	originalSave := app.saveConfig
+	app.saveConfig = func(next config.Config) error {
+		if next.Mode == config.ModeServer {
+			return errors.New("disque refusé")
+		}
+		return originalSave(next)
+	}
+	requete, err := json.Marshal(attachRequest{DriveID: fakeSpaceID, Root: "Notes", Adopt: true})
+	if err != nil {
+		t.Fatalf("sérialisation: %v", err)
+	}
+	if _, err := app.AttachJSON(string(requete)); err == nil {
+		t.Fatal("AttachJSON devrait propager l'échec du commit")
+	}
+	if !app.cache.LocalOnly() || app.PendingCount() != 0 {
+		t.Fatalf("cache après rollback: local=%v, pending=%d", app.cache.LocalOnly(), app.PendingCount())
+	}
+	if content, err := app.ReadNote("Idée du soir.md"); err != nil || content != "# Idée du soir\n" {
+		t.Fatalf("note locale après rollback = %q, erreur = %v", content, err)
+	}
+	var state appState
+	raw, err := app.StateJSON()
+	if err != nil {
+		t.Fatalf("StateJSON: %v", err)
+	}
+	decodeJSON(t, raw, &state)
+	if state.Mode != config.ModeLocal {
+		t.Fatalf("mode après rollback = %q", state.Mode)
+	}
+
+	app.saveConfig = originalSave
+	if _, err := app.AttachJSON(string(requete)); err != nil {
+		t.Fatalf("nouvel essai AttachJSON: %v", err)
 	}
 }
 

@@ -289,14 +289,13 @@ class OCnotesRepository(
     /** Choisit le stockage exclusivement local au premier lancement. */
     suspend fun startLocal() {
         call { it.startLocal() }
-        retainCoreQuota()
-        tokenStore.clear()
-        accountRegistry.recordLocal(accountId)
         sessionOpen = true
         _sessionValidee.value = false
         _sessionExpired.value = false
         _pendingCount.value = 0
+        _lastSync.value = null
         _mode.value = AppMode.LOCAL
+        reconcileLocalMetadata()
     }
 
     /**
@@ -363,11 +362,13 @@ class OCnotesRepository(
         val current = state()
         if (current.mode == AppMode.LOCAL) {
             // NewApp a déjà rouvert le Store persistant. Le mode local n'a ni
-            // bibliothèque distante à monter, ni secret à récupérer.
+            // bibliothèque distante à monter, ni secret à récupérer. Il
+            // répare aussi un nettoyage Android interrompu après le commit Go.
             sessionOpen = true
             _sessionValidee.value = false
             _sessionExpired.value = false
             _pendingCount.value = 0
+            reconcileLocalMetadata()
             return@withLock RestoreOutcome.LOCALE
         }
         if (!current.connected) return@withLock RestoreOutcome.AUCUNE_SESSION
@@ -490,12 +491,14 @@ class OCnotesRepository(
         return operationMutex.withLock {
             val request = encoder(AttachRequestDto(driveId, root, adopt))
             val result: AttachResultDto = authenticatedCallJson { it.attachJSON(request) }
-            enregistrerCompte()
             sessionOpen = true
             _sessionValidee.value = true
             _sessionExpired.value = false
             _mode.value = AppMode.SERVER
             refreshPending()
+            // Le cœur a déjà commis le mode serveur. Une panne du registre ne
+            // doit pas transformer ce succès en faux échec ; restore réparera.
+            enregistrerCompteSansEchec()
             result
         }
     }
@@ -512,9 +515,6 @@ class OCnotesRepository(
     suspend fun detach(): DetachResultDto {
         return operationMutex.withLock {
             val result: DetachResultDto = authenticatedCallJson { it.detachJSON() }
-            retainCoreQuota()
-            tokenStore.clear()
-            accountRegistry.recordLocal(accountId)
             sessionOpen = true
             oidcTokenPousseAuCoeur = null
             _sessionValidee.value = false
@@ -522,7 +522,28 @@ class OCnotesRepository(
             _pendingCount.value = 0
             _lastSync.value = null
             _mode.value = AppMode.LOCAL
+            // DetachJSON est le point de commit. Les trois écritures Android
+            // suivantes sont du nettoyage réparable, jamais une raison de
+            // réannoncer l'échec d'une transition déjà accomplie.
+            reconcileLocalMetadata()
             result
+        }
+    }
+
+    private suspend fun reconcileLocalMetadata() {
+        bestEffortLocalCleanup { retainCoreQuota() }
+        bestEffortLocalCleanup { tokenStore.clear() }
+        bestEffortLocalCleanup { accountRegistry.recordLocal(accountId) }
+    }
+
+    private suspend inline fun bestEffortLocalCleanup(crossinline operation: suspend () -> Unit) {
+        try {
+            operation()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Le mode durable du cœur fait foi. Le prochain restore rejoue les
+            // nettoyages sans exposer une session serveur depuis le mode local.
         }
     }
 

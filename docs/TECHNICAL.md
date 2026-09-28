@@ -49,6 +49,12 @@ conservé sous dix générations immuables. Au démarrage, la génération valid
 plus récente est retenue ; en mode local, tout blob non référencé est remonté à
 la racine sous un nom « Note récupérée NNN.md » plutôt que supprimé.
 
+En mode synchronisé, le préfixe physique distingue une création locale d'un
+téléchargement serveur. Après repli sur un ancien index, un blob dont le contenu
+diffère de `BaseHash` redevient automatiquement une écriture en attente. Une
+création locale orpheline est récupérée et synchronisée ; un téléchargement
+orphelin peut être supprimé puisque le serveur en conserve la référence.
+
 Les écritures distantes utilisent les ETags et les préconditions HTTP. Si une
 note a été modifiée à la fois localement et sur le serveur, OCnotes n'écrase
 pas silencieusement la version distante : la situation est signalée afin que

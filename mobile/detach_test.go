@@ -2,8 +2,10 @@ package mobile
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 
+	"github.com/ybediat/OpenNote/internal/config"
 	"github.com/ybediat/OpenNote/internal/store"
 )
 
@@ -113,6 +115,34 @@ func TestDetachRapatrieToutPuisPasseEnLocal(t *testing.T) {
 	}
 	if etat.Connected {
 		t.Error("l'application se dit encore connectée après le débranchement")
+	}
+}
+
+func TestDetachEchecDuCommitResteServeurEtPeutReessayer(t *testing.T) {
+	app, _ := prepareDebranchement(t)
+	rapatrieTout(t, app)
+	originalSave := app.saveConfig
+	app.saveConfig = func(config.Config) error { return errors.New("disque refusé") }
+
+	if _, err := app.DetachJSON(); err == nil {
+		t.Fatal("DetachJSON devrait propager l'échec du commit")
+	}
+	if app.cache.LocalOnly() {
+		t.Fatal("le cache est resté local malgré l'échec du commit")
+	}
+	var state appState
+	raw, err := app.StateJSON()
+	if err != nil {
+		t.Fatalf("StateJSON: %v", err)
+	}
+	decodeJSON(t, raw, &state)
+	if state.Mode != config.ModeServer || !state.HasWorkspace {
+		t.Fatalf("session après rollback = %+v", state)
+	}
+
+	app.saveConfig = originalSave
+	if _, err := app.DetachJSON(); err != nil {
+		t.Fatalf("nouvel essai DetachJSON: %v", err)
 	}
 }
 
