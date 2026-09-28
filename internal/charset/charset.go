@@ -65,9 +65,10 @@ var (
 //     supposition, sans risque pour les données (voir le paquet).
 func Detect(b []byte) Encoding {
 	switch {
-	case bytes.HasPrefix(b, bomUTF8) && utf8.Valid(b):
-		// Une BOM UTF-8 suivie d'octets invalides ne tranche rien : le fichier
-		// a été assemblé de morceaux, et retombe sur Windows-1252 plus bas.
+	case bytes.HasPrefix(b, bomUTF8):
+		// Une BOM UTF-8 désigne l'encodage même si la suite est tronquée ou
+		// invalide. RoundTrips refusera alors la réécriture : la rabattre sur
+		// Windows-1252 rendrait le fichier éditable sous forme de mojibake.
 		return Encoding{Name: UTF8, BOM: true}
 	case bytes.HasPrefix(b, bomUTF16LE):
 		return Encoding{Name: UTF16LE, BOM: true}
@@ -168,6 +169,9 @@ func Encode(s string, enc Encoding) ([]byte, error) {
 // enregistrement, même sans une seule modification.
 func RoundTrips(b []byte) bool {
 	s, enc := Decode(b)
+	if enc.Name == UTF8 && !utf8.ValidString(s) {
+		return false
+	}
 	again, err := Encode(s, enc)
 	return err == nil && bytes.Equal(again, b)
 }

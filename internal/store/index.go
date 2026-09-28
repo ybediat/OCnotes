@@ -138,6 +138,17 @@ func (s *Store) SetIndexWithPermissions(notes []Known, folders []FolderKnown) er
 		s.rememberFolderLocked(d)
 	}
 
+	// Une métadonnée d'encodage ne doit pas survivre à la disparition complète
+	// de son chemin : si le serveur recrée plus tard une note ASCII au même nom,
+	// elle ne doit pas hériter de l'encodage de l'ancienne.
+	for chemin := range s.textEncodings {
+		_, connue := s.known[chemin]
+		_, detenue := s.entries[chemin]
+		if !connue && !detenue {
+			delete(s.textEncodings, chemin)
+		}
+	}
+
 	s.indexed = true
 	return s.save()
 }

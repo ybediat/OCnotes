@@ -220,6 +220,50 @@ func TestLEncodageSurvitAUnTexteSansAccent(t *testing.T) {
 	}
 }
 
+// La mémoire d'encodage appartient au cache, pas au processus. Un fichier
+// Windows-1252 devenu temporairement ASCII doit donc rester Windows-1252 après
+// la recréation complète de l'application.
+func TestLEncodageSurvitAUnRedemarrageAvecUnTexteASCII(t *testing.T) {
+	app, server, dataDir := prepare(t)
+
+	deposer(server, map[string][]byte{"latin1.txt": []byte("\xe9t\xe9\n")})
+	if _, err := app.ReadNote("latin1.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.WriteNote("latin1.txt", "ete\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	relance, err := NewApp(dataDir)
+	if err != nil {
+		t.Fatalf("NewApp après redémarrage : %v", err)
+	}
+	if err := relance.Restore(fakeToken); err != nil {
+		t.Fatalf("Restore après redémarrage : %v", err)
+	}
+	if texte, err := relance.ReadNote("latin1.txt"); err != nil || texte != "ete\n" {
+		t.Fatalf("ReadNote après redémarrage = %q, %v", texte, err)
+	}
+	if enc := relance.NoteEncoding("latin1.txt"); enc != "windows-1252" {
+		t.Fatalf("NoteEncoding après redémarrage = %q", enc)
+	}
+	if err := relance.WriteNote("latin1.txt", "été\n"); err != nil {
+		t.Fatal(err)
+	}
+	if contenu, _, _ := relance.cache.Get("latin1.txt"); string(contenu) != "\xe9t\xe9\n" {
+		t.Errorf("cache après redémarrage : %q, veut du Windows-1252", contenu)
+	}
+}
+
+func TestReadNoteRefuseUnUTF8ABOMInvalide(t *testing.T) {
+	app, server, _ := prepare(t)
+	deposer(server, map[string][]byte{"abime.md": []byte("\xef\xbb\xbfcaf\xc3\xa9\xff")})
+
+	if _, err := app.ReadNote("abime.md"); ErrorCode(errString(err)) != CodeNotUTF8 {
+		t.Fatalf("ReadNote : %v, attendu %s", err, CodeNotUTF8)
+	}
+}
+
 func deposer(server *fakeServer, fichiers map[string][]byte) {
 	server.mu.Lock()
 	defer server.mu.Unlock()

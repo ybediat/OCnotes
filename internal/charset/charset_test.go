@@ -158,9 +158,14 @@ func TestUTF8(t *testing.T) {
 		t.Errorf("UTF-8 : %q, %+v", s, enc)
 	}
 
-	// Une BOM UTF-8 devant des octets Latin-1 ne tranche rien.
-	if enc := Detect([]byte("\xef\xbb\xbfr\xe9sum\xe9")); enc.Name != Windows1252 {
-		t.Errorf("BOM UTF-8 suivie de Latin-1 : détecté %s", enc.Name)
+	// Une BOM UTF-8 devant une séquence invalide désigne un UTF-8 abîmé, pas
+	// du Windows-1252 éditable sous forme de mojibake.
+	invalide := []byte("\xef\xbb\xbfr\xe9sum\xe9")
+	if enc := Detect(invalide); enc != (Encoding{Name: UTF8, BOM: true}) {
+		t.Errorf("BOM UTF-8 suivie d'octets invalides : détecté %+v", enc)
+	}
+	if RoundTrips(invalide) {
+		t.Error("un UTF-8 à BOM invalide ne doit pas être déclaré réécrivable")
 	}
 }
 

@@ -1334,11 +1334,30 @@ func (a *App) ReadNote(notePath string) (string, error) {
 		return "", err
 	}
 	text, enc := charset.Decode(content)
+	// De l'ASCII seul ne permet pas de distinguer l'UTF-8 de Windows-1252.
+	// Quand cette note a déjà été identifiée avec certitude avant de devenir
+	// ASCII, la métadonnée persistante du cache tranche après un redémarrage.
+	if enc.Name == charset.UTF8 && !enc.BOM && asciiOnly(content) {
+		if a.cache.TextEncoding(notePath) == string(charset.Windows1252) {
+			enc = charset.Encoding{Name: charset.Windows1252}
+		}
+	}
 	if !rewritable(enc) || !charset.RoundTrips(content) {
 		return "", fmt.Errorf("mobile: [%s] l'encodage de %s n'est pas reconnu avec certitude : il ne s'ouvre qu'en lecture", CodeNotUTF8, notePath)
 	}
-	a.rememberFormat(notePath, noteFormat{encoding: enc, ending: notes.DetectLineEnding(text)})
+	if err := a.rememberFormat(notePath, noteFormat{encoding: enc, ending: notes.DetectLineEnding(text)}); err != nil {
+		return "", err
+	}
 	return notes.NormalizeLineEndings(text), nil
+}
+
+func asciiOnly(content []byte) bool {
+	for _, b := range content {
+		if b >= 0x80 {
+			return false
+		}
+	}
+	return true
 }
 
 // rewritable dit si un encodage détecté est assez sûr pour réécrire le
@@ -1367,13 +1386,17 @@ type noteFormat struct {
 // Windows-1252 dont on efface les accents devient du pur ASCII, que la
 // détection lit comme de l'UTF-8 : le premier « é » retapé partirait alors en
 // UTF-8, et le fichier changerait d'encodage sans que personne l'ait voulu.
-func (a *App) rememberFormat(notePath string, f noteFormat) {
+func (a *App) rememberFormat(notePath string, f noteFormat) error {
+	if err := a.cache.RememberTextEncoding(notePath, string(f.encoding.Name)); err != nil {
+		return err
+	}
 	a.editsMu.Lock()
 	defer a.editsMu.Unlock()
 	if a.formats == nil {
 		a.formats = make(map[string]noteFormat)
 	}
 	a.formats[notePath] = f
+	return nil
 }
 
 // formatFor renvoie le format à écrire pour une note : celui retenu à sa
@@ -1387,6 +1410,9 @@ func (a *App) formatFor(notePath string) noteFormat {
 	}
 	if content, _, cached := a.cache.Get(notePath); cached {
 		text, enc := charset.Decode(content)
+		if enc.Name == charset.UTF8 && !enc.BOM && asciiOnly(content) && a.cache.TextEncoding(notePath) == string(charset.Windows1252) {
+			enc = charset.Encoding{Name: charset.Windows1252}
+		}
 		return noteFormat{encoding: enc, ending: notes.DetectLineEnding(text)}
 	}
 	return noteFormat{encoding: charset.Encoding{Name: charset.UTF8}, ending: notes.LF}
