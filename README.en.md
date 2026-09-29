@@ -105,7 +105,7 @@ go test ./... -run TestIntegration -v
 
 ## Project status
 
-**Alpha.** Signed version **0.1.5** is available. The app works in local-only
+**Beta.** Signed version **0.1.6** is available. The app works in local-only
 mode and with OpenCloud synchronization, including offline changes.
 
 The Go core and Android adapters have unit tests, and integration tests can run

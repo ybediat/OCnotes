@@ -1,0 +1,3 @@
+Gestion des formatage de fichier
+Divers correction de sécurité. 
+ajout gestion polices opendislexique

@@ -137,8 +137,8 @@ inclusion if you prefer that order.
 
 ### Notes
 
-- Current release: `v0.1.5` (versionCode 6).
-- The app is **alpha**. It works day to day, but the UI has no instrumented
+- Current release: `v0.1.6` (versionCode 7).
+- The app is **beta**. It works day to day, but the UI has no instrumented
   tests, and the Spanish and German translations have not been reviewed by
   native speakers on device.
 - The project is developed in French; code, comments and documentation are in

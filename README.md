@@ -236,8 +236,8 @@ Les options (`-server`, `-user`, `-drive`, `-timeout`) précèdent la commande.
 
 ## État du projet
 
-**Alpha.** La version signée **0.1.5** est disponible sur
-[GitHub Releases](https://github.com/ybediat/OCnotes/releases/tag/v0.1.5).
+**Beta.** La version signée **0.1.6** est disponible sur
+[GitHub Releases](https://github.com/ybediat/OCnotes/releases/tag/v0.1.6).
 L'application fonctionne en mode local, sans compte, ou avec un serveur
 OpenCloud ; ses notes Markdown et texte brut continuent alors à se synchroniser
 hors ligne.
