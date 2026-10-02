@@ -48,15 +48,26 @@ type HTTPError struct {
 	URL    string
 	Status int
 	Body   string
+
+	// Conflict force la lecture « conflit » d'un statut qui ne l'est pas
+	// d'ordinaire. ownCloud Infinite Scale répond 409 (et non 412) à un PUT
+	// dont l'If-Match est périmé ; le client le pose sur les écritures
+	// conditionnelles, là seulement où ce 409 ne peut pas dire autre chose.
+	Conflict bool
+}
+
+func (e *HTTPError) isConflict() bool {
+	return e.Status == http.StatusPreconditionFailed || e.Conflict
 }
 
 // Code renvoie l'étiquette de catégorie correspondant au statut.
 func (e *HTTPError) Code() string {
+	if e.isConflict() {
+		return CodeConflict
+	}
 	switch e.Status {
 	case http.StatusNotFound:
 		return CodeNotFound
-	case http.StatusPreconditionFailed:
-		return CodeConflict
 	case http.StatusUnauthorized:
 		return CodeUnauthorized
 	case http.StatusForbidden:
@@ -79,11 +90,12 @@ func (e *HTTPError) Error() string {
 // (sur MKCOL il indique que la ressource existe déjà, ailleurs que le verbe
 // est refusé). Mkdir fait cette traduction lui-même.
 func (e *HTTPError) Unwrap() error {
+	if e.isConflict() {
+		return ErrConflict
+	}
 	switch e.Status {
 	case http.StatusNotFound:
 		return ErrNotFound
-	case http.StatusPreconditionFailed:
-		return ErrConflict
 	case http.StatusUnauthorized:
 		return ErrUnauthorized
 	case http.StatusForbidden:

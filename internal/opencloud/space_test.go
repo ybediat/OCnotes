@@ -439,3 +439,26 @@ func TestReadNoteAbsente(t *testing.T) {
 		t.Errorf("erreur = %v, attendu ErrNotFound", err)
 	}
 }
+
+// OCIS répond 409 (et non 412) à un If-Match périmé : Write doit quand même
+// le remonter comme un conflit. Sans If-Match, un 409 reste une erreur HTTP
+// ordinaire (dossier parent absent, par exemple).
+func TestWriteIfMatchConflitOCIS409(t *testing.T) {
+	sp, _ := newTestSpace(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+	})
+	ctx := context.Background()
+
+	_, err := sp.Write(ctx, "a.md", []byte("x"), `"perime"`)
+	if !errors.Is(err, ErrConflict) {
+		t.Errorf("409 avec If-Match : err = %v, attendu ErrConflict", err)
+	}
+	if !strings.Contains(err.Error(), "["+CodeConflict+"]") {
+		t.Errorf("le message doit porter l'étiquette CONFLICT : %v", err)
+	}
+
+	_, err = sp.Write(ctx, "a.md", []byte("x"), "")
+	if errors.Is(err, ErrConflict) {
+		t.Errorf("409 sans If-Match ne doit pas devenir un conflit : %v", err)
+	}
+}

@@ -171,6 +171,11 @@ func (s *Space) Write(ctx context.Context, p string, content []byte, ifMatch str
 
 	_, hdr, err := s.c.do(ctx, http.MethodPut, s.resourceURL(p, false), content, headers)
 	if err != nil {
+		// OCIS refuse un If-Match périmé par un 409 au lieu du 412 standard.
+		var he *HTTPError
+		if ifMatch != "" && errors.As(err, &he) && he.Status == http.StatusConflict {
+			he.Conflict = true
+		}
 		return "", err
 	}
 	return hdr.Get("ETag"), nil
