@@ -48,8 +48,9 @@ directly on an Android device.
 
 Android 8.0 (API 26) or later is required. To synchronize, configure an HTTPS
 OpenCloud server and an App Token. A configured server can alternatively use
-the [experimental OIDC login](docs/OIDC.md). The app also works fully in
-local-only mode.
+the [experimental OIDC login](docs/OIDC.md). ownCloud Infinite Scale support
+is **experimental** (see the [dedicated section](docs/OIDC.md#owncloud-infinite-scale-expérimental)).
+The app also works fully in local-only mode.
 
 ## Building from source
 

@@ -59,7 +59,9 @@ construite depuis les sources (voir [Construire depuis les sources](#construire-
 
 **Pour la synchronisation** : un serveur OpenCloud accessible en HTTPS et un App
 Token créé depuis *Réglages du compte → App Tokens → + New*. Un serveur
-configuré peut aussi proposer la [connexion OIDC](docs/OIDC.md). Aucun serveur
+configuré peut aussi proposer la [connexion OIDC](docs/OIDC.md). La compatibilité
+avec ownCloud Infinite Scale est **expérimentale** (voir la
+[section dédiée](docs/OIDC.md#owncloud-infinite-scale-expérimental)). Aucun serveur
 n'est requis pour utiliser le mode local.
 
 **Prérequis côté appareil** : Android 8.0 (API 26) ou supérieur.

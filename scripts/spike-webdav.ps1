@@ -191,10 +191,10 @@ try {
              -HeaderLines @('If-Match: "0000000000000000000000000000dead"',
                             'Content-Type: text/markdown') `
              -ExtraArgs @('--data-binary', "@$f1b")
-    $ok = Write-Result -Label 'PUT avec If-Match perime (doit echouer)' -Status $r.Status -Expected @(412)
+    $ok = Write-Result -Label 'PUT avec If-Match perime (doit echouer)' -Status $r.Status -Expected @(409, 412)
 
     if ($ok) {
-        Write-Host "         -> 412 confirme : la strategie de sync de la brique 3 tient." -ForegroundColor Green
+        Write-Host "         -> refus (412, ou 409 sur OCIS) confirme : la strategie de sync de la brique 3 tient." -ForegroundColor Green
     }
     else {
         Write-Host "         -> le serveur accepte une ecriture sur un ETag perime." -ForegroundColor Red
