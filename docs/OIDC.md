@@ -163,8 +163,9 @@ conteneur OpenCloud qui le porte.
 
 > ⚠️ **Compatibilité expérimentale.** Testée sur OCIS 8.2.0 en Docker : les
 > opérations de fichiers (App Token) passent les tests d'intégration, et une
-> connexion OIDC par navigateur a abouti. Le renouvellement du jeton sur la
-> durée et les autres versions d'OCIS n'ont pas été vérifiés.
+> connexion OIDC par navigateur a abouti : création et écriture d'une note dans
+> l'application, relue ensuite depuis l'interface web. Le renouvellement du
+> jeton sur la durée et les autres versions d'OCIS n'ont pas été vérifiés.
 
 OCIS et OpenCloud partagent la même base : WebFinger, LibreGraph, WebDAV et
 l'IdP intégré sont compatibles. Trois différences à connaître.
