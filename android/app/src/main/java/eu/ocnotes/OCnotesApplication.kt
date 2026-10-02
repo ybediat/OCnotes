@@ -143,6 +143,29 @@ class AppContainer(
         afficher(accountRegistry.createAndActivate())
     }
 
+    private val mutableCompteDejaPresent = MutableStateFlow(false)
+
+    /** Vrai quand une connexion a été ramenée vers un profil existant ; l'interface le signale. */
+    val compteDejaPresent: StateFlow<Boolean> = mutableCompteDejaPresent.asStateFlow()
+
+    fun acquitterCompteDejaPresent() {
+        mutableCompteDejaPresent.value = false
+    }
+
+    /**
+     * Une connexion a révélé une identité déjà enregistrée : on rouvre le profil
+     * qui la porte et on retire le profil vide qui venait d'être créé.
+     *
+     * Deux étapes séquentielles, jamais imbriquées : [switchMutex] n'est pas
+     * réentrant. On active d'abord, pour que la suppression n'ait pas à choisir
+     * elle-même le profil suivant.
+     */
+    suspend fun adopterCompteExistant(existantId: String, nouveauId: String) {
+        activateAccount(existantId)
+        deleteAccount(nouveauId)
+        mutableCompteDejaPresent.value = true
+    }
+
     /**
      * Supprime secret, cache, configuration et travaux du profil.
      *

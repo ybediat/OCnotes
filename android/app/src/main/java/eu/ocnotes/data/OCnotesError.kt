@@ -34,6 +34,16 @@ enum class ErrorCategory {
 }
 
 /**
+ * La connexion d'un nouveau profil a révélé une identité déjà enregistrée dans
+ * un autre profil. Sans message : l'interface n'a besoin que des deux
+ * identifiants, tous deux des UUID locaux.
+ */
+class CompteDejaPresentException(
+    val existantId: String,
+    val nouveauId: String,
+) : Exception()
+
+/**
  * Erreur normalisée de la couche Go, telle que l'interface la manipule.
  *
  * [rawMessage] garde le message d'origine, utile en journalisation et comme

@@ -71,7 +71,7 @@ class SyncWorker(
                     // Le message Go peut contenir une URL ou un chemin. Le
                     // code stable suffit au diagnostic et ne révèle rien.
                     Log.w(TAG, "token refusé pendant la synchronisation (${report.errorCode})")
-                    repository.invalidateSession()
+                    repository.invalidateSession("sync-rapport")
                     Result.failure()
                 }
 
@@ -92,7 +92,7 @@ class SyncWorker(
             // un geste de l'utilisateur.
             Log.w(TAG, "synchronisation abandonnée (${e.category}/${e.code})")
             if (e.category == ErrorCategory.AUTH) {
-                repository.invalidateSession()
+                repository.invalidateSession("sync-exception")
             }
             Result.failure()
         }

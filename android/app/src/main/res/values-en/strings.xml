@@ -314,6 +314,7 @@
     <string name="compte_nouveau">New account</string>
     <string name="compte_ajouter">Add account</string>
     <string name="compte_geste_echec">The account operation failed. Please try again.</string>
+    <string name="compte_deja_present">This account is already added on this device. The existing profile has been opened; sign in again from it if its session has expired.</string>
     <string name="compte_supprimer">Remove account</string>
     <string name="compte_supprimer_titre">Remove this account?</string>
     <string name="compte_supprimer_message">The %1$s account, its cache and any unsynced local changes will be removed from this device. This cannot be undone.</string>

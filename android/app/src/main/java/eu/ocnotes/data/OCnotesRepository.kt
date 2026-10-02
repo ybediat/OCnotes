@@ -1,5 +1,6 @@
 package eu.ocnotes.data
 
+import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,6 +15,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import mobile.Mobile
 import mobile.App as GoApp
+import net.openid.appauth.AuthorizationException
 import java.io.File
 
 /**
@@ -178,7 +180,8 @@ class OCnotesRepository(
 
     /** Marque la session comme perdue. Ne touche pas au token enregistré :
      * l'écran de connexion le repropose, le nom d'utilisateur et l'URL avec. */
-    fun invalidateSession() {
+    fun invalidateSession(origine: String = "inconnue") {
+        journal("session invalidée (origine=$origine)") // i18n-ok : trace de diagnostic
         sessionOpen = false
         oidcTokenPousseAuCoeur = null
         _sessionValidee.value = false
@@ -308,12 +311,28 @@ class OCnotesRepository(
     suspend fun connect(serverUrl: String, username: String, appToken: String) {
         val token = appToken.trim()
         call { it.connect(serverUrl.trim(), username.trim(), token) }
+        refuserDoublon()
         tokenStore.saveAppToken(token)
         enregistrerCompte()
         sessionOpen = true
         _sessionValidee.value = true
         _sessionExpired.value = false
         refreshPending()
+    }
+
+    /**
+     * Refuse d'enregistrer une identité qu'un autre profil porte déjà.
+     *
+     * Deux profils sur le même compte auraient chacun leur cache et leur
+     * synchronisation, et pousseraient les mêmes notes l'un contre l'autre.
+     * Appelé avant d'écrire le secret : rien n'est gardé de cette connexion.
+     * Le profil vide, lui, est retiré par l'appelant (`adopterCompteExistant`).
+     */
+    private suspend fun refuserDoublon() {
+        val existant = accountRegistry.profilDeMemeIdentite(state().identityKey, sauf = accountId)
+            ?: return
+        journal("connexion refusée : identité déjà portée par ${existant.id.take(8)}") // i18n-ok : trace de diagnostic
+        throw CompteDejaPresentException(existant.id, accountId)
     }
 
     /**
@@ -330,6 +349,7 @@ class OCnotesRepository(
         serializedState: String,
     ) {
         call { it.connectOIDC(serverUrl.trim(), subject, accessToken) }
+        refuserDoublon()
         tokenStore.saveOidcState(serializedState)
         enregistrerCompte()
         sessionOpen = true
@@ -371,7 +391,10 @@ class OCnotesRepository(
             reconcileLocalMetadata()
             return@withLock RestoreOutcome.LOCALE
         }
-        if (!current.connected) return@withLock RestoreOutcome.AUCUNE_SESSION
+        if (!current.connected) {
+            journal("restore : aucune session (connected=false, mode=${current.mode}, auth=${current.authMode})") // i18n-ok : trace de diagnostic
+            return@withLock RestoreOutcome.AUCUNE_SESSION
+        }
 
         try {
             if (current.authMode == AuthMode.OIDC) {
@@ -379,11 +402,15 @@ class OCnotesRepository(
                 // quand même le cache, et le premier appel en ligne déclenchera
                 // son renouvellement.
                 val serialized = tokenStore.oidcState()
-                    ?: return@withLock RestoreOutcome.AUCUNE_SESSION
+                    ?: return@withLock RestoreOutcome.AUCUNE_SESSION.also {
+                        journal("restore : connecté côté Go mais état OIDC absent du TokenStore") // i18n-ok : trace de diagnostic
+                    }
                 call { it.restoreOIDC(oidcManager.lastAccessToken(serialized).orEmpty()) }
             } else {
                 val token = tokenStore.appToken()
-                    ?: return@withLock RestoreOutcome.AUCUNE_SESSION
+                    ?: return@withLock RestoreOutcome.AUCUNE_SESSION.also {
+                        journal("restore : connecté côté Go mais App Token absent du TokenStore") // i18n-ok : trace de diagnostic
+                    }
                 call { it.restore(token) }
             }
             sessionOpen = true
@@ -393,10 +420,11 @@ class OCnotesRepository(
             RestoreOutcome.PRETE
         } catch (e: CancellationException) {
             throw e
-        } catch (_: OCnotesException) {
+        } catch (e: OCnotesException) {
             // Aucun réseau n'entre en jeu ici : le seul échec possible est
             // l'absence d'espace enregistré. Il faut alors passer par Connect
             // puis la sélection d'espace.
+            journal("restore : sans espace (${e.category}/${e.code})") // i18n-ok : trace de diagnostic
             RestoreOutcome.SANS_ESPACE
         }
     }
@@ -417,10 +445,15 @@ class OCnotesRepository(
         return try {
             if (current.authMode == AuthMode.OIDC) {
                 val token = refreshOidcToken(allowStaleOnFailure = false, force = true)
-                    ?: return ValidationSession.TOKEN_REFUSE
+                    ?: return ValidationSession.TOKEN_REFUSE.also {
+                        journal("validation : aucun état OIDC à renouveler") // i18n-ok : trace de diagnostic
+                    }
                 call { it.connectOIDC(current.serverUrl, current.username, token) }
             } else {
-                val token = tokenStore.appToken() ?: return ValidationSession.TOKEN_REFUSE
+                val token = tokenStore.appToken()
+                    ?: return ValidationSession.TOKEN_REFUSE.also {
+                        journal("validation : App Token absent du TokenStore") // i18n-ok : trace de diagnostic
+                    }
                 call { it.connect(current.serverUrl, current.username, token) }
             }
             sessionOpen = true
@@ -433,9 +466,11 @@ class OCnotesRepository(
             throw e
         } catch (e: OCnotesException) {
             if (e.category == ErrorCategory.AUTH) {
-                invalidateSession()
+                journal("validation refusée (${e.category}/${e.code})") // i18n-ok : trace de diagnostic
+                invalidateSession("validation")
                 ValidationSession.TOKEN_REFUSE
             } else {
+                journal("validation sans verdict (${e.category}/${e.code})") // i18n-ok : trace de diagnostic
                 ValidationSession.HORS_LIGNE
             }
         }
@@ -465,6 +500,7 @@ class OCnotesRepository(
      */
     suspend fun disconnect() {
         operationMutex.withLock {
+            journal("déconnexion demandée") // i18n-ok : trace de diagnostic
             call { it.disconnect() }
             tokenStore.clear()
             accountRegistry.recordDisconnected(accountId)
@@ -514,6 +550,7 @@ class OCnotesRepository(
     /** Coupe le serveur une fois les écritures poussées et les contenus rapatriés. */
     suspend fun detach(): DetachResultDto {
         return operationMutex.withLock {
+            journal("détachement vers le mode local") // i18n-ok : trace de diagnostic
             val result: DetachResultDto = authenticatedCallJson { it.detachJSON() }
             sessionOpen = true
             oidcTokenPousseAuCoeur = null
@@ -718,10 +755,25 @@ class OCnotesRepository(
             } catch (e: CancellationException) {
                 throw e
             } catch (t: Throwable) {
+                journal("renouvellement du jeton échoué (${descriptionRenouvellement(t)}, force=$force, tolérant=$allowStaleOnFailure)") // i18n-ok : trace de diagnostic
                 if (!allowStaleOnFailure) throw OCnotesException.from(t)
                 oidcManager.lastAccessToken(courant)?.let { pousserAuCoeur(it) }
             }
         }
+    }
+
+    /**
+     * Ni message ni URL : le type d'exception et, pour AppAuth, le couple
+     * type/code numérique, qui suffisent à distinguer un refus du serveur
+     * d'une panne réseau.
+     */
+    private fun descriptionRenouvellement(t: Throwable): String =
+        if (t is AuthorizationException) "AppAuth type=${t.type} code=${t.code}" // i18n-ok : trace de diagnostic
+        else t.javaClass.simpleName
+
+    /** Trace de diagnostic sur la perte de session : jamais de secret ni de message d'exception. */
+    private fun journal(evenement: String) {
+        Log.i(TAG, "[session ${accountId.take(8)}] $evenement") // i18n-ok : trace de diagnostic
     }
 
     /** Ne traverse la frontière Go que si le cœur n'a pas déjà cet access token. */
@@ -936,5 +988,9 @@ class OCnotesRepository(
         if (images.isEmpty()) return text
         val encodees = encoder(images)
         return call { it.restoreImages(text, encodees) }
+    }
+
+    private companion object {
+        const val TAG = "OCnotesSession"
     }
 }

@@ -100,6 +100,27 @@ class AccountRegistryTest {
     }
 
     @Test
+    fun `un second profil sur la meme identite est reconnu comme doublon`() = runBlocking {
+        val root = Files.createTempDirectory("ocnotes-doublon").toFile()
+        try {
+            val registry = AccountRegistry(root)
+            val premier = registry.active
+            registry.recordAuthenticated(premier.id, "https://cloud.test", "alice", "oidc", "identite-alice")
+            val second = registry.createAndActivate()
+
+            // Le profil vierge n'a pas d'identité : rien à comparer.
+            assertEquals(null, registry.profilDeMemeIdentite("", sauf = second.id))
+            // Même identité vue depuis le nouveau profil : c'est le premier.
+            assertEquals(premier.id, registry.profilDeMemeIdentite("identite-alice", sauf = second.id)?.id)
+            // Un profil ne se reconnaît pas lui-même, et une autre identité passe.
+            assertEquals(null, registry.profilDeMemeIdentite("identite-alice", sauf = premier.id))
+            assertEquals(null, registry.profilDeMemeIdentite("identite-bob", sauf = second.id))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `plusieurs profils sont conservés et peuvent etre actives`() = runBlocking {
         val root = Files.createTempDirectory("ocnotes-multi").toFile()
         try {

@@ -10,6 +10,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import eu.ocnotes.AppContainer
 import eu.ocnotes.data.AppMode
+import eu.ocnotes.data.CompteDejaPresentException
 import eu.ocnotes.data.ErrorCategory
 import eu.ocnotes.data.OCnotesException
 import eu.ocnotes.data.OCnotesRepository
@@ -77,6 +78,7 @@ class LoginViewModel(
     private val tokenStore: TokenStore,
     private val oidcManager: OidcManager,
     private val savedStateHandle: SavedStateHandle,
+    private val surCompteDejaPresent: (CompteDejaPresentException) -> Unit,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LoginUiState())
@@ -155,6 +157,9 @@ class LoginViewModel(
                         },
                     )
                 }
+            } catch (e: CompteDejaPresentException) {
+                _uiState.update { it.copy(enCours = false) }
+                surCompteDejaPresent(e)
             } catch (e: OCnotesException) {
                 _uiState.update {
                     it.copy(
@@ -250,6 +255,9 @@ class LoginViewModel(
                 }
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: CompteDejaPresentException) {
+                _uiState.update { it.copy(enCours = false) }
+                surCompteDejaPresent(e)
             } catch (_: Throwable) {
                 _uiState.update {
                     it.copy(enCours = false, erreur = Texte.de(eu.ocnotes.R.string.login_oidc_erreur))
@@ -288,6 +296,9 @@ class LoginViewModel(
                     container.tokenStore,
                     container.oidcManager,
                     createSavedStateHandle(),
+                    surCompteDejaPresent = { e ->
+                        container.lancerGesteCompte { adopterCompteExistant(e.existantId, e.nouveauId) }
+                    },
                 )
             }
         }

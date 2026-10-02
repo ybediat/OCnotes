@@ -77,6 +77,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         EchecCompteDialog()
+                        CompteDejaPresentDialog()
                     }
                 }
             }
@@ -209,6 +210,23 @@ private fun EchecCompteDialog() {
         text = { Text(stringResource(R.string.compte_geste_echec)) },
         confirmButton = {
             TextButton(onClick = container::acquitterEchecCompte) {
+                Text(stringResource(R.string.action_fermer))
+            }
+        },
+    )
+}
+
+/** Explique pourquoi une connexion a rouvert un profil existant au lieu d'en ajouter un. */
+@Composable
+private fun CompteDejaPresentDialog() {
+    val container = LocalContext.current.appContainer
+    val present by container.compteDejaPresent.collectAsStateWithLifecycle()
+    if (!present) return
+    AlertDialog(
+        onDismissRequest = container::acquitterCompteDejaPresent,
+        text = { Text(stringResource(R.string.compte_deja_present)) },
+        confirmButton = {
+            TextButton(onClick = container::acquitterCompteDejaPresent) {
                 Text(stringResource(R.string.action_fermer))
             }
         },

@@ -116,6 +116,17 @@ class AccountRegistry(private val filesDir: File) {
             }
         }
 
+    /**
+     * Autre profil déjà connecté à la même identité, ou `null`.
+     *
+     * Une clé vide ne désigne personne : un profil vierge, local ou déconnecté
+     * n'a pas d'identité à comparer. La clé est opaque, on ne fait que
+     * l'égaler.
+     */
+    fun profilDeMemeIdentite(identityKey: String, sauf: String): AccountProfile? =
+        if (identityKey.isBlank()) null
+        else accounts.firstOrNull { it.id != sauf && it.identityKey == identityKey }
+
     suspend fun recordLocal(accountId: String) = withContext(Dispatchers.IO) {
         updateAccount(accountId) {
             it.copy(

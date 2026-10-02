@@ -291,6 +291,7 @@
     <string name="compte_nouveau">Nouveau compte</string>
     <string name="compte_ajouter">Ajouter un compte</string>
     <string name="compte_geste_echec">L\'opération sur le compte a échoué. Réessayez.</string>
+    <string name="compte_deja_present">Ce compte est déjà ajouté sur cet appareil. Le profil existant est ouvert ; reconnectez-vous depuis celui-ci si sa session a expiré.</string>
     <string name="compte_supprimer">Supprimer le compte</string>
     <string name="compte_supprimer_titre">Supprimer ce compte ?</string>
     <string name="compte_supprimer_message">Le compte %1$s, son cache et ses modifications locales non synchronisées seront supprimés de cet appareil. Cette action est irréversible.</string>
