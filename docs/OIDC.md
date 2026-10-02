@@ -13,6 +13,9 @@ Deux façons d'y parvenir, selon la façon dont le serveur authentifie :
 - **IdP intégré d'OpenCloud** — possible, mais l'admin devient responsable de
   **toute** la liste des clients. Lire l'avertissement ci-dessous avant de s'y
   engager.
+- **ownCloud Infinite Scale (OCIS)** — compatibilité **expérimentale**, avec une
+  procédure différente de celle d'OpenCloud. Voir
+  [ownCloud Infinite Scale](#owncloud-infinite-scale-expérimental).
 
 ## Client du serveur OpenCloud intégré
 
@@ -155,6 +158,86 @@ GET /signin/v1/identifier/_/authorize
 
 Après modification de la configuration, redémarrer le service IDP ou le
 conteneur OpenCloud qui le porte.
+
+## ownCloud Infinite Scale (expérimental)
+
+> ⚠️ **Compatibilité expérimentale.** Testée sur OCIS 8.2.0 en Docker : les
+> opérations de fichiers (App Token) passent les tests d'intégration, et une
+> connexion OIDC par navigateur a abouti. Le renouvellement du jeton sur la
+> durée et les autres versions d'OCIS n'ont pas été vérifiés.
+
+OCIS et OpenCloud partagent la même base : WebFinger, LibreGraph, WebDAV et
+l'IdP intégré sont compatibles. Trois différences à connaître.
+
+### Différences avec OpenCloud
+
+- **Conflits d'écriture : 409 au lieu de 412.** Sur un `If-Match` périmé, OCIS
+  répond `409`. OCnotes le traite comme un conflit sur les écritures
+  conditionnelles ; rien à configurer.
+- **`If-None-Match: *` est ignoré** par OCIS. La protection des notes créées
+  hors connexion repose sur la vérification d'existence faite par l'application.
+- **WebFinger sans scopes.** OCIS ne publie pas la propriété de scopes propre à
+  OpenCloud : OCnotes retombe sur `openid profile email offline_access`, que
+  l'IdP d'OCIS accepte.
+
+### Enregistrer le client OCnotes
+
+Il n'existe **aucune variable d'environnement** pour désigner le fichier de
+registration de l'IdP. Le fichier `…/idp/tmp/identifier-registration.yaml` est
+**regénéré à chaque démarrage** à partir de la configuration du service : le
+modifier à la main est inutile, il est écrasé.
+
+La liste des clients se déclare dans **`idp.yaml`**, à côté de `ocis.yaml`
+(`/etc/ocis/idp.yaml` dans le conteneur, si `OCIS_CONFIG_DIR=/etc/ocis`).
+
+> ⚠️ Comme avec OpenCloud, **déclarer `clients` remplace toute la liste par
+> défaut** (`web`, applications de bureau, Android et iOS). Il faut donc la
+> recopier en entier avant d'ajouter OCnotes.
+
+1. **Partez du fichier généré**, qui contient les clients par défaut de *votre*
+   version, avec vos URL déjà substituées :
+   ```bash
+   cp <data>/idp/tmp/identifier-registration.yaml <config>/idp.yaml
+   ```
+2. **Ajoutez l'entrée OCnotes en fin de liste**, avec **la même indentation que
+   les entrées existantes** :
+   ```yaml
+   - id: OCnotesAndroid
+     name: OCnotes Android App
+     trusted: false
+     secret: ""
+     redirect_uris:
+     - eu.ocnotes://oauth2redirect
+     origins: []
+     application_type: native
+   ```
+   Les clés d'une entrée OCIS sont `id`, `name`, `trusted`, `secret`,
+   `redirect_uris`, `origins` et `application_type`. Il n'y a pas de
+   `post_logout_redirect_uris`, contrairement à OpenCloud.
+3. **Vérifiez que le YAML est valide** avant de redémarrer :
+   ```bash
+   python3 -c "import yaml; print([c['id'][:12] for c in yaml.safe_load(open('idp.yaml'))['clients']])"
+   ```
+4. **Redémarrez** le service puis contrôlez que le client est pris en compte :
+   ```bash
+   docker compose restart ocis
+   docker exec ocis grep -n OCnotes /var/lib/ocis/idp/tmp/identifier-registration.yaml
+   ```
+
+Une erreur d'indentation sur la nouvelle entrée rend le YAML invalide : l'IdP
+ignore alors la liste, retombe sur ses défauts et refuse OCnotes. Le journal
+affiche `Unknown redirect uri: eu.ocnotes://oauth2redirect`.
+
+### Contrôle rapide (OCIS)
+
+La requête de [contrôle de l'IdP intégré](#contrôle-rapide-idp-intégré) doit
+renvoyer un `302` vers la page de connexion (et non un `500`). Un échange de
+code sans secret doit répondre `invalid_grant` — preuve que le client est
+accepté comme **client public** — et non `invalid client_secret`.
+
+> Les clients Android et iOS par défaut d'OCIS portent un **secret** : ils
+> exigent qu'il soit envoyé à l'échange du code. OCnotes n'en envoie pas, d'où
+> la nécessité d'un client dédié, déclaré avec `secret: ""`.
 
 ## IdP externe (Keycloak, Authentik, Zitadel, Entra ID…)
 
