@@ -422,3 +422,73 @@ func TestPersistanceModeLocalConfigurationPerdueEtServeurBranche(t *testing.T) {
 
 	verifierCache(t, app, attendu)
 }
+
+// Un profil serveur dont la configuration est perdue n'a, lui, rien à adopter :
+// ses notes propres sont déjà sur son serveur, et son travail en attente est
+// déjà dans la file. Les adopter les faisait monter sur le premier compte venu
+// — celui que l'utilisateur saisit devant l'écran de connexion, qui n'est pas
+// forcément le sien, puisque la configuration ne peut plus le dire.
+func TestPersistanceConfigurationPerdueProfilServeurNeMonteRienAilleurs(t *testing.T) {
+	app, _, dataDir := prepare(t)
+	if _, err := app.CreateNoteJSON("", "privee-de-A", "contenu du compte A"); err != nil {
+		t.Fatalf("CreateNoteJSON: %v", err)
+	}
+	if res := synchroniser(t, app); res.Error != "" || res.Remaining != 0 {
+		t.Fatalf("passe sur A = %+v", res)
+	}
+	if err := os.Remove(config.Path(dataDir)); err != nil {
+		t.Fatal(err)
+	}
+
+	autre := newFakeServer(t)
+	apres, err := NewApp(dataDir)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if err := apres.Connect(autre.URL, fakeUser, fakeToken); err != nil {
+		t.Fatalf("Connect sur B: %v", err)
+	}
+	if got := apres.PendingCount(); got != 0 {
+		t.Errorf("file après connexion à B = %d, attendu 0", got)
+	}
+	if err := apres.SelectWorkspace(fakeSpaceID, "Notes"); err != nil {
+		t.Fatalf("SelectWorkspace: %v", err)
+	}
+	if _, err := apres.ListFolderJSON(""); err != nil {
+		t.Fatalf("ListFolderJSON: %v", err)
+	}
+	synchroniser(t, apres)
+
+	autre.mu.Lock()
+	defer autre.mu.Unlock()
+	if _, ok := autre.files["Notes/privee-de-A.md"]; ok {
+		t.Errorf("la note du compte A a été envoyée sur B : %v", keys(autre.files))
+	}
+}
+
+// Même perte, même compte : rien ne doit repartir. Adopter faisait passer
+// chaque note du cache par le chemin des créations, et toute note modifiée
+// ailleurs entre-temps revenait en copie de conflit.
+func TestPersistanceConfigurationPerdueProfilServeurMemeCompteRienARenvoyer(t *testing.T) {
+	app, server, dataDir := prepare(t)
+	if _, err := app.CreateNoteJSON("", "synchronisee", "v1"); err != nil {
+		t.Fatalf("CreateNoteJSON: %v", err)
+	}
+	if res := synchroniser(t, app); res.Error != "" || res.Remaining != 0 {
+		t.Fatalf("passe initiale = %+v", res)
+	}
+	if err := os.Remove(config.Path(dataDir)); err != nil {
+		t.Fatal(err)
+	}
+
+	apres, err := NewApp(dataDir)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if err := apres.Connect(server.URL, fakeUser, fakeToken); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	if got := apres.PendingCount(); got != 0 {
+		t.Errorf("file après reconnexion = %d, attendu 0", got)
+	}
+}

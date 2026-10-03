@@ -288,6 +288,10 @@ func TestBranchementInterrompuResteEnModeLocal(t *testing.T) {
 // StartLocal tué entre le cache et la configuration : l'installation reste
 // neuve, et un cache figé en « stockage unique » ferait ignorer toutes les
 // écritures du serveur branché ensuite.
+//
+// Le drapeau survit au redémarrage — sous une configuration vide il est le
+// seul témoin d'un profil local dont la configuration est perdue — et c'est la
+// connexion qui le lève.
 func TestDemarrageLocalInterrompuNeFigePasLeCache(t *testing.T) {
 	dataDir := t.TempDir()
 	app, err := NewApp(dataDir)
@@ -298,11 +302,26 @@ func TestDemarrageLocalInterrompuNeFigePasLeCache(t *testing.T) {
 		t.Fatalf("SetLocalOnly: %v", err)
 	}
 
+	server := newFakeServer(t)
 	relance, err := NewApp(dataDir)
 	if err != nil {
 		t.Fatalf("NewApp au redémarrage: %v", err)
 	}
+	if err := relance.Connect(server.URL, fakeUser, fakeToken); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	if err := relance.SelectWorkspace(fakeSpaceID, "Notes"); err != nil {
+		t.Fatalf("SelectWorkspace: %v", err)
+	}
 	if relance.cache.LocalOnly() {
-		t.Error("cache resté en « stockage unique » sous une installation neuve")
+		t.Error("cache resté en « stockage unique » sous un serveur branché")
+	}
+
+	server.setOffline(true)
+	if _, err := relance.CreateNoteJSON("", "hors-connexion", "à envoyer"); err != nil {
+		t.Fatalf("CreateNoteJSON hors connexion: %v", err)
+	}
+	if n := relance.PendingCount(); n != 1 {
+		t.Errorf("PendingCount = %d, attendu 1 : l'écriture doit partir au retour du réseau", n)
 	}
 }
