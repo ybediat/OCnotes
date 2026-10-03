@@ -465,6 +465,19 @@ func (a *App) connectClient(serverURL, username, authMode string, client *opencl
 	}
 	nouvelle.Mode = config.ModeServer
 
+	// Première connexion à un serveur alors que le cache porte déjà des notes :
+	// la seule façon d'y arriver est une configuration perdue ou tronquée — la
+	// purge d'une déconnexion vide le cache, et le branchement depuis le mode
+	// local passe par AttachJSON. Ces notes n'ont alors de copie nulle part. Les
+	// laisser « propres » les faisait oublier en silence au premier listing,
+	// puisque le serveur ne les connaît pas : on les traite comme un travail
+	// créé hors connexion, que pushWrite envoie sans rien écraser.
+	if !ancienne.IsConnected() && len(a.cache.Entries()) > 0 {
+		if err := a.cache.Adopt(); err != nil {
+			return err
+		}
+	}
+
 	var nouvelleBibliotheque *notes.Library
 	if nouvelle.DriveID != "" {
 		for _, d := range drives {
@@ -1767,13 +1780,17 @@ func (a *App) CreateNoteJSON(dir, name, content string) (string, error) {
 		}
 		return toJSON(noteRef{Path: note.Path, Name: note.Name, Display: note.DisplayName})
 	}
-	if !errors.Is(err, opencloud.ErrOffline) {
+	if !errors.Is(err, opencloud.ErrOffline) && !errors.Is(err, opencloud.ErrUnauthorized) {
 		return "", err
 	}
 
 	// Hors connexion : la note est créée dans le cache seul et poussée plus
 	// tard. Pouvoir écrire une note existante sans réseau mais pas en créer
 	// une n'aurait aucun sens pour l'utilisateur.
+	//
+	// Un token refusé est traité de même : modifier une note existante reste
+	// possible sous une session expirée, créer une note doit l'être aussi. La
+	// passe de synchronisation la poussera après la reconnexion.
 	return a.createNoteLocal(dir, name, content)
 }
 
@@ -1851,12 +1868,12 @@ func (a *App) CreateFolderJSON(dir, name string) (string, error) {
 		}
 		return toJSON(noteRef{Path: folder.Path, Name: folder.Name, Display: folder.Name})
 	}
-	if !errors.Is(err, opencloud.ErrOffline) {
+	if !errors.Is(err, opencloud.ErrOffline) && !errors.Is(err, opencloud.ErrUnauthorized) {
 		return "", err
 	}
 
-	// Hors connexion : le dossier est retenu par le cache et créé au prochain
-	// passage. Le navigateur l'affiche entre-temps.
+	// Hors connexion, ou sous un token refusé : le dossier est retenu par le
+	// cache et créé au prochain passage. Le navigateur l'affiche entre-temps.
 	return a.createFolderLocal(dir, name)
 }
 

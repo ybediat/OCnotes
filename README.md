@@ -20,8 +20,9 @@
 
 OCnotes est une application Android d'édition de notes **Markdown**. Elles
 peuvent vivre uniquement sur l'appareil, sans compte, ou être synchronisées
-avec un serveur [**OpenCloud**](https://opencloud.eu) (fork d'ownCloud Infinite
-Scale). Avec un serveur, elles restent de simples fichiers `.md` dans votre
+avec un serveur [**OpenCloud**](https://opencloud.eu) ou
+[**ownCloud Infinite Scale**](https://owncloud.dev/ocis/) (OCIS) : l'application
+est compatible avec les deux. Avec un serveur, elles restent de simples fichiers `.md` dans votre
 espace personnel : lisibles depuis l'interface web et synchronisables avec
 n'importe quel autre client.
 
@@ -59,9 +60,10 @@ construite depuis les sources (voir [Construire depuis les sources](#construire-
 
 **Pour la synchronisation** : un serveur OpenCloud accessible en HTTPS et un App
 Token créé depuis *Réglages du compte → App Tokens → + New*. Un serveur
-configuré peut aussi proposer la [connexion OIDC](docs/OIDC.md). La compatibilité
-avec ownCloud Infinite Scale est **expérimentale** (voir la
-[section dédiée](docs/OIDC.md#owncloud-infinite-scale-expérimental)). Aucun serveur
+configuré peut aussi proposer la [connexion OIDC](docs/OIDC.md). Les mêmes
+fonctions marchent avec OpenCloud et avec ownCloud Infinite Scale, dont
+l'enregistrement du client OIDC diffère (voir la
+[section dédiée](docs/OIDC.md#owncloud-infinite-scale)). Aucun serveur
 n'est requis pour utiliser le mode local.
 
 **Prérequis côté appareil** : Android 8.0 (API 26) ou supérieur.

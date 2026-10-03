@@ -118,6 +118,17 @@ class AppContainer(
         operation(runtimeFor(accountId).repository)
     }
 
+    /**
+     * Opérations que la suppression du profil détruirait : écritures, créations
+     * et renommages jamais envoyés. Lu dans le cœur Go du profil, actif ou non,
+     * sans réseau. Sans verrou de compte — il reste tenu pendant toute une
+     * passe, et le dialogue attendrait la fin d'une synchronisation.
+     *
+     * `null` si la lecture échoue : l'appelant doit alors supposer le pire.
+     */
+    suspend fun operationsEnAttente(id: String): Int? =
+        runCatching { runtimeFor(id).repository.state().pending }.getOrNull()
+
     /** Installe le travail périodique de chaque compte serveur enregistré. */
     fun scheduleAllAccounts() {
         accountRegistry.accounts

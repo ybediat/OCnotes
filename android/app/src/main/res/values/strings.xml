@@ -295,6 +295,12 @@
     <string name="compte_supprimer">Supprimer le compte</string>
     <string name="compte_supprimer_titre">Supprimer ce compte ?</string>
     <string name="compte_supprimer_message">Le compte %1$s, son cache et ses modifications locales non synchronisées seront supprimés de cet appareil. Cette action est irréversible.</string>
+    <string name="compte_supprimer_perte_titre">Des notes seront perdues</string>
+    <string name="compte_supprimer_local_message">Les notes de ce compte local n\'existent nulle part ailleurs : ni sur un serveur, ni sur un autre appareil. Les supprimer les efface définitivement. Cette action est irréversible.</string>
+    <plurals name="compte_supprimer_attente_message">
+        <item quantity="one">Le compte %1$s a %2$d modification locale qui n\'a pas encore été envoyée au serveur. La supprimer la perd définitivement. Ouvrez ce compte et synchronisez d\'abord.</item>
+        <item quantity="other">Le compte %1$s a %2$d modifications locales qui n\'ont pas encore été envoyées au serveur. Les supprimer les perd définitivement. Ouvrez ce compte et synchronisez d\'abord.</item>
+    </plurals>
     <string name="menu_mode_arborescence">Par dossiers</string>
     <string name="menu_mode_liste">Toutes les notes</string>
 
@@ -428,6 +434,9 @@
     <string name="reglages_deconnexion">Se déconnecter</string>
     <string name="reglages_deconnexion_explication">La déconnexion efface le token, la configuration et le cache local de cet appareil. Les notes restent sur le serveur.</string>
     <string name="reglages_deconnexion_titre">Se déconnecter ?</string>
+    <string name="reglages_deconnexion_perte_titre">Des modifications seront perdues</string>
+    <string name="reglages_deconnexion_perte_case">Je comprends que ces modifications seront définitivement perdues</string>
+    <string name="reglages_deconnexion_perte_confirmer">Se déconnecter et les perdre</string>
     <string name="reglages_deconnexion_confirmation">Le token, la configuration et le cache local seront effacés. Vos notes restent sur le serveur.</string>
     <string name="reglages_local_titre">Stockage local</string>
     <string name="reglages_local_explication">Toutes les notes vivent uniquement sur cet appareil. Aucune synchronisation n\'est effectuée.</string>
@@ -463,6 +472,7 @@
     <string name="reglages_local_effacer_explication">Réinitialise l\'application. En mode local, ces notes n\'existent nulle part ailleurs.</string>
     <string name="reglages_local_effacer_titre">Effacer définitivement toutes les notes ?</string>
     <string name="reglages_local_effacer_confirmation">Toutes les notes et tous les dossiers de cet appareil seront définitivement supprimés. Cette action est irréversible.</string>
+    <string name="reglages_local_effacer_case">Je comprends que toutes mes notes seront définitivement effacées</string>
     <!-- Des modifications non envoyées seraient perdues : c'est la seule mise
          en garde de l'écran, elle compte ce qui est en jeu. -->
     <plurals name="reglages_deconnexion_attente">

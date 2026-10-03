@@ -279,6 +279,12 @@
     <string name="compte_supprimer">Konto entfernen</string>
     <string name="compte_supprimer_titre">Dieses Konto entfernen?</string>
     <string name="compte_supprimer_message">Das Konto %1$s, sein Cache und alle nicht synchronisierten lokalen Änderungen werden von diesem Gerät gelöscht. Dies kann nicht rückgängig gemacht werden.</string>
+    <string name="compte_supprimer_perte_titre">Notizen gehen verloren</string>
+    <string name="compte_supprimer_local_message">Die Notizen dieses lokalen Kontos existieren nirgendwo sonst: weder auf einem Server noch auf einem anderen Gerät. Das Entfernen löscht sie endgültig. Dies kann nicht rückgängig gemacht werden.</string>
+    <plurals name="compte_supprimer_attente_message">
+        <item quantity="one">Das Konto %1$s hat %2$d lokale Änderung, die noch nicht an den Server gesendet wurde. Das Entfernen des Kontos verliert sie endgültig. Öffnen Sie das Konto und synchronisieren Sie zuerst.</item>
+        <item quantity="other">Das Konto %1$s hat %2$d lokale Änderungen, die noch nicht an den Server gesendet wurden. Das Entfernen des Kontos verliert sie endgültig. Öffnen Sie das Konto und synchronisieren Sie zuerst.</item>
+    </plurals>
     <string name="menu_mode_arborescence">Nach Ordnern</string>
     <string name="menu_mode_liste">Alle Notizen</string>
 
@@ -401,6 +407,9 @@
     <string name="reglages_deconnexion">Abmelden</string>
     <string name="reglages_deconnexion_explication">Das Abmelden löscht das Token, die Konfiguration und den lokalen Cache dieses Geräts. Die Notizen bleiben auf dem Server.</string>
     <string name="reglages_deconnexion_titre">Abmelden?</string>
+    <string name="reglages_deconnexion_perte_titre">Änderungen gehen verloren</string>
+    <string name="reglages_deconnexion_perte_case">Ich verstehe, dass diese Änderungen endgültig verloren gehen</string>
+    <string name="reglages_deconnexion_perte_confirmer">Abmelden und verlieren</string>
     <string name="reglages_deconnexion_confirmation">Das Token, die Konfiguration und der lokale Cache werden gelöscht. Ihre Notizen bleiben auf dem Server.</string>
     <string name="reglages_local_titre">Lokaler Speicher</string>
     <string name="reglages_local_explication">Alle Notizen befinden sich ausschließlich auf diesem Gerät. Es findet keine Synchronisierung statt.</string>
@@ -436,6 +445,7 @@
     <string name="reglages_local_effacer_explication">Setzt die App zurück. Im lokalen Modus gibt es diese Notizen nirgendwo sonst.</string>
     <string name="reglages_local_effacer_titre">Alle Notizen endgültig löschen?</string>
     <string name="reglages_local_effacer_confirmation">Alle Notizen und Ordner auf diesem Gerät werden endgültig gelöscht. Dies kann nicht rückgängig gemacht werden.</string>
+    <string name="reglages_local_effacer_case">Ich verstehe, dass alle meine Notizen endgültig gelöscht werden</string>
     <!-- Nicht gesendete Änderungen würden verloren gehen: Dies ist die einzige Warnung auf dem Bildschirm,
          die angibt, was auf dem Spiel steht. -->
     <plurals name="reglages_deconnexion_attente">

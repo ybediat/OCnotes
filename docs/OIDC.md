@@ -13,9 +13,9 @@ Deux façons d'y parvenir, selon la façon dont le serveur authentifie :
 - **IdP intégré d'OpenCloud** — possible, mais l'admin devient responsable de
   **toute** la liste des clients. Lire l'avertissement ci-dessous avant de s'y
   engager.
-- **ownCloud Infinite Scale (OCIS)** — compatibilité **expérimentale**, avec une
-  procédure différente de celle d'OpenCloud. Voir
-  [ownCloud Infinite Scale](#owncloud-infinite-scale-expérimental).
+- **ownCloud Infinite Scale (OCIS)** — compatible, avec une procédure
+  d'enregistrement différente de celle d'OpenCloud. Voir
+  [ownCloud Infinite Scale](#owncloud-infinite-scale).
 
 ## Client du serveur OpenCloud intégré
 
@@ -159,13 +159,14 @@ GET /signin/v1/identifier/_/authorize
 Après modification de la configuration, redémarrer le service IDP ou le
 conteneur OpenCloud qui le porte.
 
-## ownCloud Infinite Scale (expérimental)
+## ownCloud Infinite Scale
 
-> ⚠️ **Compatibilité expérimentale.** Testée sur OCIS 8.2.0 en Docker : les
+> **Compatible avec OpenCloud et OCIS.** Testé sur OCIS 8.2.0 en Docker : les
 > opérations de fichiers (App Token) passent les tests d'intégration, et une
 > connexion OIDC par navigateur a abouti : création et écriture d'une note dans
 > l'application, relue ensuite depuis l'interface web. Le renouvellement du
-> jeton sur la durée et les autres versions d'OCIS n'ont pas été vérifiés.
+> jeton sur la durée et les autres versions d'OCIS n'ont pas été vérifiés : la
+> compatibilité est établie pour 8.2.0, pas garantie pour les autres.
 
 OCIS et OpenCloud partagent la même base : WebFinger, LibreGraph, WebDAV et
 l'IdP intégré sont compatibles. Trois différences à connaître.

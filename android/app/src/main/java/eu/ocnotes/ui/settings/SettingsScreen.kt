@@ -1,5 +1,6 @@
 package eu.ocnotes.ui.settings
 
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -36,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.pluralStringResource
 import eu.ocnotes.data.ConflictDto
 import androidx.compose.ui.res.stringResource
@@ -418,6 +421,14 @@ fun SettingsScreen(
     }
 
     if (confirmation) {
+        // Des modifications jamais envoyées : la déconnexion est ici le seul
+        // geste qui détruise du travail. Elle exige un acquiescement explicite,
+        // et la sortie sûre — synchroniser — est offerte dans le même dialogue.
+        val perte = !etat.modeLocal && etat.enAttente > 0
+        // En mode local, toute la bibliothèque est l'enjeu : ces notes n'ont de
+        // copie nulle part. Même verrou, même case.
+        val verrou = perte || etat.modeLocal
+        var compris by remember { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { confirmation = false },
             title = {
@@ -425,6 +436,8 @@ fun SettingsScreen(
                     stringResource(
                         if (etat.modeLocal) {
                             R.string.reglages_local_effacer_titre
+                        } else if (perte) {
+                            R.string.reglages_deconnexion_perte_titre
                         } else {
                             R.string.reglages_deconnexion_titre
                         },
@@ -432,19 +445,59 @@ fun SettingsScreen(
                 )
             },
             text = {
-                Text(
-                    if (etat.modeLocal) {
-                        stringResource(R.string.reglages_local_effacer_confirmation)
-                    } else if (etat.enAttente > 0) {
-                        pluralStringResource(
-                            R.plurals.reglages_deconnexion_attente,
-                            etat.enAttente,
-                            etat.enAttente,
-                        )
-                    } else {
-                        stringResource(R.string.reglages_deconnexion_confirmation)
-                    },
-                )
+                if (verrou) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (perte) {
+                            Text(
+                                pluralStringResource(
+                                    R.plurals.reglages_deconnexion_attente,
+                                    etat.enAttente,
+                                    etat.enAttente,
+                                ),
+                            )
+                            OutlinedButton(
+                                onClick = {
+                                    confirmation = false
+                                    viewModel.synchroniser()
+                                },
+                                enabled = !etat.syncEnCours,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(stringResource(R.string.reglages_sync_maintenant))
+                            }
+                        } else {
+                            Text(stringResource(R.string.reglages_local_effacer_confirmation))
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.toggleable(
+                                value = compris,
+                                role = Role.Checkbox,
+                                onValueChange = { compris = it },
+                            ),
+                        ) {
+                            Checkbox(checked = compris, onCheckedChange = null)
+                            Text(
+                                text = stringResource(
+                                    if (perte) {
+                                        R.string.reglages_deconnexion_perte_case
+                                    } else {
+                                        R.string.reglages_local_effacer_case
+                                    },
+                                ),
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        if (etat.modeLocal) {
+                            stringResource(R.string.reglages_local_effacer_confirmation)
+                        } else {
+                            stringResource(R.string.reglages_deconnexion_confirmation)
+                        },
+                    )
+                }
             },
             confirmButton = {
                 TextButton(
@@ -452,16 +505,23 @@ fun SettingsScreen(
                         confirmation = false
                         viewModel.deconnecter()
                     },
+                    enabled = !verrou || compris,
                 ) {
                     Text(
                         text = stringResource(
                             if (etat.modeLocal) {
                                 R.string.reglages_local_effacer
+                            } else if (perte) {
+                                R.string.reglages_deconnexion_perte_confirmer
                             } else {
                                 R.string.reglages_deconnexion
                             },
                         ),
-                        color = MaterialTheme.colorScheme.error,
+                        color = if (!verrou || compris) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        },
                     )
                 }
             },

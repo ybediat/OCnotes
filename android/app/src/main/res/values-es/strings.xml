@@ -299,6 +299,12 @@
     <string name="compte_supprimer">Eliminar cuenta</string>
     <string name="compte_supprimer_titre">¿Eliminar esta cuenta?</string>
     <string name="compte_supprimer_message">La cuenta %1$s, su caché y todos los cambios locales sin sincronizar se eliminarán de este dispositivo. Esta acción no se puede deshacer.</string>
+    <string name="compte_supprimer_perte_titre">Se perderán notas</string>
+    <string name="compte_supprimer_local_message">Las notas de esta cuenta local no existen en ningún otro lugar: ni en un servidor ni en otro dispositivo. Eliminarla las borra definitivamente. Esta acción no se puede deshacer.</string>
+    <plurals name="compte_supprimer_attente_message">
+        <item quantity="one">La cuenta %1$s tiene %2$d modificación local que todavía no se ha enviado al servidor. Eliminar la cuenta la pierde definitivamente. Abra la cuenta y sincronice primero.</item>
+        <item quantity="other">La cuenta %1$s tiene %2$d modificaciones locales que todavía no se han enviado al servidor. Eliminar la cuenta las pierde definitivamente. Abra la cuenta y sincronice primero.</item>
+    </plurals>
     <string name="menu_mode_arborescence">Por carpetas</string>
     <string name="menu_mode_liste">Todas las notas</string>
 
@@ -402,6 +408,9 @@
     <string name="reglages_deconnexion">Cerrar sesión</string>
     <string name="reglages_deconnexion_explication">Al cerrar sesión se eliminan el token, la configuración y la caché local de este dispositivo. Sus notas permanecen en el servidor.</string>
     <string name="reglages_deconnexion_titre">¿Cerrar sesión?</string>
+    <string name="reglages_deconnexion_perte_titre">Se perderán modificaciones</string>
+    <string name="reglages_deconnexion_perte_case">Entiendo que estas modificaciones se perderán definitivamente</string>
+    <string name="reglages_deconnexion_perte_confirmer">Cerrar sesión y perderlas</string>
     <string name="reglages_deconnexion_confirmation">Se eliminarán el token, la configuración y la caché local. Sus notas permanecen en el servidor.</string>
     <string name="reglages_local_titre">Almacenamiento local</string>
     <string name="reglages_local_explication">Todas las notas se guardan únicamente en este dispositivo. No se realiza ninguna sincronización.</string>
@@ -441,6 +450,7 @@
     <string name="reglages_local_effacer_explication">Restablece la aplicación. En modo local, estas notas no existen en ningún otro lugar.</string>
     <string name="reglages_local_effacer_titre">¿Eliminar definitivamente todas las notas?</string>
     <string name="reglages_local_effacer_confirmation">Todas las notas y carpetas de este dispositivo se eliminarán definitivamente. Esta acción no se puede deshacer.</string>
+    <string name="reglages_local_effacer_case">Entiendo que todas mis notas se borrarán definitivamente</string>
     <!-- Des modifications non envoyées seraient perdues : c'est la seule mise
          en garde de l'écran, elle compte ce qui est en jeu. -->
     <plurals name="reglages_deconnexion_attente">

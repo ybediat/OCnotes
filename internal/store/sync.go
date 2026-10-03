@@ -789,6 +789,13 @@ func (s *Store) Pull(ctx context.Context, remote Remote, notePath string) error 
 	content, etag, err := remote.Read(ctx, notePath)
 	if err != nil {
 		if errors.Is(err, opencloud.ErrNotFound) {
+			// Le serveur ne connaît pas encore ce nom parce qu'une opération en
+			// file doit le lui apprendre — un renommage fait hors connexion, par
+			// exemple. L'oublier ici fait échouer l'ouverture et jette le blob
+			// que la passe suivante devait déplacer.
+			if s.queueReferences(notePath) {
+				return nil
+			}
 			_, err := s.ForgetIfUnchanged(notePath, obs)
 			return err
 		}
@@ -796,6 +803,19 @@ func (s *Store) Pull(ctx context.Context, remote Remote, notePath string) error 
 	}
 	_, err = s.AcceptIfUnchanged(notePath, obs, content, etag)
 	return err
+}
+
+// queueReferences dit si une opération en file porte sur ce chemin, comme
+// source ou comme destination.
+func (s *Store) queueReferences(itemPath string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, op := range s.queue {
+		if op.Path == itemPath || op.Target == itemPath {
+			return true
+		}
+	}
+	return false
 }
 
 // Adopt prépare la montée de tout le contenu local vers un serveur qu'on vient

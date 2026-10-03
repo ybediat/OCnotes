@@ -318,6 +318,12 @@
     <string name="compte_supprimer">Remove account</string>
     <string name="compte_supprimer_titre">Remove this account?</string>
     <string name="compte_supprimer_message">The %1$s account, its cache and any unsynced local changes will be removed from this device. This cannot be undone.</string>
+    <string name="compte_supprimer_perte_titre">Notes will be lost</string>
+    <string name="compte_supprimer_local_message">The notes in this local account exist nowhere else: not on a server, not on another device. Removing it erases them permanently. This cannot be undone.</string>
+    <plurals name="compte_supprimer_attente_message">
+        <item quantity="one">The %1$s account has %2$d local change that has not been sent to the server yet. Removing the account loses it permanently. Open the account and sync first.</item>
+        <item quantity="other">The %1$s account has %2$d local changes that have not been sent to the server yet. Removing the account loses them permanently. Open the account and sync first.</item>
+    </plurals>
     <string name="menu_mode_arborescence">By folder</string>
     <string name="menu_mode_liste">All notes</string>
 
@@ -421,6 +427,9 @@
     <string name="reglages_deconnexion">Sign out</string>
     <string name="reglages_deconnexion_explication">Signing out clears the token, configuration, and local cache from this device. Your notes remain on the server.</string>
     <string name="reglages_deconnexion_titre">Sign out?</string>
+    <string name="reglages_deconnexion_perte_titre">Changes will be lost</string>
+    <string name="reglages_deconnexion_perte_case">I understand these changes will be permanently lost</string>
+    <string name="reglages_deconnexion_perte_confirmer">Sign out and lose them</string>
     <string name="reglages_deconnexion_confirmation">The token, configuration, and local cache will be cleared. Your notes remain on the server.</string>
     <string name="reglages_local_titre">Local storage</string>
     <string name="reglages_local_explication">All notes live on this device only. Nothing is synchronized.</string>
@@ -456,6 +465,7 @@
     <string name="reglages_local_effacer_explication">Resets the app. In local mode, these notes do not exist anywhere else.</string>
     <string name="reglages_local_effacer_titre">Permanently delete all notes?</string>
     <string name="reglages_local_effacer_confirmation">All notes and folders on this device will be permanently deleted. This cannot be undone.</string>
+    <string name="reglages_local_effacer_case">I understand that all my notes will be permanently erased</string>
     <!-- Des modifications non envoyées seraient perdues : c'est la seule mise
          en garde de l'écran, elle compte ce qui est en jeu. -->
     <plurals name="reglages_deconnexion_attente">

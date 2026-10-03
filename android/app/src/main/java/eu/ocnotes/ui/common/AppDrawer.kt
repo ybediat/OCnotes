@@ -3,6 +3,7 @@ package eu.ocnotes.ui.common
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -33,6 +35,7 @@ import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,8 +43,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -246,33 +252,115 @@ fun TiroirApplication(
     }
 
     compteASupprimer?.let { compte ->
-        AlertDialog(
-            onDismissRequest = { compteASupprimer = null },
-            title = { Text(stringResource(R.string.compte_supprimer_titre)) },
-            text = {
-                Text(stringResource(R.string.compte_supprimer_message, nomCompte(compte)))
+        DialogueSuppressionCompte(
+            compte = compte,
+            onConfirme = {
+                compteASupprimer = null
+                fermer()
+                onSupprimerCompte(compte.id)
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        compteASupprimer = null
-                        fermer()
-                        onSupprimerCompte(compte.id)
-                    },
-                ) {
-                    Text(
-                        stringResource(R.string.compte_supprimer),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { compteASupprimer = null }) {
-                    Text(stringResource(R.string.action_annuler))
-                }
-            },
+            onAnnule = { compteASupprimer = null },
         )
     }
+}
+
+/**
+ * Confirmation de la suppression d'un profil.
+ *
+ * C'est le seul geste de l'application qui détruise des notes sans copie
+ * ailleurs : celles d'un profil local, et les écritures d'un profil serveur que
+ * la synchronisation n'a pas encore envoyées. Dans ces deux cas la case est
+ * obligatoire. Une lecture du travail en attente qui échoue compte comme un
+ * risque, pas comme son absence — il faut pouvoir supprimer un profil abîmé,
+ * mais pas à l'aveugle.
+ */
+@Composable
+private fun DialogueSuppressionCompte(
+    compte: AccountProfile,
+    onConfirme: () -> Unit,
+    onAnnule: () -> Unit,
+) {
+    val container = LocalContext.current.appContainer
+    val local = compte.kind == "local"
+    // `null` tant que la lecture est en cours ou si elle a échoué.
+    var enAttente by remember(compte.id) { mutableStateOf<Int?>(null) }
+    var compris by remember(compte.id) { mutableStateOf(false) }
+    LaunchedEffect(compte.id) { enAttente = container.operationsEnAttente(compte.id) }
+
+    val perte = !local && enAttente?.let { it > 0 } == true
+    val verrou = local || enAttente != 0
+
+    AlertDialog(
+        onDismissRequest = onAnnule,
+        title = {
+            Text(
+                stringResource(
+                    if (local || perte) {
+                        R.string.compte_supprimer_perte_titre
+                    } else {
+                        R.string.compte_supprimer_titre
+                    },
+                ),
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                val attente = enAttente
+                Text(
+                    when {
+                        local -> stringResource(R.string.compte_supprimer_local_message)
+                        perte && attente != null -> pluralStringResource(
+                            R.plurals.compte_supprimer_attente_message,
+                            attente,
+                            nomCompte(compte),
+                            attente,
+                        )
+                        else -> stringResource(R.string.compte_supprimer_message, nomCompte(compte))
+                    },
+                )
+                if (verrou) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.toggleable(
+                            value = compris,
+                            role = Role.Checkbox,
+                            onValueChange = { compris = it },
+                        ),
+                    ) {
+                        Checkbox(checked = compris, onCheckedChange = null)
+                        Text(
+                            text = stringResource(
+                                if (local) {
+                                    R.string.reglages_local_effacer_case
+                                } else {
+                                    R.string.reglages_deconnexion_perte_case
+                                },
+                            ),
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            val actif = !verrou || compris
+            TextButton(onClick = onConfirme, enabled = actif) {
+                Text(
+                    stringResource(R.string.compte_supprimer),
+                    color = if (actif) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    },
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onAnnule) {
+                Text(stringResource(R.string.action_annuler))
+            }
+        },
+    )
 }
 
 /**

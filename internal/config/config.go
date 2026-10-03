@@ -160,12 +160,33 @@ func Save(dataDir string, c Config) error {
 		return fmt.Errorf("config: [%s] sérialisation: %w", CodeStorageIO, err)
 	}
 
+	// Le fichier est synchronisé sur le disque avant le renommage : sans cela,
+	// une coupure de courant juste après peut laisser un fichier vide sous le
+	// nom définitif. Load le lirait comme « installation neuve » — alors que le
+	// cache, lui, porte encore des notes.
 	tmp := Path(dataDir) + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	file, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("config: [%s] écriture: %w", CodeStorageIO, err)
+	}
+	_, err = file.Write(data)
+	if err == nil {
+		err = file.Sync()
+	}
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
 		return fmt.Errorf("config: [%s] écriture: %w", CodeStorageIO, err)
 	}
 	if err := os.Rename(tmp, Path(dataDir)); err != nil {
 		return fmt.Errorf("config: [%s] remplacement: %w", CodeStorageIO, err)
+	}
+	// Meilleur effort : tous les systèmes de fichiers ne savent pas synchroniser
+	// un dossier, et le fichier est de toute façon déjà durable.
+	if dir, err := os.Open(dataDir); err == nil {
+		_ = dir.Sync()
+		_ = dir.Close()
 	}
 	return nil
 }
