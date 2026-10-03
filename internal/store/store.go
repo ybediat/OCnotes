@@ -678,6 +678,31 @@ func writeAtomic(target string, data []byte) error {
 	return nil
 }
 
+// Peek renvoie le contenu en cache d'une note sans rien modifier — pas même la
+// date d'accès que Get met à jour en mémoire. C'est la lecture de l'export :
+// copier toutes les notes ne doit pas changer ce que l'éviction croit de leur
+// ancienneté, ni ce que le prochain enregistrement de l'index écrira.
+func (s *Store) Peek(notePath string) ([]byte, bool) {
+	s.mu.Lock()
+	entry, ok := s.entries[notePath]
+	var blob string
+	if ok {
+		blob = s.blobPath(entry.Cache)
+	}
+	s.mu.Unlock()
+	if !ok {
+		return nil, false
+	}
+	// La lecture du fichier se fait hors verrou : un export de centaines de
+	// notes ne doit pas geler l'éditeur. Une note supprimée entre-temps rend
+	// un fichier absent, traité comme une note absente.
+	content, err := os.ReadFile(blob)
+	if err != nil {
+		return nil, false
+	}
+	return content, true
+}
+
 // Get renvoie le contenu en cache d'une note.
 func (s *Store) Get(notePath string) ([]byte, Entry, bool) {
 	content, entry, _, ok := s.getObserved(notePath)

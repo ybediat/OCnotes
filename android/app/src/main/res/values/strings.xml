@@ -96,6 +96,7 @@
     <string name="err_modifications_attente">Des modifications doivent encore être synchronisées avant de déconnecter le serveur.</string>
     <string name="err_compte_different">Ce compte ne correspond pas au profil sélectionné. Sélectionnez l\'autre compte dans le menu ou ajoutez-le.</string>
     <string name="err_session_changee">La session a changé pendant la connexion. Réessayez.</string>
+    <string name="err_export_mode_local">L\'export en archive ne sert qu\'au stockage local. Avec un compte serveur, vos notes sont sur le serveur.</string>
 
     <!-- ================================================================
          Démarrage
@@ -487,6 +488,26 @@
     </plurals>
     <string name="reglages_local_effacer">Effacer toutes les notes</string>
     <string name="reglages_local_effacer_explication">Réinitialise l\'application. En mode local, ces notes n\'existent nulle part ailleurs.</string>
+    <string name="reglages_export_titre">Exporter les notes</string>
+    <string name="reglages_export_bouton">Exporter en archive zip</string>
+    <string name="reglages_export_explication">Crée une archive de toutes vos notes, avec leurs dossiers, que n\'importe quel ordinateur sait ouvrir. Les noms illégaux sous Windows sont corrigés et listés dans _renommages.txt.</string>
+    <string name="reglages_export_espace">Espace insuffisant sur l\'appareil pour préparer l\'archive. Libérez de la place et réessayez.</string>
+    <string name="reglages_export_copie">L\'archive n\'a pas pu être écrite à l\'emplacement choisi. Rien n\'a été conservé.</string>
+    <plurals name="reglages_export_notes">
+        <item quantity="one">%d note exportée</item>
+        <item quantity="many">%d notes exportées</item>
+        <item quantity="other">%d notes exportées</item>
+    </plurals>
+    <plurals name="reglages_export_ignorees">
+        <item quantity="one">%d note illisible ignorée</item>
+        <item quantity="many">%d notes illisibles ignorées</item>
+        <item quantity="other">%d notes illisibles ignorées</item>
+    </plurals>
+    <plurals name="reglages_export_renommes">
+        <item quantity="one">%d nom modifié (voir _renommages.txt)</item>
+        <item quantity="many">%d noms modifiés (voir _renommages.txt)</item>
+        <item quantity="other">%d noms modifiés (voir _renommages.txt)</item>
+    </plurals>
     <string name="reglages_local_effacer_titre">Effacer définitivement toutes les notes ?</string>
     <string name="reglages_local_effacer_confirmation">Toutes les notes et tous les dossiers de cet appareil seront définitivement supprimés. Cette action est irréversible.</string>
     <string name="reglages_local_effacer_case">Je comprends que toutes mes notes seront définitivement effacées</string>

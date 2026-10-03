@@ -85,6 +85,7 @@
     <string name="err_modifications_attente">Vor dem Trennen des Servers müssen noch Änderungen synchronisiert werden.</string>
     <string name="err_compte_different">Dieses Konto entspricht nicht dem ausgewählten Profil. Wählen Sie das andere Konto im Menü aus oder fügen Sie es hinzu.</string>
     <string name="err_session_changee">Die Sitzung hat sich während der Verbindung geändert. Versuchen Sie es erneut.</string>
+    <string name="err_export_mode_local">Der Export in ein Archiv gilt nur für den lokalen Speicher. Bei einem Serverkonto liegen Ihre Notizen auf dem Server.</string>
 
     <!-- ================================================================
          Start
@@ -460,6 +461,23 @@
     </plurals>
     <string name="reglages_local_effacer">Alle Notizen löschen</string>
     <string name="reglages_local_effacer_explication">Setzt die App zurück. Im lokalen Modus gibt es diese Notizen nirgendwo sonst.</string>
+    <string name="reglages_export_titre">Notizen exportieren</string>
+    <string name="reglages_export_bouton">Als ZIP-Archiv exportieren</string>
+    <string name="reglages_export_explication">Erstellt ein Archiv aller Ihrer Notizen mit ihren Ordnern, das jeder Computer öffnen kann. Namen, die Windows nicht zulässt, werden korrigiert und in _renommages.txt aufgeführt.</string>
+    <string name="reglages_export_espace">Auf dem Gerät ist nicht genug Platz, um das Archiv vorzubereiten. Geben Sie Speicher frei und versuchen Sie es erneut.</string>
+    <string name="reglages_export_copie">Das Archiv konnte nicht am gewählten Ort geschrieben werden. Es wurde nichts behalten.</string>
+    <plurals name="reglages_export_notes">
+        <item quantity="one">%d Notiz exportiert</item>
+        <item quantity="other">%d Notizen exportiert</item>
+    </plurals>
+    <plurals name="reglages_export_ignorees">
+        <item quantity="one">%d unlesbare Notiz übersprungen</item>
+        <item quantity="other">%d unlesbare Notizen übersprungen</item>
+    </plurals>
+    <plurals name="reglages_export_renommes">
+        <item quantity="one">%d Name geändert (siehe _renommages.txt)</item>
+        <item quantity="other">%d Namen geändert (siehe _renommages.txt)</item>
+    </plurals>
     <string name="reglages_local_effacer_titre">Alle Notizen endgültig löschen?</string>
     <string name="reglages_local_effacer_confirmation">Alle Notizen und Ordner auf diesem Gerät werden endgültig gelöscht. Dies kann nicht rückgängig gemacht werden.</string>
     <string name="reglages_local_effacer_case">Ich verstehe, dass alle meine Notizen endgültig gelöscht werden</string>

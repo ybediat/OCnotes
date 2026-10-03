@@ -102,6 +102,7 @@
     <string name="err_modifications_attente">Some changes still need to be synchronized before disconnecting the server.</string>
     <string name="err_compte_different">This account does not match the selected profile. Select the other account from the menu or add it.</string>
     <string name="err_session_changee">The session changed while connecting. Please try again.</string>
+    <string name="err_export_mode_local">Exporting to an archive only applies to local storage. With a server account, your notes are on the server.</string>
 
     <!-- ================================================================
          Démarrage
@@ -480,6 +481,23 @@
     </plurals>
     <string name="reglages_local_effacer">Delete all notes</string>
     <string name="reglages_local_effacer_explication">Resets the app. In local mode, these notes do not exist anywhere else.</string>
+    <string name="reglages_export_titre">Export notes</string>
+    <string name="reglages_export_bouton">Export as zip archive</string>
+    <string name="reglages_export_explication">Creates an archive of all your notes, with their folders, that any computer can open. Names that Windows does not allow are corrected and listed in _renommages.txt.</string>
+    <string name="reglages_export_espace">Not enough space on the device to prepare the archive. Free up some space and try again.</string>
+    <string name="reglages_export_copie">The archive could not be written to the chosen location. Nothing was kept.</string>
+    <plurals name="reglages_export_notes">
+        <item quantity="one">%d note exported</item>
+        <item quantity="other">%d notes exported</item>
+    </plurals>
+    <plurals name="reglages_export_ignorees">
+        <item quantity="one">%d unreadable note skipped</item>
+        <item quantity="other">%d unreadable notes skipped</item>
+    </plurals>
+    <plurals name="reglages_export_renommes">
+        <item quantity="one">%d name changed (see _renommages.txt)</item>
+        <item quantity="other">%d names changed (see _renommages.txt)</item>
+    </plurals>
     <string name="reglages_local_effacer_titre">Permanently delete all notes?</string>
     <string name="reglages_local_effacer_confirmation">All notes and folders on this device will be permanently deleted. This cannot be undone.</string>
     <string name="reglages_local_effacer_case">I understand that all my notes will be permanently erased</string>

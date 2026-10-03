@@ -12,6 +12,9 @@ import eu.ocnotes.data.AppStateDto
 import eu.ocnotes.data.CacheStateDto
 import eu.ocnotes.data.ConflictDto
 import eu.ocnotes.data.DetachPlanDto
+import eu.ocnotes.data.ExportLocal
+import eu.ocnotes.data.ExportResultatDto
+import eu.ocnotes.data.ResultatExport
 import eu.ocnotes.data.OCnotesException
 import eu.ocnotes.data.OCnotesRepository
 import eu.ocnotes.data.PoliceInterface
@@ -26,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import android.net.Uri
 
 data class SettingsUiState(
     val etat: AppStateDto = AppStateDto(),
@@ -60,6 +64,7 @@ data class SettingsUiState(
     val policeInterface: PoliceInterface = PoliceInterface.LEXEND,
     val preparationModeLocal: Boolean = false,
     val planModeLocal: DetachPlanDto? = null,
+    val exportEnCours: Boolean = false,
     val rapatriementEnCours: Boolean = false,
     val rapatriementTotal: Int = 0,
     val rapatriementRestant: Int = 0,
@@ -74,6 +79,7 @@ class SettingsViewModel(
     private val preferences: PreferencesAffichage,
     private val syncScheduler: SyncScheduler,
     private val syncNotifier: SyncNotifier,
+    private val exportLocal: ExportLocal,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -396,6 +402,37 @@ class SettingsViewModel(
         }
     }
 
+    /**
+     * Exporte les notes locales dans l'archive que l'utilisateur vient de
+     * nommer. Le résultat passe par `resume` : un export incomplet est un état
+     * **partiel**, jamais présenté comme un succès.
+     */
+    fun exporterArchive(cible: Uri) {
+        if (_uiState.value.exportEnCours || !_uiState.value.modeLocal) return
+        _uiState.update { it.copy(exportEnCours = true, erreur = null, resume = null) }
+        viewModelScope.launch {
+            try {
+                when (val issue = exportLocal.exporter(cible)) {
+                    is ResultatExport.Termine -> _uiState.update {
+                        it.copy(
+                            exportEnCours = false,
+                            resume = resumeExport(issue.resultat),
+                            resumePartiel = issue.resultat.skipped > 0,
+                        )
+                    }
+                    ResultatExport.EspaceInsuffisant -> _uiState.update {
+                        it.copy(exportEnCours = false, erreur = Texte.de(R.string.reglages_export_espace))
+                    }
+                    ResultatExport.EchecCopie -> _uiState.update {
+                        it.copy(exportEnCours = false, erreur = Texte.de(R.string.reglages_export_copie))
+                    }
+                }
+            } catch (e: OCnotesException) {
+                _uiState.update { it.copy(exportEnCours = false, erreur = e.texte()) }
+            }
+        }
+    }
+
     fun ouvrirConflits() = _uiState.update { it.copy(dialogueConflits = it.conflits.isNotEmpty()) }
 
     fun fermerConflits() = _uiState.update { it.copy(dialogueConflits = false) }
@@ -468,6 +505,20 @@ class SettingsViewModel(
             )
         }
 
+        /**
+         * Compte rendu d'un export, décrit et non rédigé : des `<plurals>` mis
+         * bout à bout, comme [resumeDe]. « 3 notes exportées, 1 note ignorée »
+         * dit ce qui s'est passé ; rien n'est annoncé réussi si une note manque.
+         */
+        fun resumeExport(r: ExportResultatDto): Texte {
+            val morceaux = buildList {
+                add(Texte.pluriel(R.plurals.reglages_export_notes, r.notes))
+                if (r.skipped > 0) add(Texte.pluriel(R.plurals.reglages_export_ignorees, r.skipped))
+                if (r.renamed > 0) add(Texte.pluriel(R.plurals.reglages_export_renommes, r.renamed))
+            }
+            return Texte.Liste(morceaux, R.string.sync_separateur)
+        }
+
         fun factory(container: AppContainer): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 SettingsViewModel(
@@ -475,6 +526,7 @@ class SettingsViewModel(
                     container.preferencesAffichage,
                     container.syncScheduler,
                     container.syncNotifier,
+                    ExportLocal(container.repository, container.dossierExport, container.contentResolver),
                 )
             }
         }

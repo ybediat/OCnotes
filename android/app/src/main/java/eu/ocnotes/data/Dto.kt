@@ -45,6 +45,20 @@ object AuthMode {
     const val OIDC = "oidc"
 }
 
+/** Compte rendu de `exportZip`, tel que la façade Go le sérialise. */
+@Serializable
+data class ExportResultatDto(
+    /** Notes écrites dans l'archive. */
+    val notes: Int = 0,
+    /** Dossiers écrits, vides compris. */
+    val folders: Int = 0,
+    /** Noms assainis ou départagés, listés dans `_renommages.txt`. */
+    val renamed: Int = 0,
+    /** Notes illisibles ou disparues : non nul, l'export est incomplet. */
+    val skipped: Int = 0,
+    val archiveBytes: Long = 0,
+)
+
 /** Occupation des seuls contenus récupérables du cache local. */
 @Serializable
 data class CacheStateDto(

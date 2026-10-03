@@ -80,6 +80,7 @@ private fun texteLocal(code: String): Texte? = when (code) {
     "PENDING_CHANGES" -> Texte.de(R.string.err_modifications_attente)
     "ACCOUNT_MISMATCH" -> Texte.de(R.string.err_compte_different)
     "SESSION_CHANGED" -> Texte.de(R.string.err_session_changee)
+    "EXPORT_REQUIRES_LOCAL" -> Texte.de(R.string.err_export_mode_local)
     else -> null
 }
 

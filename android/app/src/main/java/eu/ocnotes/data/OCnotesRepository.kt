@@ -903,6 +903,17 @@ class OCnotesRepository(
     }
 
     /**
+     * Écrit toutes les notes locales dans une archive zip à `destination`.
+     *
+     * Mode local seulement : sinon `EXPORT_REQUIRES_LOCAL`, rien n'est écrit.
+     * Le contenu ne traverse pas la frontière — Go écrit le fichier, l'appelant
+     * le copie ailleurs (voir [ExportLocal]). Pas d'`authenticatedCall` : il
+     * n'y a pas de serveur à joindre.
+     */
+    suspend fun exportZip(destination: File): ExportResultatDto =
+        callJson { it.exportZip(destination.absolutePath) }
+
+    /**
      * Vrai pour un fichier affiché tel quel, sans interprétation.
      *
      * La question se pose avant qu'il y ait des blocs à regarder — un fichier

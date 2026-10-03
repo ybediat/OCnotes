@@ -1,5 +1,7 @@
 package eu.ocnotes.ui.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -53,6 +55,7 @@ import eu.ocnotes.ui.common.Bandeau
 import eu.ocnotes.ui.common.resoudre
 import eu.ocnotes.ui.theme.familleDePolice
 import android.text.format.Formatter
+import java.time.LocalDate
 
 private object QuotaCache {
     const val MO_50 = 50L * 1024 * 1024
@@ -80,6 +83,12 @@ fun SettingsScreen(
     var choixConnexion by remember { mutableStateOf(false) }
     var choixPolice by remember { mutableStateOf(false) }
     val context = LocalContext.current
+
+    // Aucune permission de stockage : le sélecteur de documents donne l'accès à
+    // l'emplacement choisi, et à lui seul. Un retour nul est une annulation.
+    val choisirArchive = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip"),
+    ) { uri -> uri?.let(viewModel::exporterArchive) }
 
     LaunchedEffect(etat.deconnecte) {
         if (etat.deconnecte) onDeconnecte()
@@ -345,6 +354,32 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(stringResource(R.string.reglages_cache_modifier_quota))
+            }
+            if (etat.modeLocal) {
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Text(
+                    text = stringResource(R.string.reglages_export_titre),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    text = stringResource(R.string.reglages_export_explication),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(
+                    // Date ISO : aucun texte à traduire dans le nom proposé.
+                    onClick = { choisirArchive.launch("OCnotes-${LocalDate.now()}.zip") }, // i18n-ok
+                    enabled = !etat.exportEnCours,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (etat.exportEnCours) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                    Text(stringResource(R.string.reglages_export_bouton))
+                }
             }
             if (!etat.modeLocal) {
                 OutlinedButton(

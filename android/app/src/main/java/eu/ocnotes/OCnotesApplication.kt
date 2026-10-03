@@ -1,6 +1,7 @@
 package eu.ocnotes
 
 import android.app.Application
+import android.content.ContentResolver
 import android.content.Context
 import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -330,6 +331,15 @@ class AppContainer(
      * dossier exposé par le `FileProvider` (`res/xml/chemins_partage.xml`).
      */
     val dossierPartage = File(context.cacheDir, "partage")
+
+    /**
+     * Où Go écrit l'archive d'export avant qu'elle soit copiée vers
+     * l'emplacement choisi. **Pas** `partage/` : c'est le seul dossier que le
+     * `FileProvider` expose, et l'archive contient toutes les notes en clair.
+     */
+    val dossierExport = File(context.cacheDir, "export")
+
+    val contentResolver: ContentResolver get() = context.contentResolver
 
     init {
         if (accountRegistry.vientDeMigrer) syncScheduler.annulerTravauxSansProfil()
