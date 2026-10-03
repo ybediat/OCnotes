@@ -62,6 +62,6 @@ Français, anglais, espagnol et allemand, y compris tous les nouveaux écrans.
 Installez par-dessus la version précédente : les notes, comptes et réglages sont
 conservés. L'APK est signé avec la même clé que les versions précédentes.
 
-**SHA-256 de l'APK** : SHA-256 APK : 35b1d542a2edd89884c86bdb7470a44347d64eb39bb8c550847b1ad40767f874
+**SHA-256 de l'APK** : SHA-256 APK : 11fb3ae7380f75e6a3b7bc05519e53ae6132a9e8f3eed1badec92e1e6c1093de
 
 Signaler un problème : https://github.com/ybediat/OCnotes/issues
