@@ -49,6 +49,7 @@ fun OCnotesNavHost(
     depart: Depart,
     messageDemarrage: Texte?,
     onOuvrirComptes: () -> Unit,
+    onAjouterCompte: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     NavHost(
@@ -120,6 +121,7 @@ fun OCnotesNavHost(
                         popUpTo(0) { inclusive = true }
                     }
                 },
+                onAjouterCompteServeur = onAjouterCompte,
                 onConnecterServeur = {
                     navController.navigate(Routes.CONNEXION) {
                         popUpTo(0) { inclusive = true }

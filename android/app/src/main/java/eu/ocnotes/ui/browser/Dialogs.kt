@@ -338,7 +338,7 @@ fun DossierCibleLotDialog(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SelecteurDossier(
+internal fun SelecteurDossier(
     dossiers: List<FolderRefDto>,
     nomRacine: String,
     valeur: String,

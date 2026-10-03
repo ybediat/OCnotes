@@ -265,6 +265,16 @@
         <item quantity="one">%d elemento copiado</item>
         <item quantity="other">%d elementos copiados</item>
     </plurals>
+    <string name="browser_copier_compte_titre">Copiar a otra cuenta</string>
+    <string name="browser_copier_compte_aucun">Ninguna otra cuenta puede recibir notas: hace falta una cuenta local, o un servidor con espacio elegido.</string>
+    <plurals name="browser_copier_compte_fait">
+        <item quantity="one">%1$d nota copiada a %2$s</item>
+        <item quantity="other">%1$d notas copiadas a %2$s</item>
+    </plurals>
+    <plurals name="browser_copier_compte_ecart">
+        <item quantity="one">La copia de %d nota no coincide con el original; no se cuenta.</item>
+        <item quantity="other">Las copias de %d notas no coinciden con los originales; no se cuentan.</item>
+    </plurals>
     <plurals name="browser_lot_supprimes">
         <item quantity="one">%d elemento eliminado</item>
         <item quantity="other">%d elementos eliminados</item>
@@ -294,6 +304,8 @@
     <string name="compte_local">Notas locales</string>
     <string name="compte_nouveau">Nueva cuenta</string>
     <string name="compte_ajouter">Añadir una cuenta</string>
+    <string name="compte_renommer">Renombrar esta cuenta local</string>
+    <string name="compte_nom_label">Nombre</string>
     <string name="compte_geste_echec">La operación en la cuenta ha fallado. Vuelva a intentarlo.</string>
     <string name="compte_deja_present">Esta cuenta ya está añadida en este dispositivo. Se ha abierto el perfil existente; vuelva a iniciar sesión desde él si su sesión ha caducado.</string>
     <string name="compte_supprimer">Eliminar cuenta</string>
@@ -415,6 +427,11 @@
     <string name="reglages_local_titre">Almacenamiento local</string>
     <string name="reglages_local_explication">Todas las notas se guardan únicamente en este dispositivo. No se realiza ninguna sincronización.</string>
     <string name="reglages_local_connecter">Conectar un servidor</string>
+    <string name="reglages_local_connecter_titre">Conectar un servidor</string>
+    <string name="reglages_local_connecter_cote">Añadir una cuenta al lado</string>
+    <string name="reglages_local_connecter_cote_explication">Tus notas locales no cambian y siguen en su propia cuenta. El servidor se abre en una cuenta nueva.</string>
+    <string name="reglages_local_connecter_convertir">Convertir esta cuenta</string>
+    <string name="reglages_local_connecter_convertir_explication">Esta cuenta pasa a ser una cuenta de servidor; elegirás si subir tus notas locales o eliminarlas.</string>
     <string name="reglages_local_utiliser">Usar solo este dispositivo</string>
     <string name="reglages_local_utiliser_explication">Primero se descargarán las notas que faltan en el dispositivo. Las copias del servidor no se eliminarán.</string>
     <string name="reglages_local_plan_titre">¿Cambiar al modo local?</string>

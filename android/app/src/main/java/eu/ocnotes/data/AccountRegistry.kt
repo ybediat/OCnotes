@@ -35,6 +35,9 @@ data class AccountProfile(
     val displayName: String = "",
 )
 
+/** Longueur maximale du nom d'un profil local. */
+const val MAX_NOM_LOCAL = 40
+
 /** Un profil ne doit réveiller WorkManager que s'il désigne un serveur utilisable. */
 internal val AccountProfile.syncEnabled: Boolean
     get() = kind == "server" && serverUrl.isNotBlank()
@@ -135,8 +138,22 @@ class AccountRegistry(private val filesDir: File) {
                 username = "",
                 authMode = "",
                 identityKey = "",
-                displayName = "",
+                // Appelé à chaque démarrage local : le nom choisi par
+                // l'utilisateur ne doit pas s'y perdre. Un profil qui
+                // devient local (débranchement) repart sans nom.
+                displayName = if (it.kind == KIND_LOCAL) it.displayName else "",
             )
+        }
+    }
+
+    /**
+     * Nomme un profil local. Libellé Android pur, jamais transmis au cœur Go ;
+     * vide, le tiroir retombe sur « Notes locales ». Sans effet sur un profil
+     * serveur, dont le nom vient de la session.
+     */
+    suspend fun renommerLocal(accountId: String, nom: String) = withContext(Dispatchers.IO) {
+        updateAccount(accountId) {
+            if (it.kind == KIND_LOCAL) it.copy(displayName = nom.trim().take(MAX_NOM_LOCAL)) else it
         }
     }
 

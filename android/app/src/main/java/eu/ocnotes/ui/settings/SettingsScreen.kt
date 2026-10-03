@@ -68,6 +68,7 @@ fun SettingsScreen(
     onRetour: () -> Unit,
     onDeconnecte: () -> Unit,
     onConnecterServeur: () -> Unit,
+    onAjouterCompteServeur: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModel.factory(LocalContext.current.appContainer),
@@ -76,11 +77,41 @@ fun SettingsScreen(
     val etat by viewModel.uiState.collectAsStateWithLifecycle()
     var confirmation by remember { mutableStateOf(false) }
     var choixQuota by remember { mutableStateOf(false) }
+    var choixConnexion by remember { mutableStateOf(false) }
     var choixPolice by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     LaunchedEffect(etat.deconnecte) {
         if (etat.deconnecte) onDeconnecte()
+    }
+
+    if (choixConnexion) {
+        AlertDialog(
+            onDismissRequest = { choixConnexion = false },
+            title = { Text(stringResource(R.string.reglages_local_connecter_titre)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.reglages_local_connecter_cote_explication))
+                    Text(stringResource(R.string.reglages_local_connecter_convertir_explication))
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    choixConnexion = false
+                    onAjouterCompteServeur()
+                }) {
+                    Text(stringResource(R.string.reglages_local_connecter_cote))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    choixConnexion = false
+                    onConnecterServeur()
+                }) {
+                    Text(stringResource(R.string.reglages_local_connecter_convertir))
+                }
+            },
+        )
     }
 
     Scaffold(
@@ -121,7 +152,7 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Button(onClick = onConnecterServeur, modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { choixConnexion = true }, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.reglages_local_connecter))
                 }
             } else {

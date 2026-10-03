@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -32,6 +33,7 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -54,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.ocnotes.R
 import eu.ocnotes.appContainer
 import eu.ocnotes.data.AccountProfile
+import eu.ocnotes.data.MAX_NOM_LOCAL
 import eu.ocnotes.data.AuthMode
 import eu.ocnotes.ui.browser.ModeAffichage
 import eu.ocnotes.ui.theme.CouleurSignatureClaire
@@ -105,6 +108,7 @@ fun TiroirApplication(
     val fermer: () -> Unit = { portee.launch { etatTiroir.close() } }
     var aProposOuvert by rememberSaveable { mutableStateOf(false) }
     var compteASupprimer by remember { mutableStateOf<AccountProfile?>(null) }
+    var compteARenommer by remember { mutableStateOf<AccountProfile?>(null) }
     val couleurTitre = if (isSystemInDarkTheme()) CouleurSignatureSombre else CouleurSignatureClaire
     val container = LocalContext.current.appContainer
     val comptes by container.accountRegistry.state.collectAsStateWithLifecycle()
@@ -148,11 +152,21 @@ fun TiroirApplication(
                         },
                         selected = compte.id == comptes.active.id,
                         badge = {
-                            IconButton(onClick = { compteASupprimer = compte }) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = stringResource(R.string.compte_supprimer),
-                                )
+                            Row {
+                                if (compte.kind == "local") {
+                                    IconButton(onClick = { compteARenommer = compte }) {
+                                        Icon(
+                                            Icons.Default.Edit,
+                                            contentDescription = stringResource(R.string.compte_renommer),
+                                        )
+                                    }
+                                }
+                                IconButton(onClick = { compteASupprimer = compte }) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = stringResource(R.string.compte_supprimer),
+                                    )
+                                }
                             }
                         },
                         onClick = {
@@ -251,6 +265,17 @@ fun TiroirApplication(
         AProposDialog(onFermer = { aProposOuvert = false })
     }
 
+    compteARenommer?.let { compte ->
+        DialogueRenommageCompte(
+            compte = compte,
+            onConfirme = { nom ->
+                compteARenommer = null
+                portee.launch { container.accountRegistry.renommerLocal(compte.id, nom) }
+            },
+            onAnnule = { compteARenommer = null },
+        )
+    }
+
     compteASupprimer?.let { compte ->
         DialogueSuppressionCompte(
             compte = compte,
@@ -262,6 +287,39 @@ fun TiroirApplication(
             onAnnule = { compteASupprimer = null },
         )
     }
+}
+
+/** Nom d'un profil local : un libellé Android, jamais transmis au cœur Go. */
+@Composable
+private fun DialogueRenommageCompte(
+    compte: AccountProfile,
+    onConfirme: (String) -> Unit,
+    onAnnule: () -> Unit,
+) {
+    var nom by remember(compte.id) { mutableStateOf(compte.displayName) }
+    AlertDialog(
+        onDismissRequest = onAnnule,
+        title = { Text(stringResource(R.string.compte_renommer)) },
+        text = {
+            OutlinedTextField(
+                value = nom,
+                onValueChange = { nom = it.take(MAX_NOM_LOCAL) },
+                label = { Text(stringResource(R.string.compte_nom_label)) },
+                placeholder = { Text(stringResource(R.string.compte_local)) },
+                singleLine = true,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirme(nom) }) {
+                Text(stringResource(R.string.action_renommer))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onAnnule) {
+                Text(stringResource(R.string.action_annuler))
+            }
+        },
+    )
 }
 
 /**
@@ -369,8 +427,8 @@ private fun DialogueSuppressionCompte(
  * il arrive avec la session suivante —, l'adresse du serveur en tient lieu.
  */
 @Composable
-private fun nomCompte(compte: AccountProfile): String = when {
-    compte.kind == "local" -> stringResource(R.string.compte_local)
+fun nomCompte(compte: AccountProfile): String = when {
+    compte.kind == "local" -> compte.displayName.ifBlank { stringResource(R.string.compte_local) }
     compte.displayName.isNotBlank() -> compte.displayName
     compte.authMode != AuthMode.OIDC && compte.username.isNotBlank() -> compte.username
     else -> adresseServeur(compte) ?: stringResource(R.string.compte_nouveau)

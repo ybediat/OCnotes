@@ -150,6 +150,7 @@ private fun OCnotesApp(
                 depart = etat.depart,
                 messageDemarrage = etat.message,
                 onOuvrirComptes = { scope.launch { etatTiroir.open() } },
+                onAjouterCompte = { container.lancerGesteCompte { createAccount() } },
             )
         }
     }

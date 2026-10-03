@@ -391,6 +391,29 @@ class OCnotesRepository(
             reconcileLocalMetadata()
             return@withLock RestoreOutcome.LOCALE
         }
+        if (!current.connected && registreDitLocal()) {
+            // Le registre Android connaît ce profil comme local, mais la
+            // configuration Go a été perdue : le cœur répond « mode vide ».
+            // Le cache est déjà local, seule la configuration manque ; la
+            // réécrire ne risque rien, alors que l'écran de connexion
+            // laisserait croire à un profil neuf.
+            journal("restore : profil local sans configuration, mode local relancé") // i18n-ok : trace de diagnostic
+            return@withLock try {
+                call { it.startLocal() }
+                sessionOpen = true
+                _sessionValidee.value = false
+                _sessionExpired.value = false
+                _pendingCount.value = 0
+                _mode.value = AppMode.LOCAL
+                reconcileLocalMetadata()
+                RestoreOutcome.LOCALE
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: OCnotesException) {
+                journal("restore : relance du mode local refusée (${e.category}/${e.code})") // i18n-ok : trace de diagnostic
+                RestoreOutcome.AUCUNE_SESSION
+            }
+        }
         if (!current.connected) {
             journal("restore : aucune session (connected=false, mode=${current.mode}, auth=${current.authMode})") // i18n-ok : trace de diagnostic
             return@withLock RestoreOutcome.AUCUNE_SESSION
@@ -428,6 +451,10 @@ class OCnotesRepository(
             RestoreOutcome.SANS_ESPACE
         }
     }
+
+    /** Vrai si le registre classe le profil de ce dépôt parmi les profils locaux. */
+    private fun registreDitLocal(): Boolean =
+        accountRegistry.accounts.firstOrNull { it.id == accountId }?.kind == "local"
 
     /**
      * Valide le token auprès du serveur, en arrière-plan.

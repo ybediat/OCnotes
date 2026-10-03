@@ -114,6 +114,14 @@ data class BrowserUiState(
             peutRecevoirNote
 
     /**
+     * La copie vers un autre profil est proposable : des notes modifiables,
+     * ni dossier ni document. Le dossier courant n'a pas à accepter de note —
+     * c'est le profil cible qui reçoit.
+     */
+    val peutCopierVersCompteSelection: Boolean
+        get() = modeSelection && !selectionContientDossier && !selectionContientDocument
+
+    /**
      * Le partage groupé est proposable dans les mêmes conditions que le
      * déplacement : aucune entrée n'est un dossier, qui n'a pas de contenu à
      * joindre. Un document `.docx`/`.odt` part tel quel — le cœur Go le recopie
@@ -212,6 +220,7 @@ class BrowserViewModel(
     private val preferences: PreferencesAffichage,
     /** `cacheDir/partage/`, le seul dossier que le `FileProvider` expose. */
     private val dossierPartage: File,
+    private val container: AppContainer,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BrowserUiState())
@@ -583,6 +592,34 @@ class BrowserViewModel(
     fun copierLot(dossier: String) =
         executerLot(R.plurals.browser_lot_copies) { repository.copy(it, dossier) }
 
+    /**
+     * Copie les notes sélectionnées vers un autre profil, sans rien supprimer.
+     *
+     * La sélection n'est vidée que si tout est passé : un échec reste coché
+     * pour une nouvelle tentative, comme pour les autres actions groupées.
+     * [nomCompte] est le nom du profil cible tel qu'affiché, pour le message.
+     */
+    fun copierVersCompte(destinationId: String, dossier: String, nomCompte: String) {
+        val cibles = _uiState.value.selection.toList()
+        if (cibles.isEmpty()) return
+        viewModelScope.launch {
+            val bilan = container.copierVersCompte(repository, cibles, destinationId, dossier)
+            val fait = Texte.pluriel(R.plurals.browser_copier_compte_fait, bilan.copiees, nomCompte)
+            _evenements.value = BrowserEvent.Message(
+                when {
+                    bilan.echecs == 0 -> fait
+                    bilan.copiees == 0 -> bilan.premiereErreur?.texte()
+                        ?: Texte.pluriel(R.plurals.browser_copier_compte_ecart, bilan.echecs)
+                    else -> Texte.Liste(
+                        listOf(fait, Texte.pluriel(R.plurals.browser_lot_echecs, bilan.echecs)),
+                        R.string.sync_separateur,
+                    )
+                },
+            )
+            if (bilan.echecs == 0) viderSelection()
+        }
+    }
+
     /** Supprime toutes les entrées sélectionnées. */
     fun supprimerLot() =
         executerLot(R.plurals.browser_lot_supprimes) { repository.delete(it) }
@@ -701,6 +738,7 @@ class BrowserViewModel(
                     container.syncScheduler,
                     container.preferencesAffichage,
                     container.dossierPartage,
+                    container,
                 )
             }
         }

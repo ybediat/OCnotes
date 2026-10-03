@@ -284,6 +284,16 @@
         <item quantity="one">%d item copied</item>
         <item quantity="other">%d items copied</item>
     </plurals>
+    <string name="browser_copier_compte_titre">Copy to another account</string>
+    <string name="browser_copier_compte_aucun">No other account can receive notes: you need a local account, or a server whose space is chosen.</string>
+    <plurals name="browser_copier_compte_fait">
+        <item quantity="one">%1$d note copied to %2$s</item>
+        <item quantity="other">%1$d notes copied to %2$s</item>
+    </plurals>
+    <plurals name="browser_copier_compte_ecart">
+        <item quantity="one">The copy of %d note does not match the original; it is not counted.</item>
+        <item quantity="other">The copies of %d notes do not match the originals; they are not counted.</item>
+    </plurals>
     <plurals name="browser_lot_supprimes">
         <item quantity="one">%d item deleted</item>
         <item quantity="other">%d items deleted</item>
@@ -313,6 +323,8 @@
     <string name="compte_local">Local notes</string>
     <string name="compte_nouveau">New account</string>
     <string name="compte_ajouter">Add account</string>
+    <string name="compte_renommer">Rename this local account</string>
+    <string name="compte_nom_label">Name</string>
     <string name="compte_geste_echec">The account operation failed. Please try again.</string>
     <string name="compte_deja_present">This account is already added on this device. The existing profile has been opened; sign in again from it if its session has expired.</string>
     <string name="compte_supprimer">Remove account</string>
@@ -434,6 +446,11 @@
     <string name="reglages_local_titre">Local storage</string>
     <string name="reglages_local_explication">All notes live on this device only. Nothing is synchronized.</string>
     <string name="reglages_local_connecter">Connect a server</string>
+    <string name="reglages_local_connecter_titre">Connect a server</string>
+    <string name="reglages_local_connecter_cote">Add an account alongside</string>
+    <string name="reglages_local_connecter_cote_explication">Your local notes stay untouched, in their own account. The server opens in a new account.</string>
+    <string name="reglages_local_connecter_convertir">Convert this account</string>
+    <string name="reglages_local_connecter_convertir_explication">This account becomes a server account; you will choose whether to upload your local notes or delete them.</string>
     <string name="reglages_local_utiliser">Use this device only</string>
     <string name="reglages_local_utiliser_explication">Notes missing from the device will be downloaded first. Server copies will not be deleted.</string>
     <string name="reglages_local_plan_titre">Switch to local mode?</string>

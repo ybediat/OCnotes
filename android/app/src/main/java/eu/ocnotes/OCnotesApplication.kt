@@ -8,6 +8,10 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import eu.ocnotes.data.AccountRegistry
 import eu.ocnotes.data.AccountProfile
+import eu.ocnotes.data.DestinationCopie
+import eu.ocnotes.data.OCnotesException
+import eu.ocnotes.data.RestoreOutcome
+import eu.ocnotes.data.ResultatCopie
 import eu.ocnotes.data.OCnotesRepository
 import eu.ocnotes.data.PreferencesAffichage
 import eu.ocnotes.data.TokenStore
@@ -128,6 +132,84 @@ class AppContainer(
      */
     suspend fun operationsEnAttente(id: String): Int? =
         runCatching { runtimeFor(id).repository.state().pending }.getOrNull()
+
+    /**
+     * Les autres profils qui peuvent recevoir une copie, avec leurs dossiers.
+     *
+     * Chacun est remonté sans réseau (`restore`) : un profil sans session — un
+     * emplacement vierge, un serveur sans espace choisi — n'est pas une
+     * destination. Lu sous le verrou du profil visé, comme toute opération qui
+     * touche son cœur Go.
+     */
+    suspend fun destinationsCopie(): List<DestinationCopie> =
+        accountRegistry.accounts.filter { it.id != activeId }.mapNotNull { profil ->
+            try {
+                withAccountRepository(profil.id) { cible ->
+                    when (cible.restore()) {
+                        RestoreOutcome.LOCALE, RestoreOutcome.PRETE ->
+                            cible.folders().filter { it.canCreateFile }
+                                .takeIf { it.isNotEmpty() }
+                                ?.let { DestinationCopie(profil, it) }
+                        else -> null
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: OCnotesException) {
+                null
+            }
+        }
+
+    /**
+     * Copie des notes de [source] vers un autre profil, sans rien supprimer.
+     *
+     * Lecture par le dépôt source, création par celui du profil cible
+     * (`runtimeFor`) : jamais un cœur Go partagé. Chaque copie est relue dans la
+     * cible et comparée au texte lu à la source avant d'être comptée ; une
+     * copie qui diffère est un échec, pas un succès à moitié. Un nom pris reçoit
+     * un suffixe, comme une création ordinaire : aucune note de la cible n'est
+     * écrasée.
+     *
+     * Le texte passe par `ReadNote` : fins de ligne ramenées à « 
+ » et
+     * encodage UTF-8 dans la copie, ce qui ne change pas ce qu'on lit. Une note
+     * `.txt` devient `.md` (l'application ne crée que du Markdown).
+     */
+    suspend fun copierVersCompte(
+        source: OCnotesRepository,
+        chemins: List<String>,
+        destinationId: String,
+        dossier: String,
+    ): ResultatCopie {
+        var copiees = 0
+        var echecs = 0
+        var premiere: OCnotesException? = null
+        val fait = withAccountRepository(destinationId) { cible ->
+            for (chemin in chemins) {
+                try {
+                    val texte = source.readNote(chemin)
+                    val nom = chemin.substringAfterLast('/').substringBeforeLast('.')
+                    val copie = cible.createNote(dossier, nom, texte)
+                    if (cible.readNote(copie.path) == texte) {
+                        copiees++
+                    } else {
+                        echecs++
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: OCnotesException) {
+                    echecs++
+                    if (premiere == null) premiere = e
+                }
+            }
+            true
+        }
+        if (fait == null) {
+            return ResultatCopie(0, chemins.size, null)
+        }
+        if (copiees > 0) runtimeFor(destinationId).syncScheduler.syncAfterLocalChange()
+        return ResultatCopie(copiees, echecs, premiere)
+    }
 
     /** Installe le travail périodique de chaque compte serveur enregistré. */
     fun scheduleAllAccounts() {

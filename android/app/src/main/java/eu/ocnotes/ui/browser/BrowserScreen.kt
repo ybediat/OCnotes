@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.SwitchAccount
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EditNote
@@ -118,6 +119,7 @@ private sealed interface Dialogue {
     /** Actions groupées : la cible est la sélection portée par l'état. */
     data object DeplacerLot : Dialogue
     data object CopierLot : Dialogue
+    data object CopierVersCompte : Dialogue
     data object SupprimerLot : Dialogue
 }
 
@@ -132,6 +134,8 @@ fun BrowserScreen(
     ),
 ) {
     val etat by viewModel.uiState.collectAsStateWithLifecycle()
+    val comptes by LocalContext.current.appContainer.accountRegistry.state.collectAsStateWithLifecycle()
+    val plusieursComptes = comptes.accounts.size > 1
     val evenement by viewModel.evenements.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -199,11 +203,13 @@ fun BrowserScreen(
                     nombre = etat.selection.size,
                     peutDeplacer = etat.peutDeplacerSelection,
                     peutCopier = etat.peutCopierSelection,
+                    peutCopierCompte = etat.peutCopierVersCompteSelection && plusieursComptes,
                     peutPartager = etat.peutPartagerSelection,
                     peutSupprimer = etat.peutSupprimerSelection,
                     onQuitter = viewModel::viderSelection,
                     onDeplacer = { dialogue = Dialogue.DeplacerLot },
                     onCopier = { dialogue = Dialogue.CopierLot },
+                    onCopierCompte = { dialogue = Dialogue.CopierVersCompte },
                     onPartager = viewModel::partagerLot,
                     onSupprimer = { dialogue = Dialogue.SupprimerLot },
                 )
@@ -479,6 +485,14 @@ fun BrowserScreen(
             onFermer = { dialogue = null },
         )
 
+        Dialogue.CopierVersCompte -> CopieVersCompteDialog(
+            nombre = etat.selection.size,
+            onValider = { destination, dossier, nom ->
+                viewModel.copierVersCompte(destination.profil.id, dossier, nom)
+            },
+            onFermer = { dialogue = null },
+        )
+
         Dialogue.SupprimerLot -> SuppressionLotDialog(
             nombre = etat.selection.size,
             contientDossier = etat.selectionContientDossier,
@@ -503,11 +517,13 @@ private fun BarreSelection(
     nombre: Int,
     peutDeplacer: Boolean,
     peutCopier: Boolean,
+    peutCopierCompte: Boolean,
     peutPartager: Boolean,
     peutSupprimer: Boolean,
     onQuitter: () -> Unit,
     onDeplacer: () -> Unit,
     onCopier: () -> Unit,
+    onCopierCompte: () -> Unit,
     onPartager: () -> Unit,
     onSupprimer: () -> Unit,
 ) {
@@ -537,6 +553,14 @@ private fun BarreSelection(
                     Icon(
                         imageVector = Icons.Default.ContentCopy,
                         contentDescription = stringResource(R.string.action_copier),
+                    )
+                }
+            }
+            if (peutCopierCompte) {
+                IconButton(onClick = onCopierCompte) {
+                    Icon(
+                        imageVector = Icons.Default.SwitchAccount,
+                        contentDescription = stringResource(R.string.browser_copier_compte_titre),
                     )
                 }
             }

@@ -261,6 +261,16 @@
         <item quantity="one">%d élément copié</item>
         <item quantity="other">%d éléments copiés</item>
     </plurals>
+    <string name="browser_copier_compte_titre">Copier vers un autre compte</string>
+    <string name="browser_copier_compte_aucun">Aucun autre compte ne peut recevoir de note : il faut un compte local, ou un serveur dont l\'espace est choisi.</string>
+    <plurals name="browser_copier_compte_fait">
+        <item quantity="one">%1$d note copiée vers %2$s</item>
+        <item quantity="other">%1$d notes copiées vers %2$s</item>
+    </plurals>
+    <plurals name="browser_copier_compte_ecart">
+        <item quantity="one">La copie de %d note ne correspond pas à l\'original ; elle n\'est pas comptée.</item>
+        <item quantity="other">La copie de %d notes ne correspond pas à l\'original ; elles ne sont pas comptées.</item>
+    </plurals>
     <plurals name="browser_lot_supprimes">
         <item quantity="one">%d élément supprimé</item>
         <item quantity="other">%d éléments supprimés</item>
@@ -290,6 +300,8 @@
     <string name="compte_local">Notes locales</string>
     <string name="compte_nouveau">Nouveau compte</string>
     <string name="compte_ajouter">Ajouter un compte</string>
+    <string name="compte_renommer">Renommer ce compte local</string>
+    <string name="compte_nom_label">Nom</string>
     <string name="compte_geste_echec">L\'opération sur le compte a échoué. Réessayez.</string>
     <string name="compte_deja_present">Ce compte est déjà ajouté sur cet appareil. Le profil existant est ouvert ; reconnectez-vous depuis celui-ci si sa session a expiré.</string>
     <string name="compte_supprimer">Supprimer le compte</string>
@@ -441,6 +453,11 @@
     <string name="reglages_local_titre">Stockage local</string>
     <string name="reglages_local_explication">Toutes les notes vivent uniquement sur cet appareil. Aucune synchronisation n\'est effectuée.</string>
     <string name="reglages_local_connecter">Connecter un serveur</string>
+    <string name="reglages_local_connecter_titre">Connecter un serveur</string>
+    <string name="reglages_local_connecter_cote">Ajouter un compte à côté</string>
+    <string name="reglages_local_connecter_cote_explication">Vos notes locales restent telles quelles, dans leur propre compte. Le serveur s\'ouvre dans un nouveau compte.</string>
+    <string name="reglages_local_connecter_convertir">Convertir ce compte</string>
+    <string name="reglages_local_connecter_convertir_explication">Ce compte devient un compte serveur ; vous choisirez d\'envoyer vos notes locales ou de les supprimer.</string>
     <string name="reglages_local_utiliser">Utiliser uniquement cet appareil</string>
     <string name="reglages_local_utiliser_explication">Les notes absentes de l\'appareil seront d\'abord rapatriées. Les copies présentes sur le serveur ne seront pas supprimées.</string>
     <string name="reglages_local_plan_titre">Passer en mode local ?</string>
