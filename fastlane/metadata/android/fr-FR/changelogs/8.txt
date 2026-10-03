@@ -1,0 +1,7 @@
+Nouveau : compatibilité ownCloud Infinite Scale (en test, validée sur OCIS 7 et 8.2.0, connexion OIDC comprise).
+
+Comptes : copie de notes d'un compte à l'autre, serveur ajouté à côté d'un compte local ou conversion, plus de doublon d'un compte déjà présent.
+
+Export de toutes vos notes en archive zip.
+
+Avertissement avant toute suppression ou déconnexion qui ferait perdre des notes ou des modifications non envoyées.

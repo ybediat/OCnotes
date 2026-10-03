@@ -1,0 +1,7 @@
+New: ownCloud Infinite Scale support (in testing, verified on OCIS 7 and 8.2.0, OIDC sign-in included).
+
+Accounts: copy notes between accounts, add a server beside a local account or convert it, no more duplicate of an existing account.
+
+Export all your notes as a zip archive.
+
+Warning before any removal or sign-out that would lose notes or unsent changes.
