@@ -309,6 +309,7 @@
     <string name="compte_nom_label">Nombre</string>
     <string name="compte_geste_echec">La operación en la cuenta ha fallado. Vuelva a intentarlo.</string>
     <string name="compte_deja_present">Esta cuenta ya está añadida en este dispositivo. Se ha abierto el perfil existente; vuelva a iniciar sesión desde él si su sesión ha caducado.</string>
+    <string name="conversion_compte_deja_present">Esta cuenta ya está abierta en otro perfil de este dispositivo. Sus notas locales no se han modificado. Para enviarlas allí, use «Copiar a otra cuenta» en la lista de notas.</string>
     <string name="compte_supprimer">Eliminar cuenta</string>
     <string name="compte_supprimer_titre">¿Eliminar esta cuenta?</string>
     <string name="compte_supprimer_message">La cuenta %1$s, su caché y todos los cambios locales sin sincronizar se eliminarán de este dispositivo. Esta acción no se puede deshacer.</string>

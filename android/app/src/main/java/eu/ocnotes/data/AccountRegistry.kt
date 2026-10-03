@@ -42,6 +42,14 @@ const val MAX_NOM_LOCAL = 40
 internal val AccountProfile.syncEnabled: Boolean
     get() = kind == "server" && serverUrl.isNotBlank()
 
+/**
+ * Profil qu'aucune connexion n'a rempli : tout juste ajouté, ou vidé par une
+ * déconnexion. Seul un tel profil peut être retiré sans que l'utilisateur l'ait
+ * demandé — un profil local porte la seule copie de ses notes.
+ */
+internal val AccountProfile.vierge: Boolean
+    get() = kind == "server" && serverUrl.isBlank() && identityKey.isBlank()
+
 data class AccountRegistryState(
     val active: AccountProfile,
     val accounts: List<AccountProfile>,

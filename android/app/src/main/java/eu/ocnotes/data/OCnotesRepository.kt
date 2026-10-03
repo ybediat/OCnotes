@@ -327,11 +327,26 @@ class OCnotesRepository(
      * synchronisation, et pousseraient les mêmes notes l'un contre l'autre.
      * Appelé avant d'écrire le secret : rien n'est gardé de cette connexion.
      * Le profil vide, lui, est retiré par l'appelant (`adopterCompteExistant`).
+     *
+     * Sauf conversion d'un profil local : ses notes n'ont pas d'autre copie, le
+     * profil n'est jamais retiré. `Connect` n'a rien persisté en mode local ;
+     * `startLocal` défait le client qu'il a posé en mémoire, comme le bouton
+     * « Rester en mode local ».
      */
     private suspend fun refuserDoublon() {
-        val existant = accountRegistry.profilDeMemeIdentite(state().identityKey, sauf = accountId)
+        val etat = state()
+        val existant = accountRegistry.profilDeMemeIdentite(etat.identityKey, sauf = accountId)
             ?: return
         journal("connexion refusée : identité déjà portée par ${existant.id.take(8)}") // i18n-ok : trace de diagnostic
+        if (etat.mode == AppMode.LOCAL) {
+            try {
+                call { it.startLocal() }
+            } catch (_: OCnotesException) {
+                // « Rester en mode local », sur l'écran de connexion, refera
+                // l'annulation : les notes, elles, n'ont pas bougé.
+            }
+            throw ConversionVersCompteExistantException()
+        }
         throw CompteDejaPresentException(existant.id, accountId)
     }
 

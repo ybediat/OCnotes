@@ -153,12 +153,17 @@ func (a *App) persistConfig(next config.Config) error {
 //     débranchement exigeant une file vide, et l'inventaire se reconstitue au
 //     premier listing. Android, lui, n'efface le token qu'une fois DetachJSON
 //     revenu : il a encore de quoi rouvrir la session.
+//
+// Le mode vide ne fait pas foi : c'est celui d'une installation neuve, mais
+// aussi d'une configuration perdue ou tronquée. Le cache garde alors son
+// drapeau, seul témoin restant de ce qu'il était — connectClient s'en sert pour
+// n'adopter que des notes qui n'ont de copie nulle part.
 func alignCacheOnMode(cache *store.Store, cfg config.Config) error {
 	switch {
 	case cfg.IsLocal() && !cache.LocalOnly():
 		_, err := cache.GoLocal()
 		return err
-	case !cfg.IsLocal() && cache.LocalOnly():
+	case cfg.Mode != config.ModeUnset && !cfg.IsLocal() && cache.LocalOnly():
 		return cache.SetLocalOnly(false)
 	}
 	return nil
@@ -465,19 +470,6 @@ func (a *App) connectClient(serverURL, username, authMode string, client *opencl
 	}
 	nouvelle.Mode = config.ModeServer
 
-	// Première connexion à un serveur alors que le cache porte déjà des notes :
-	// la seule façon d'y arriver est une configuration perdue ou tronquée — la
-	// purge d'une déconnexion vide le cache, et le branchement depuis le mode
-	// local passe par AttachJSON. Ces notes n'ont alors de copie nulle part. Les
-	// laisser « propres » les faisait oublier en silence au premier listing,
-	// puisque le serveur ne les connaît pas : on les traite comme un travail
-	// créé hors connexion, que pushWrite envoie sans rien écraser.
-	if !ancienne.IsConnected() && len(a.cache.Entries()) > 0 {
-		if err := a.cache.Adopt(); err != nil {
-			return err
-		}
-	}
-
 	var nouvelleBibliotheque *notes.Library
 	if nouvelle.DriveID != "" {
 		for _, d := range drives {
@@ -514,7 +506,30 @@ func (a *App) connectClient(serverURL, username, authMode string, client *opencl
 		return errSessionChanged()
 	}
 	nouvelle.LastPath = a.cfg.LastPath
+
+	// Cache « stockage unique » sous une configuration vide : un profil local
+	// dont la configuration a été perdue — le branchement ordinaire passe par
+	// AttachJSON. Ces notes n'ont de copie nulle part. Les laisser « propres »
+	// les faisait oublier en silence au premier listing, puisque le serveur ne
+	// les connaît pas : on les traite comme un travail créé hors connexion, que
+	// pushWrite envoie sans rien écraser.
+	//
+	// Le drapeau, pas la présence de notes : le cache d'un profil serveur n'a
+	// rien à adopter — ses notes propres sont sur son serveur, son travail en
+	// attente déjà en file — et ce serveur n'est peut-être pas celui qu'on
+	// branche. Adopter seulement maintenant, la session acquise : un échec plus
+	// haut laisse le cache tel qu'il était.
+	adopte := a.cache.LocalOnly()
+	if adopte {
+		if err := a.cache.Adopt(); err != nil {
+			return err
+		}
+	}
 	if err := a.persistConfig(nouvelle); err != nil {
+		if adopte {
+			_, rollback := a.cache.GoLocal()
+			return errors.Join(err, rollback)
+		}
 		return err
 	}
 	a.client, a.oidcAuth, a.lib, a.cfg = client, oidcAuth, nouvelleBibliotheque, nouvelle

@@ -289,6 +289,7 @@
     <string name="compte_nom_label">Name</string>
     <string name="compte_geste_echec">Der Vorgang für das Konto ist fehlgeschlagen. Versuchen Sie es erneut.</string>
     <string name="compte_deja_present">Dieses Konto ist auf diesem Gerät bereits hinzugefügt. Das vorhandene Profil wurde geöffnet; melden Sie sich dort erneut an, falls die Sitzung abgelaufen ist.</string>
+    <string name="conversion_compte_deja_present">Dieses Konto ist bereits in einem anderen Profil auf diesem Gerät geöffnet. Ihre lokalen Notizen wurden nicht verändert. Um sie dorthin zu senden, verwenden Sie „In ein anderes Konto kopieren“ in der Notizliste.</string>
     <string name="compte_supprimer">Konto entfernen</string>
     <string name="compte_supprimer_titre">Dieses Konto entfernen?</string>
     <string name="compte_supprimer_message">Das Konto %1$s, sein Cache und alle nicht synchronisierten lokalen Änderungen werden von diesem Gerät gelöscht. Dies kann nicht rückgängig gemacht werden.</string>

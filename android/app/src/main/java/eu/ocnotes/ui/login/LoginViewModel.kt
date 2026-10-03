@@ -11,6 +11,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import eu.ocnotes.AppContainer
 import eu.ocnotes.data.AppMode
 import eu.ocnotes.data.CompteDejaPresentException
+import eu.ocnotes.data.ConversionVersCompteExistantException
 import eu.ocnotes.data.ErrorCategory
 import eu.ocnotes.data.OCnotesException
 import eu.ocnotes.data.OCnotesRepository
@@ -157,6 +158,8 @@ class LoginViewModel(
                         },
                     )
                 }
+            } catch (_: ConversionVersCompteExistantException) {
+                refuserConversion()
             } catch (e: CompteDejaPresentException) {
                 _uiState.update { it.copy(enCours = false) }
                 surCompteDejaPresent(e)
@@ -255,6 +258,8 @@ class LoginViewModel(
                 }
             } catch (e: CancellationException) {
                 throw e
+            } catch (_: ConversionVersCompteExistantException) {
+                refuserConversion()
             } catch (e: CompteDejaPresentException) {
                 _uiState.update { it.copy(enCours = false) }
                 surCompteDejaPresent(e)
@@ -280,6 +285,21 @@ class LoginViewModel(
             } catch (e: OCnotesException) {
                 _uiState.update { it.copy(enCours = false, erreur = e.texte()) }
             }
+        }
+    }
+
+    /**
+     * Le compte visé est déjà ouvert dans un autre profil : la conversion est
+     * abandonnée, le profil local et ses notes restent tels quels. L'écran
+     * reste ouvert, avec « Rester en mode local » pour revenir aux notes.
+     */
+    private fun refuserConversion() {
+        _uiState.update {
+            it.copy(
+                enCours = false,
+                erreur = Texte.de(eu.ocnotes.R.string.conversion_compte_deja_present),
+                erreurEstAuth = false,
+            )
         }
     }
 

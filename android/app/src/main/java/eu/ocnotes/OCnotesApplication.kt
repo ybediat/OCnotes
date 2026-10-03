@@ -17,6 +17,7 @@ import eu.ocnotes.data.OCnotesRepository
 import eu.ocnotes.data.PreferencesAffichage
 import eu.ocnotes.data.TokenStore
 import eu.ocnotes.data.syncEnabled
+import eu.ocnotes.data.vierge
 import eu.ocnotes.data.auth.OidcManager
 import eu.ocnotes.diagnostic.CrashReporter
 import eu.ocnotes.sync.SyncNotifier
@@ -256,7 +257,13 @@ class AppContainer(
      */
     suspend fun adopterCompteExistant(existantId: String, nouveauId: String) {
         activateAccount(existantId)
-        deleteAccount(nouveauId)
+        // Seul un profil vierge part sans qu'on l'ait demandé : la suppression
+        // n'a pas de retour. Un autre — profil serveur dont la configuration a
+        // été perdue, par exemple — reste dans le tiroir, où l'utilisateur le
+        // supprimera lui-même, avec la confirmation d'usage, s'il le veut.
+        if (accountRegistry.accounts.firstOrNull { it.id == nouveauId }?.vierge == true) {
+            deleteAccount(nouveauId)
+        }
         mutableCompteDejaPresent.value = true
     }
 

@@ -24,6 +24,15 @@ class AccountRegistryTest {
     }
 
     @Test
+    fun `seul un profil que rien n a rempli est vierge`() {
+        assertTrue(AccountProfile("neuf", "server").vierge)
+        // Un profil local porte la seule copie de ses notes.
+        assertFalse(AccountProfile("local", "local").vierge)
+        assertFalse(AccountProfile("serveur", "server", "https://cloud.test").vierge)
+        assertFalse(AccountProfile("identifie", "server", identityKey = "v2:abc").vierge)
+    }
+
+    @Test
     fun `une installation serveur conserve son cache et son compte`() {
         val root = Files.createTempDirectory("ocnotes-accounts").toFile()
         try {
