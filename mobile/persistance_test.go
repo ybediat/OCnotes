@@ -382,18 +382,33 @@ func TestPersistanceModeLocalConfigurationPerdue(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewApp: %v", err)
 			}
-			// Le geste de l'utilisateur devant l'écran de départ.
-			if err := app.StartLocal(); err != nil {
-				t.Fatalf("StartLocal après perte de configuration: %v", err)
+			// Aucun geste : le cœur se reconnaît local à son cache, sans
+			// écran de départ et sans attendre le registre Android.
+			var state appState
+			raw, err := app.StateJSON()
+			if err != nil {
+				t.Fatalf("StateJSON: %v", err)
+			}
+			decodeJSON(t, raw, &state)
+			if state.Mode != config.ModeLocal {
+				t.Errorf("mode après perte de configuration = %q, attendu local", state.Mode)
 			}
 			verifierCache(t, app, attendu)
+
+			// Et la configuration est réécrite : le registre Android, s'il
+			// devait être reconstruit, la lirait locale.
+			cfg, err := config.Load(dataDir)
+			if err != nil || !cfg.IsLocal() {
+				t.Errorf("configuration réécrite = %+v, %v ; attendu le mode local", cfg, err)
+			}
 		})
 	}
 }
 
-// L'autre sortie de l'écran de départ : brancher un serveur. Les notes du mode
-// local doivent y monter, pas y disparaître parce que le serveur ne les connaît
-// pas.
+// Brancher un serveur après la perte : c'est un branchement ordinaire depuis le
+// mode local. Connect n'engage rien — ni configuration ni adoption — tant que
+// l'utilisateur n'a pas choisi le sort de ses notes ; c'est ce choix qui
+// manquait quand la connexion les adoptait d'office sous le mode vide.
 func TestPersistanceModeLocalConfigurationPerdueEtServeurBranche(t *testing.T) {
 	dataDir, attendu := prepareLocalAvecNotes(t)
 	if err := os.Remove(config.Path(dataDir)); err != nil {
@@ -408,19 +423,18 @@ func TestPersistanceModeLocalConfigurationPerdueEtServeurBranche(t *testing.T) {
 	if err := app.Connect(server.URL, fakeUser, fakeToken); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
-	if err := app.SelectWorkspace(fakeSpaceID, "Notes"); err != nil {
-		t.Fatalf("SelectWorkspace: %v", err)
+	if !app.cache.LocalOnly() || app.PendingCount() != 0 {
+		t.Fatalf("Connect a engagé le cache avant le choix : local=%v, file=%d", app.cache.LocalOnly(), app.PendingCount())
 	}
-	// Un listing, comme le fait l'écran de navigation, puis une passe.
-	if _, err := app.ListFolderJSON(""); err != nil {
-		t.Fatalf("ListFolderJSON: %v", err)
+	if res := attache(t, app, true); res.Adopted != len(attendu) {
+		t.Errorf("adopted = %d, attendu %d", res.Adopted, len(attendu))
 	}
-	if _, err := app.ListFolderJSON("Carnets"); err != nil {
-		t.Fatalf("ListFolderJSON: %v", err)
+	if res := synchroniser(t, app); res.Error != "" || res.Remaining != 0 {
+		t.Fatalf("passe après branchement = %+v", res)
 	}
-	synchroniser(t, app)
 
 	verifierCache(t, app, attendu)
+	verifierServeur(t, server, attendu)
 }
 
 // Un profil serveur dont la configuration est perdue n'a, lui, rien à adopter :

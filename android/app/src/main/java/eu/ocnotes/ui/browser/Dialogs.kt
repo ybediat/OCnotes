@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import eu.ocnotes.R
 import eu.ocnotes.data.FolderEntryDto
 import eu.ocnotes.data.FolderRefDto
+import eu.ocnotes.ui.common.BoutonDangereux
 
 /**
  * Boîte de saisie d'une ligne : création de note, de dossier, renommage.
@@ -422,17 +423,13 @@ fun SuppressionDialog(
             )
         },
         confirmButton = {
-            TextButton(
+            BoutonDangereux(
+                texte = stringResource(R.string.action_supprimer),
                 onClick = {
                     onConfirmer()
                     onFermer()
                 },
-            ) {
-                Text(
-                    text = stringResource(R.string.action_supprimer),
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
+            )
         },
         dismissButton = {
             TextButton(onClick = onFermer) { Text(stringResource(R.string.action_annuler)) }
@@ -480,17 +477,13 @@ fun SuppressionLotDialog(
             )
         },
         confirmButton = {
-            TextButton(
+            BoutonDangereux(
+                texte = stringResource(R.string.action_supprimer),
                 onClick = {
                     onConfirmer()
                     onFermer()
                 },
-            ) {
-                Text(
-                    text = stringResource(R.string.action_supprimer),
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
+            )
         },
         dismissButton = {
             TextButton(onClick = onFermer) { Text(stringResource(R.string.action_annuler)) }

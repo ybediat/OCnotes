@@ -407,11 +407,13 @@ class OCnotesRepository(
             return@withLock RestoreOutcome.LOCALE
         }
         if (!current.connected && registreDitLocal()) {
-            // Le registre Android connaît ce profil comme local, mais la
-            // configuration Go a été perdue : le cœur répond « mode vide ».
-            // Le cache est déjà local, seule la configuration manque ; la
-            // réécrire ne risque rien, alors que l'écran de connexion
-            // laisserait croire à un profil neuf.
+            // Le registre Android connaît ce profil comme local, mais le cœur
+            // répond « mode vide ». Une configuration perdue seule n'arrive
+            // plus ici — le cœur se reconnaît à son cache (`recoverLocalMode`)
+            // — : il a fallu perdre l'index avec elle, et le drapeau du cache
+            // avec lui. Les notes sont toujours là ; relancer le mode local ne
+            // risque rien, alors que l'écran de connexion laisserait croire à
+            // un profil neuf.
             journal("restore : profil local sans configuration, mode local relancé") // i18n-ok : trace de diagnostic
             return@withLock try {
                 call { it.startLocal() }

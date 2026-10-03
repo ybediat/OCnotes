@@ -876,6 +876,25 @@ func (s *Store) PutEncoded(notePath string, content []byte, encoding string) err
 	return s.putLocked(notePath, content, encoding, true)
 }
 
+// PutNew crée une note sous notePath, ou sous « nom (2) », « nom (3) »… si ce
+// chemin est pris, et renvoie le chemin retenu.
+//
+// Le choix du nom et l'écriture se font sous le même verrou. Choisi à part, le
+// même nom libre était vu par deux créations simultanées, et la seconde
+// écrasait la première — en mode local, la seule copie. « Pris » s'entend au
+// sens de takenLocked, dossiers compris : une note pouvait sinon naître au
+// chemin d'un dossier, et la supprimer emportait le dossier avec elle.
+func (s *Store) PutNew(notePath string, content []byte) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	candidat := notePath
+	for n := 2; s.takenLocked(candidat); n++ {
+		candidat = numberedPath(notePath, n)
+	}
+	return candidat, s.putLocked(candidat, content, "", true)
+}
+
 // EncodingOf renvoie l'encodage retenu pour ce contenu précis, et false si
 // rien n'est retenu ou si le contenu a changé depuis.
 func (s *Store) EncodingOf(notePath string, content []byte) (string, bool) {
@@ -1281,10 +1300,21 @@ func (s *Store) takenLocked(chemin string) bool {
 }
 
 // EnsureFolder retient un dossier et inscrit sa création en file d'attente.
+//
+// Refusé si une note occupe ce chemin ou l'un de ses parents : le serveur le
+// refuserait, et dans le cache la note et le dossier se confondraient —
+// supprimer l'un effaçait l'autre.
 func (s *Store) EnsureFolder(dir string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	for chemin := strings.Trim(dir, "/"); chemin != "." && chemin != ""; chemin = path.Dir(chemin) {
+		_, detenue := s.entries[chemin]
+		_, connue := s.known[chemin]
+		if detenue || connue {
+			return fmt.Errorf("store: [%s] une note occupe déjà %s", CodeTargetExists, chemin)
+		}
+	}
 	s.rememberFolderLocked(dir)
 	s.enqueueLocked(Operation{Kind: OpMkdir, Path: dir})
 	return s.save()

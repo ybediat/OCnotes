@@ -113,6 +113,7 @@ func NewApp(dataDir string) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	cfg = recoverLocalMode(dataDir, cache, cfg)
 	if err := alignCacheOnMode(cache, cfg); err != nil {
 		return nil, err
 	}
@@ -146,6 +147,33 @@ func (a *App) persistConfig(next config.Config) error {
 	// NewApp le reprendra au démarrage suivant.
 	_ = recordCacheOwner(a.cache, next)
 	return nil
+}
+
+// recoverLocalMode reconnaît un profil local dont la configuration a été
+// perdue.
+//
+// config.json est réécrite à chaque dossier ouvert ; perdue ou tronquée, elle
+// rend le mode vide, celui d'une installation neuve. Le drapeau du cache, lui,
+// est écrit avec l'index et ne ment pas dans ce sens : aucune bascule ne laisse
+// un cache « stockage unique » sous une configuration vide, sauf un démarrage
+// local interrompu avant son commit — et l'utilisateur avait alors choisi le
+// mode local. Le cœur se reconnaît donc lui-même, sans attendre que le
+// registre Android le lui dise : celui-ci peut avoir été reconstruit depuis la
+// même configuration perdue, et prendre le profil pour un serveur vierge.
+//
+// Sans cela, l'écran de connexion s'affichait devant les notes, et s'y
+// connecter les adoptait sans le choix qu'offre AttachJSON — puis, sur un
+// compte déjà présent ailleurs, le refus de doublon retirait le profil.
+//
+// L'écriture est un meilleur effort : la configuration en mémoire suffit à ce
+// démarrage, et le suivant refera le même constat.
+func recoverLocalMode(dataDir string, cache *store.Store, cfg config.Config) config.Config {
+	if cfg.Mode != config.ModeUnset || !cache.LocalOnly() {
+		return cfg
+	}
+	recovered := config.Config{Mode: config.ModeLocal}
+	_ = config.Save(dataDir, recovered)
+	return recovered
 }
 
 // alignCacheOnMode remet le cache d'accord avec le mode enregistré.
@@ -528,7 +556,9 @@ func (a *App) connectClient(serverURL, username, authMode string, client *opencl
 
 	// Cache « stockage unique » sous une configuration vide : un profil local
 	// dont la configuration a été perdue — le branchement ordinaire passe par
-	// AttachJSON. Ces notes n'ont de copie nulle part. Les laisser « propres »
+	// AttachJSON. Second rideau : NewApp reconnaît déjà ce profil comme local
+	// (recoverLocalMode), et l'on n'arrive plus ici que si cette règle cède un
+	// jour. Ces notes n'ont de copie nulle part. Les laisser « propres »
 	// les faisait oublier en silence au premier listing, puisque le serveur ne
 	// les connaît pas : on les traite comme un travail créé hors connexion, que
 	// pushWrite envoie sans rien écraser.
@@ -1908,40 +1938,17 @@ func (a *App) createNoteLocal(dir, name, content string) (string, error) {
 		return "", err
 	}
 
-	dir = notes.CleanPath(dir)
-	available := a.availableNameFromCache(dir, name)
-	notePath := path.Join(dir, available)
-
-	if err := a.cache.Put(notePath, []byte(content)); err != nil {
+	// Le cache choisit le nom libre et écrit d'un même geste : voir PutNew.
+	notePath, err := a.cache.PutNew(path.Join(notes.CleanPath(dir), name), []byte(content))
+	if err != nil {
 		return "", err
 	}
+	available := path.Base(notePath)
 	return toJSON(noteRef{
 		Path:    notePath,
 		Name:    available,
 		Display: notes.DisplayName(available),
 	})
-}
-
-// availableNameFromCache ajoute un suffixe numérique tant que le nom est pris
-// dans le cache.
-func (a *App) availableNameFromCache(dir, name string) string {
-	taken := map[string]bool{}
-	for _, entry := range a.cache.Entries() {
-		taken[entry.Path] = true
-	}
-
-	ext := path.Ext(name)
-	base := strings.TrimSuffix(name, ext)
-
-	for attempt := 0; ; attempt++ {
-		candidate := name
-		if attempt > 0 {
-			candidate = fmt.Sprintf("%s (%d)%s", base, attempt+1, ext)
-		}
-		if !taken[path.Join(dir, candidate)] {
-			return candidate
-		}
-	}
 }
 
 // CreateFolderJSON crée un sous-dossier.

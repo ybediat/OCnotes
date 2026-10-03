@@ -285,14 +285,11 @@ func TestBranchementInterrompuResteEnModeLocal(t *testing.T) {
 	}
 }
 
-// StartLocal tué entre le cache et la configuration : l'installation reste
-// neuve, et un cache figé en « stockage unique » ferait ignorer toutes les
-// écritures du serveur branché ensuite.
-//
-// Le drapeau survit au redémarrage — sous une configuration vide il est le
-// seul témoin d'un profil local dont la configuration est perdue — et c'est la
-// connexion qui le lève.
-func TestDemarrageLocalInterrompuNeFigePasLeCache(t *testing.T) {
+// StartLocal tué entre le cache et la configuration : l'installation repart en
+// mode local, le choix que l'utilisateur venait de faire (recoverLocalMode). Un
+// serveur branché ensuite passe par le branchement, et ses écritures partent :
+// un cache resté figé en « stockage unique » les ferait ignorer.
+func TestDemarrageLocalInterrompuRepartEnModeLocal(t *testing.T) {
 	dataDir := t.TempDir()
 	app, err := NewApp(dataDir)
 	if err != nil {
@@ -307,12 +304,13 @@ func TestDemarrageLocalInterrompuNeFigePasLeCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewApp au redémarrage: %v", err)
 	}
+	if _, local := relance.session(); !local {
+		t.Fatal("le démarrage local interrompu n'a pas été reconnu")
+	}
 	if err := relance.Connect(server.URL, fakeUser, fakeToken); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
-	if err := relance.SelectWorkspace(fakeSpaceID, "Notes"); err != nil {
-		t.Fatalf("SelectWorkspace: %v", err)
-	}
+	attache(t, relance, true)
 	if relance.cache.LocalOnly() {
 		t.Error("cache resté en « stockage unique » sous un serveur branché")
 	}

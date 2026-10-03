@@ -52,6 +52,7 @@ import eu.ocnotes.R
 import eu.ocnotes.appContainer
 import eu.ocnotes.data.PoliceInterface
 import eu.ocnotes.ui.common.Bandeau
+import eu.ocnotes.ui.common.BoutonDangereux
 import eu.ocnotes.ui.common.resoudre
 import eu.ocnotes.ui.theme.familleDePolice
 import android.text.format.Formatter
@@ -427,21 +428,17 @@ fun SettingsScreen(
                 )
             }
 
-            OutlinedButton(
+            BoutonDangereux(
+                texte = stringResource(
+                    if (etat.modeLocal) {
+                        R.string.reglages_local_effacer
+                    } else {
+                        R.string.reglages_deconnexion
+                    },
+                ),
                 onClick = { confirmation = true },
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    text = stringResource(
-                        if (etat.modeLocal) {
-                            R.string.reglages_local_effacer
-                        } else {
-                            R.string.reglages_deconnexion
-                        },
-                    ),
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
+            )
 
             Text(
                 text = stringResource(
@@ -566,30 +563,22 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                TextButton(
+                BoutonDangereux(
+                    texte = stringResource(
+                        if (etat.modeLocal) {
+                            R.string.reglages_local_effacer
+                        } else if (perte) {
+                            R.string.reglages_deconnexion_perte_confirmer
+                        } else {
+                            R.string.reglages_deconnexion
+                        },
+                    ),
                     onClick = {
                         confirmation = false
                         viewModel.deconnecter()
                     },
                     enabled = !verrou || compris,
-                ) {
-                    Text(
-                        text = stringResource(
-                            if (etat.modeLocal) {
-                                R.string.reglages_local_effacer
-                            } else if (perte) {
-                                R.string.reglages_deconnexion_perte_confirmer
-                            } else {
-                                R.string.reglages_deconnexion
-                            },
-                        ),
-                        color = if (!verrou || compris) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                        },
-                    )
-                }
+                )
             },
             dismissButton = {
                 TextButton(onClick = { confirmation = false }) {

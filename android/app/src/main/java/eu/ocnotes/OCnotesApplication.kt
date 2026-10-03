@@ -9,7 +9,9 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import eu.ocnotes.data.AccountRegistry
 import eu.ocnotes.data.AccountProfile
+import eu.ocnotes.data.AppMode
 import eu.ocnotes.data.DestinationCopie
+import eu.ocnotes.data.EnjeuSuppression
 import eu.ocnotes.data.NoteRefDto
 import eu.ocnotes.data.OCnotesException
 import eu.ocnotes.data.RestoreOutcome
@@ -173,15 +175,22 @@ class AppContainer(
     }
 
     /**
-     * Opérations que la suppression du profil détruirait : écritures, créations
-     * et renommages jamais envoyés. Lu dans le cœur Go du profil, actif ou non,
-     * sans réseau. Sans verrou de compte — il reste tenu pendant toute une
-     * passe, et le dialogue attendrait la fin d'une synchronisation.
+     * Ce que la suppression du profil détruirait : toutes ses notes s'il est
+     * local, sinon les écritures, créations et renommages jamais envoyés. Lu
+     * dans le cœur Go du profil, actif ou non, sans réseau. Sans verrou de
+     * compte — il reste tenu pendant toute une passe, et le dialogue attendrait
+     * la fin d'une synchronisation.
+     *
+     * Le mode vient du cœur, pas du registre : `recordLocal` n'est qu'un
+     * nettoyage au mieux, et un registre reconstruit sans `config.json` classe
+     * un profil local parmi les serveurs vierges. Or un profil local n'a jamais
+     * rien en file — le registre seul l'aurait laissé supprimer sans la case.
      *
      * `null` si la lecture échoue : l'appelant doit alors supposer le pire.
      */
-    suspend fun operationsEnAttente(id: String): Int? =
-        runCatching { runtimeFor(id).repository.state().pending }.getOrNull()
+    suspend fun enjeuSuppression(id: String): EnjeuSuppression? =
+        runCatching { runtimeFor(id).repository.state() }.getOrNull()
+            ?.let { EnjeuSuppression(local = it.mode == AppMode.LOCAL, enAttente = it.pending) }
 
     /**
      * Les autres profils qui peuvent recevoir une copie, avec leurs dossiers.
@@ -350,7 +359,15 @@ class AppContainer(
         // n'a pas de retour. Un autre — profil serveur dont la configuration a
         // été perdue, par exemple — reste dans le tiroir, où l'utilisateur le
         // supprimera lui-même, avec la confirmation d'usage, s'il le veut.
-        if (accountRegistry.accounts.firstOrNull { it.id == nouveauId }?.vierge == true) {
+        //
+        // « Vierge » au registre ne suffit pas, il faut aussi un cœur sans rien
+        // en file. Un profil local qui a perdu sa configuration et son registre
+        // ensemble passe au registre pour vierge, et la connexion qui mène ici
+        // vient d'adopter ses notes (`connectClient`) : elles sont en file, et
+        // nulle part ailleurs.
+        val vierge = accountRegistry.accounts.firstOrNull { it.id == nouveauId }?.vierge == true
+        val enjeu = enjeuSuppression(nouveauId)
+        if (vierge && enjeu != null && !enjeu.local && enjeu.enAttente == 0) {
             deleteAccount(nouveauId)
         }
         mutableCompteDejaPresent.value = true

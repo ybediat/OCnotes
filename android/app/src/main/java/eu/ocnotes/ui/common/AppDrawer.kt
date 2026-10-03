@@ -58,6 +58,7 @@ import eu.ocnotes.appContainer
 import eu.ocnotes.data.AccountProfile
 import eu.ocnotes.data.MAX_NOM_LOCAL
 import eu.ocnotes.data.AuthMode
+import eu.ocnotes.data.EnjeuSuppression
 import eu.ocnotes.ui.browser.ModeAffichage
 import eu.ocnotes.ui.theme.CouleurSignatureClaire
 import eu.ocnotes.ui.theme.CouleurSignatureSombre
@@ -339,11 +340,15 @@ private fun DialogueSuppressionCompte(
     onAnnule: () -> Unit,
 ) {
     val container = LocalContext.current.appContainer
-    val local = compte.kind == "local"
     // `null` tant que la lecture est en cours ou si elle a échoué.
-    var enAttente by remember(compte.id) { mutableStateOf<Int?>(null) }
+    var enjeu by remember(compte.id) { mutableStateOf<EnjeuSuppression?>(null) }
     var compris by remember(compte.id) { mutableStateOf(false) }
-    LaunchedEffect(compte.id) { enAttente = container.operationsEnAttente(compte.id) }
+    LaunchedEffect(compte.id) { enjeu = container.enjeuSuppression(compte.id) }
+
+    // Le registre peut retarder sur le cœur (voir `enjeuSuppression`) : l'un ou
+    // l'autre qui dit « local » suffit.
+    val local = compte.kind == "local" || enjeu?.local == true
+    val enAttente = enjeu?.enAttente
 
     val perte = !local && enAttente?.let { it > 0 } == true
     val verrou = local || enAttente != 0
@@ -401,17 +406,11 @@ private fun DialogueSuppressionCompte(
             }
         },
         confirmButton = {
-            val actif = !verrou || compris
-            TextButton(onClick = onConfirme, enabled = actif) {
-                Text(
-                    stringResource(R.string.compte_supprimer),
-                    color = if (actif) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                    },
-                )
-            }
+            BoutonDangereux(
+                texte = stringResource(R.string.compte_supprimer),
+                onClick = onConfirme,
+                enabled = !verrou || compris,
+            )
         },
         dismissButton = {
             TextButton(onClick = onAnnule) {

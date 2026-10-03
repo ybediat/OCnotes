@@ -50,6 +50,15 @@ internal val AccountProfile.syncEnabled: Boolean
 internal val AccountProfile.vierge: Boolean
     get() = kind == "server" && serverUrl.isBlank() && identityKey.isBlank()
 
+/**
+ * Ce que la suppression d'un profil détruirait, selon son cœur Go : toutes ses
+ * notes s'il est [local], sinon ses [enAttente] opérations jamais envoyées.
+ */
+data class EnjeuSuppression(
+    val local: Boolean,
+    val enAttente: Int,
+)
+
 data class AccountRegistryState(
     val active: AccountProfile,
     val accounts: List<AccountProfile>,
