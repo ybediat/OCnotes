@@ -272,6 +272,8 @@
         <item quantity="one">La copie de %d note ne correspond pas à l\'original ; elle n\'est pas comptée.</item>
         <item quantity="other">La copie de %d notes ne correspond pas à l\'original ; elles ne sont pas comptées.</item>
     </plurals>
+    <string name="browser_copier_compte_attente">%s se synchronise : la copie commencera à la fin de la passe.</string>
+    <string name="browser_copier_compte_disparu">Le compte %s n\'existe plus : rien n\'a été copié.</string>
     <plurals name="browser_lot_supprimes">
         <item quantity="one">%d élément supprimé</item>
         <item quantity="other">%d éléments supprimés</item>

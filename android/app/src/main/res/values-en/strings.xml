@@ -295,6 +295,8 @@
         <item quantity="one">The copy of %d note does not match the original; it is not counted.</item>
         <item quantity="other">The copies of %d notes do not match the originals; they are not counted.</item>
     </plurals>
+    <string name="browser_copier_compte_attente">%s is syncing: the copy will start once it finishes.</string>
+    <string name="browser_copier_compte_disparu">The account %s no longer exists: nothing was copied.</string>
     <plurals name="browser_lot_supprimes">
         <item quantity="one">%d item deleted</item>
         <item quantity="other">%d items deleted</item>

@@ -256,6 +256,8 @@
         <item quantity="one">Die Kopie von %d Notiz stimmt nicht mit dem Original überein; sie wird nicht gezählt.</item>
         <item quantity="other">Die Kopien von %d Notizen stimmen nicht mit den Originalen überein; sie werden nicht gezählt.</item>
     </plurals>
+    <string name="browser_copier_compte_attente">%s wird synchronisiert: Die Kopie beginnt, sobald der Durchlauf abgeschlossen ist.</string>
+    <string name="browser_copier_compte_disparu">Das Konto %s existiert nicht mehr: Es wurde nichts kopiert.</string>
     <plurals name="browser_lot_supprimes">
         <item quantity="one">%d Element gelöscht</item>
         <item quantity="other">%d Elemente gelöscht</item>

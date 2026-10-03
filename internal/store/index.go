@@ -238,6 +238,7 @@ func (s *Store) GoLocal() ([]string, error) {
 	s.queue = nil
 	s.indexed = true
 	s.localOnly = true
+	s.owner = ""
 	// Une bibliothèque devenue locale n'est plus soumise aux ACL du serveur
 	// qu'elle vient de quitter.
 	s.folderPermissions = map[string]string{}

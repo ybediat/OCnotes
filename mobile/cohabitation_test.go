@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -287,4 +288,115 @@ func TestCohabitationCopieEntreProfils(t *testing.T) {
 	if got := string(srv.files["Notes/"+copie.Path]); got != texte {
 		t.Errorf("serveur %s = %q, attendu %q", copie.Path, got, texte)
 	}
+}
+
+// Le serveur accepte des noms que la création refuse. La copie entre profils
+// (AppContainer.creerCopie, côté Kotlin) se replie alors sur SuggestName,
+// après un refus portant un code NAME_*. Ce test tient les deux appuis de ce
+// repli : le refus porte bien un tel code, et le nom suggéré se crée — avec
+// l'extension d'origine, puisque Kotlin passe le nom entier.
+func TestCohabitationCopieNomRefuseALaCreation(t *testing.T) {
+	local, _, serveurApp, srv, _, _ := deuxProfils(t)
+
+	for _, nom := range []string{"Réunion ? 3.md", "a|b<c>.txt", ".plan.md"} {
+		srv.mu.Lock()
+		srv.files["Notes/"+nom] = []byte("contenu de " + nom + "\n")
+		srv.mu.Unlock()
+
+		texte, err := serveurApp.ReadNote(nom)
+		if err != nil {
+			t.Fatalf("ReadNote(%q) côté serveur: %v", nom, err)
+		}
+
+		_, err = local.CreateNoteJSON("", nom, texte)
+		if err == nil {
+			t.Fatalf("CreateNoteJSON(%q) a réussi : le cas ne prouve plus rien", nom)
+		}
+		if code := ErrorCode(err.Error()); !strings.HasPrefix(code, "NAME_") {
+			t.Fatalf("refus de %q : code %q, le repli Kotlin attend NAME_*", nom, code)
+		}
+
+		suggere := local.SuggestName(nom)
+		if suggere == nom {
+			t.Fatalf("SuggestName(%q) rend le nom inchangé", nom)
+		}
+		copie := creerJSON(t, local, suggere, texte)
+		if path.Ext(copie) != path.Ext(nom) {
+			t.Errorf("copie de %q sous %q : l'extension a changé", nom, copie)
+		}
+		if relu, err := local.ReadNote(copie); err != nil || relu != texte {
+			t.Errorf("copie %s relue = %q, %v ; attendu %q", copie, relu, err, texte)
+		}
+	}
+}
+
+// Copier un .txt donne un .txt, dans les deux sens. Kotlin passe le segment
+// entier du chemin (AppContainer.copierVersCompte) ; c'est CreateNoteJSON qui
+// garde l'extension, parce qu'elle est modifiable. Retirer l'extension avant
+// l'appel, comme le faisait la première version, convertissait la note en
+// Markdown : un « # » de texte brut y devenait un titre.
+func TestCohabitationCopieGardeLeTxt(t *testing.T) {
+	local, _, serveurApp, srv, _, _ := deuxProfils(t)
+	const texte = "liste de courses\n# pas un titre\n- pas une puce\n"
+
+	srv.mu.Lock()
+	srv.files["Notes/courses.txt"] = []byte(texte)
+	srv.mu.Unlock()
+	if _, err := local.CreateNoteJSON("", "journal.txt", texte); err != nil {
+		t.Fatalf("CreateNoteJSON local: %v", err)
+	}
+
+	cas := []struct {
+		sens          string
+		source, cible *App
+		chemin        string
+	}{
+		{"serveur vers local", serveurApp, local, "courses.txt"},
+		{"local vers serveur", local, serveurApp, "journal.txt"},
+	}
+	for _, c := range cas {
+		lu, err := c.source.ReadNote(c.chemin)
+		if err != nil {
+			t.Fatalf("%s : ReadNote(%s): %v", c.sens, c.chemin, err)
+		}
+		// Deux copies : la seconde trouve le nom pris et reçoit un suffixe,
+		// qui doit lui aussi garder l'extension.
+		for _, attendu := range []string{c.chemin, strings.TrimSuffix(c.chemin, ".txt") + " (2).txt"} {
+			copie := creerJSON(t, c.cible, path.Base(c.chemin), lu)
+			if copie != attendu {
+				t.Errorf("%s : copie de %s créée sous %q, attendu %q", c.sens, c.chemin, copie, attendu)
+			}
+			if relu, err := c.cible.ReadNote(copie); err != nil || relu != texte {
+				t.Errorf("%s : %s relue = %q, %v ; attendu %q", c.sens, copie, relu, err, texte)
+			}
+		}
+	}
+
+	if res := synchroniser(t, serveurApp); res.Error != "" || res.Remaining != 0 {
+		t.Fatalf("passe serveur = %+v", res)
+	}
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	for _, chemin := range []string{"journal.txt", "journal (2).txt"} {
+		if got := string(srv.files["Notes/"+chemin]); got != texte {
+			t.Errorf("serveur %s = %q, attendu %q", chemin, got, texte)
+		}
+	}
+	if _, ok := srv.files["Notes/journal.md"]; ok {
+		t.Errorf("journal.md est arrivé sur le serveur : la copie a converti le .txt")
+	}
+}
+
+// creerJSON crée une note par la façade et rend son chemin.
+func creerJSON(t *testing.T, app *App, nom, texte string) string {
+	t.Helper()
+	raw, err := app.CreateNoteJSON("", nom, texte)
+	if err != nil {
+		t.Fatalf("CreateNoteJSON(%q): %v", nom, err)
+	}
+	var note struct {
+		Path string `json:"path"`
+	}
+	decodeJSON(t, raw, &note)
+	return note.Path
 }

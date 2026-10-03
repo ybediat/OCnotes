@@ -116,6 +116,10 @@ func NewApp(dataDir string) (*App, error) {
 	if err := alignCacheOnMode(cache, cfg); err != nil {
 		return nil, err
 	}
+	// Une installation antérieure n'a pas de propriétaire dans son cache : la
+	// configuration, tant qu'elle est intacte, le lui donne. Meilleur effort,
+	// comme dans persistConfig — le prochain démarrage réessaiera.
+	_ = recordCacheOwner(cache, cfg)
 	return &App{
 		dataDir:    dataDir,
 		cfg:        cfg,
@@ -126,10 +130,22 @@ func NewApp(dataDir string) (*App, error) {
 }
 
 func (a *App) persistConfig(next config.Config) error {
+	var err error
 	if a.saveConfig != nil {
-		return a.saveConfig(next)
+		err = a.saveConfig(next)
+	} else {
+		err = config.Save(a.dataDir, next)
 	}
-	return config.Save(a.dataDir, next)
+	if err != nil {
+		return err
+	}
+	// La configuration fait foi, le propriétaire du cache la suit. Meilleur
+	// effort : elle est déjà écrite, et la faire passer pour un échec ferait
+	// défaire à l'appelant un geste réussi. Le cache garde alors l'ancien
+	// propriétaire — le même compte, connectClient l'a vérifié — ou aucun, et
+	// NewApp le reprendra au démarrage suivant.
+	_ = recordCacheOwner(a.cache, next)
+	return nil
 }
 
 // alignCacheOnMode remet le cache d'accord avec le mode enregistré.
@@ -432,6 +448,9 @@ func (a *App) connectClient(serverURL, username, authMode string, client *opencl
 	if err := requireSameAccount(ancienne, serverURL, username, authMode, identityKey); err != nil {
 		return err
 	}
+	if err := requireCacheOwner(a.cache, serverURL, username, authMode, identityKey); err != nil {
+		return err
+	}
 
 	nouvelle := ancienne
 	nouvelle.ServerURL = serverURL
@@ -571,6 +590,72 @@ func requireSameAccount(current config.Config, serverURL, username, authMode, id
 		return errAccountMismatch()
 	}
 	return nil
+}
+
+// cacheOwner est ce que le cache retient du compte qu'il double : de quoi
+// rejouer requireSameAccount quand la configuration a été perdue. Le cache le
+// garde sans le lire.
+type cacheOwner struct {
+	ServerURL   string `json:"serverUrl"`
+	Username    string `json:"username"`
+	AuthMode    string `json:"authMode,omitempty"`
+	IdentityKey string `json:"identityKey,omitempty"`
+}
+
+// recordCacheOwner inscrit dans le cache le compte d'une configuration
+// serveur. Une configuration locale ou vide n'en désigne aucun et ne change
+// rien : le cache local oublie le sien de lui-même (store.SetLocalOnly).
+func recordCacheOwner(cache *store.Store, cfg config.Config) error {
+	if !cfg.IsConnected() {
+		return nil
+	}
+	data, err := json.Marshal(cacheOwner{
+		ServerURL:   cfg.ServerURL,
+		Username:    cfg.Username,
+		AuthMode:    cfg.AuthMode,
+		IdentityKey: cfg.IdentityKey,
+	})
+	if err != nil {
+		return err
+	}
+	return cache.SetOwner(string(data))
+}
+
+// requireCacheOwner est requireSameAccount pour une configuration perdue.
+//
+// Sans configuration, requireSameAccount laisse tout passer : il n'a rien à
+// comparer. Le cache d'un profil serveur porte pourtant encore son travail en
+// attente, et la passe suivante l'enverrait au compte qu'on vient de saisir,
+// quel qu'il soit. Son propriétaire tient lieu de configuration.
+//
+// Un cache local n'appartient à personne : ses notes montent, c'est le
+// branchement. Un cache sans propriétaire laisse passer, faute de savoir : ou
+// bien il n'a jamais été rouvert sous une configuration intacte depuis la mise
+// à jour, ou bien l'index a été perdu **en même temps** que la configuration.
+// Dans ce second cas la reconstruction remet en file chaque blob orphelin, et
+// la fuite reste possible — deux fichiers écrits atomiquement, perdus ensemble.
+// Refuser bloquerait en revanche tout profil reconstruit, même sur son compte.
+func requireCacheOwner(cache *store.Store, serverURL, username, authMode, identityKey string) error {
+	if cache.LocalOnly() {
+		return nil
+	}
+	raw := cache.Owner()
+	if raw == "" {
+		return nil
+	}
+	var owner cacheOwner
+	if err := json.Unmarshal([]byte(raw), &owner); err != nil {
+		// Illisible, il ne prouve rien dans un sens ni dans l'autre. Refuser
+		// coûte un nouveau profil ; accepter peut envoyer des notes ailleurs.
+		return errAccountMismatch()
+	}
+	return requireSameAccount(config.Config{
+		Mode:        config.ModeServer,
+		ServerURL:   owner.ServerURL,
+		Username:    owner.Username,
+		AuthMode:    owner.AuthMode,
+		IdentityKey: owner.IdentityKey,
+	}, serverURL, username, authMode, identityKey)
 }
 
 func errAccountMismatch() error {

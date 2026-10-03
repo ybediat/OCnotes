@@ -907,6 +907,7 @@ func (s *Store) Clear() error {
 	s.queue = nil
 	s.known = map[string]*Known{}
 	s.conflicts = map[string]Conflict{}
+	s.owner = ""
 	s.indexed = false
 	// Une réponse du serveur encore en route ne doit rien réécrire ici.
 	s.epoch++

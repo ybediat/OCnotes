@@ -428,6 +428,9 @@ func TestPersistanceModeLocalConfigurationPerdueEtServeurBranche(t *testing.T) {
 // déjà dans la file. Les adopter les faisait monter sur le premier compte venu
 // — celui que l'utilisateur saisit devant l'écran de connexion, qui n'est pas
 // forcément le sien, puisque la configuration ne peut plus le dire.
+//
+// Le cas d'un cache qui ne sait pas non plus à qui il appartient — index
+// reconstruit depuis les doubles — : la connexion passe, mais rien ne monte.
 func TestPersistanceConfigurationPerdueProfilServeurNeMonteRienAilleurs(t *testing.T) {
 	app, _, dataDir := prepare(t)
 	if _, err := app.CreateNoteJSON("", "privee-de-A", "contenu du compte A"); err != nil {
@@ -435,6 +438,9 @@ func TestPersistanceConfigurationPerdueProfilServeurNeMonteRienAilleurs(t *testi
 	}
 	if res := synchroniser(t, app); res.Error != "" || res.Remaining != 0 {
 		t.Fatalf("passe sur A = %+v", res)
+	}
+	if err := app.cache.SetOwner(""); err != nil {
+		t.Fatal(err)
 	}
 	if err := os.Remove(config.Path(dataDir)); err != nil {
 		t.Fatal(err)
@@ -490,5 +496,93 @@ func TestPersistanceConfigurationPerdueProfilServeurMemeCompteRienARenvoyer(t *t
 	}
 	if got := apres.PendingCount(); got != 0 {
 		t.Errorf("file après reconnexion = %d, attendu 0", got)
+	}
+}
+
+// Le travail en attente, lui, est dans la file — et ne doit partir que vers le
+// compte qui l'a produit. Sans configuration, seul le cache sait encore lequel :
+// un autre compte est refusé comme si la configuration était intacte, et le bon
+// compte retrouve tout.
+func TestPersistanceConfigurationPerdueTravailEnAttenteResteAuCompte(t *testing.T) {
+	app, server, dataDir := prepare(t)
+	server.setOffline(true)
+	if _, err := app.CreateNoteJSON("", "attente-de-A", "écrit hors connexion sur A"); err != nil {
+		t.Fatalf("CreateNoteJSON hors connexion: %v", err)
+	}
+	enAttente := app.PendingCount()
+	if enAttente == 0 {
+		t.Fatal("aucune écriture en attente : le scénario ne teste rien")
+	}
+	if err := os.Remove(config.Path(dataDir)); err != nil {
+		t.Fatal(err)
+	}
+	server.setOffline(false)
+
+	apres, err := NewApp(dataDir)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	autreServeur := newFakeServer(t)
+	err = apres.Connect(autreServeur.URL, fakeUser, fakeToken)
+	if err == nil || ErrorCode(err.Error()) != CodeAccountMismatch {
+		t.Fatalf("Connect sur un autre serveur = %v, attendu %s", err, CodeAccountMismatch)
+	}
+
+	// Même serveur, autre propriétaire : un autre compte aussi.
+	server.setOwner("55555555-5555-4555-8555-555555555555")
+	err = apres.Connect(server.URL, fakeUser, fakeToken)
+	if err == nil || ErrorCode(err.Error()) != CodeAccountMismatch {
+		t.Fatalf("Connect autre propriétaire = %v, attendu %s", err, CodeAccountMismatch)
+	}
+	if got := apres.PendingCount(); got != enAttente {
+		t.Errorf("file après les refus = %d, attendu %d", got, enAttente)
+	}
+	autreServeur.mu.Lock()
+	if _, ok := autreServeur.files["Notes/attente-de-A.md"]; ok {
+		t.Error("le travail en attente de A a atteint un autre serveur")
+	}
+	autreServeur.mu.Unlock()
+
+	server.setOwner(fakeOwnerID)
+	if err := apres.Connect(server.URL, fakeUser, fakeToken); err != nil {
+		t.Fatalf("Connect sur le compte d'origine: %v", err)
+	}
+	if err := apres.SelectWorkspace(fakeSpaceID, "Notes"); err != nil {
+		t.Fatalf("SelectWorkspace: %v", err)
+	}
+	if res := synchroniser(t, apres); res.Error != "" || res.Remaining != 0 {
+		t.Fatalf("passe sur le compte d'origine = %+v", res)
+	}
+	verifierServeur(t, server, map[string]string{"attente-de-A.md": "écrit hors connexion sur A"})
+}
+
+// Une installation antérieure n'a pas de propriétaire dans son cache. Le
+// premier démarrage avec une configuration intacte le reprend de celle-ci :
+// la protection vaut dès la première perte qui suit la mise à jour.
+func TestPersistanceProprietaireReprisDeLaConfiguration(t *testing.T) {
+	app, server, dataDir := prepare(t)
+	server.setOffline(true)
+	if _, err := app.CreateNoteJSON("", "attente", "en file"); err != nil {
+		t.Fatalf("CreateNoteJSON hors connexion: %v", err)
+	}
+	if err := app.cache.SetOwner(""); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := NewApp(dataDir); err != nil {
+		t.Fatalf("NewApp avec configuration intacte: %v", err)
+	}
+	if err := os.Remove(config.Path(dataDir)); err != nil {
+		t.Fatal(err)
+	}
+	apres, err := NewApp(dataDir)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	autreServeur := newFakeServer(t)
+	err = apres.Connect(autreServeur.URL, fakeUser, fakeToken)
+	if err == nil || ErrorCode(err.Error()) != CodeAccountMismatch {
+		t.Fatalf("Connect sur un autre serveur = %v, attendu %s", err, CodeAccountMismatch)
 	}
 }

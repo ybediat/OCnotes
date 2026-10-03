@@ -187,6 +187,12 @@ type Store struct {
 	// cache mais le stockage. Voir SetLocalOnly pour ce que cela change.
 	localOnly bool
 
+	// owner désigne le compte dont ce cache double les notes. Opaque ici :
+	// c'est la façade qui l'écrit et le compare. Il survit à la perte de la
+	// configuration, et c'est sa raison d'être — sans lui, le travail en
+	// attente partirait vers le premier compte saisi à l'écran de connexion.
+	owner string
+
 	// gen alimente Entry.gen ; epoch change à chaque purge, pour qu'aucune
 	// réponse arrivée après une déconnexion ne réécrive le cache vidé.
 	gen   uint64
@@ -207,6 +213,10 @@ type persisted struct {
 	// LocalOnly n'a pas demandé de version d'index : un champ dont la valeur
 	// nulle est le comportement d'avant ne casse aucune lecture.
 	LocalOnly bool `json:"localOnly,omitempty"`
+
+	// Owner non plus : un index qui ne le porte pas — ancien, ou reconstruit
+	// depuis les doubles — ne sait pas à qui il appartient, et le dit.
+	Owner string `json:"owner,omitempty"`
 }
 
 // Open ouvre — ou crée — un cache dans le dossier indiqué.
@@ -268,6 +278,7 @@ func Open(dir string) (*Store, error) {
 	s.indexed = state.Indexed
 	s.queue = state.Queue
 	s.localOnly = state.LocalOnly
+	s.owner = state.Owner
 	migrated := state.Version != indexVersion
 	for _, entry := range s.entries {
 		// Les index de la version 1 ne portaient pas LastAccess. LocalMod est
@@ -361,6 +372,31 @@ func (s *Store) SetLocalOnly(local bool) error {
 		return nil
 	}
 	s.localOnly = local
+	if local {
+		// Le stockage d'un profil local n'appartient à aucun compte.
+		s.owner = ""
+	}
+	return s.save()
+}
+
+// Owner renvoie le compte que ce cache double, tel que SetOwner l'a retenu ;
+// vide s'il n'en sait rien.
+func (s *Store) Owner() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.owner
+}
+
+// SetOwner retient le compte que ce cache double. L'index n'est réécrit que si
+// la valeur change : la façade l'appelle à chaque enregistrement de sa
+// configuration.
+func (s *Store) SetOwner(owner string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.owner == owner {
+		return nil
+	}
+	s.owner = owner
 	return s.save()
 }
 
@@ -626,6 +662,7 @@ func (s *Store) save() error {
 		Indexed:           s.indexed,
 		Conflicts:         s.conflicts,
 		LocalOnly:         s.localOnly,
+		Owner:             s.owner,
 	}
 	data, err := json.Marshal(state)
 	if err != nil {

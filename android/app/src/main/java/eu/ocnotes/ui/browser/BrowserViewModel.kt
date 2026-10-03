@@ -589,6 +589,8 @@ class BrowserViewModel(
         executerLot(R.plurals.browser_lot_deplaces) { repository.move(it, dossier) }
 
     /** Copie toutes les notes sélectionnées vers un même dossier. */
+    private var copieVersCompteEnCours = false
+
     fun copierLot(dossier: String) =
         executerLot(R.plurals.browser_lot_copies) { repository.copy(it, dossier) }
 
@@ -598,15 +600,31 @@ class BrowserViewModel(
      * La sélection n'est vidée que si tout est passé : un échec reste coché
      * pour une nouvelle tentative, comme pour les autres actions groupées.
      * [nomCompte] est le nom du profil cible tel qu'affiché, pour le message.
+     *
+     * La copie elle-même tourne hors de ce ViewModel (voir
+     * `AppContainer.copierVersCompte`) : quitter l'écran n'en perd que le
+     * bilan. Une seconde demande pendant la première est ignorée — la
+     * sélection reste cochée tant que la copie attend une passe de synchro, et
+     * la relancer créerait des doublons.
      */
     fun copierVersCompte(destinationId: String, dossier: String, nomCompte: String) {
         val cibles = _uiState.value.selection.toList()
-        if (cibles.isEmpty()) return
+        if (cibles.isEmpty() || copieVersCompteEnCours) return
+        copieVersCompteEnCours = true
         viewModelScope.launch {
-            val bilan = container.copierVersCompte(repository, cibles, destinationId, dossier)
+            val bilan = try {
+                container.copierVersCompte(repository, cibles, destinationId, dossier) {
+                    _evenements.value = BrowserEvent.Message(
+                        Texte.de(R.string.browser_copier_compte_attente, nomCompte),
+                    )
+                }
+            } finally {
+                copieVersCompteEnCours = false
+            }
             val fait = Texte.pluriel(R.plurals.browser_copier_compte_fait, bilan.copiees, nomCompte)
             _evenements.value = BrowserEvent.Message(
                 when {
+                    bilan.cibleDisparue -> Texte.de(R.string.browser_copier_compte_disparu, nomCompte)
                     bilan.echecs == 0 -> fait
                     bilan.copiees == 0 -> bilan.premiereErreur?.texte()
                         ?: Texte.pluriel(R.plurals.browser_copier_compte_ecart, bilan.echecs)
