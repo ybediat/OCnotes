@@ -187,6 +187,12 @@ type Store struct {
 	// cache mais le stockage. Voir SetLocalOnly pour ce que cela change.
 	localOnly bool
 
+	// owner désigne le compte dont ce cache double les notes. Opaque ici :
+	// c'est la façade qui l'écrit et le compare. Il survit à la perte de la
+	// configuration, et c'est sa raison d'être — sans lui, le travail en
+	// attente partirait vers le premier compte saisi à l'écran de connexion.
+	owner string
+
 	// gen alimente Entry.gen ; epoch change à chaque purge, pour qu'aucune
 	// réponse arrivée après une déconnexion ne réécrive le cache vidé.
 	gen   uint64
@@ -207,6 +213,10 @@ type persisted struct {
 	// LocalOnly n'a pas demandé de version d'index : un champ dont la valeur
 	// nulle est le comportement d'avant ne casse aucune lecture.
 	LocalOnly bool `json:"localOnly,omitempty"`
+
+	// Owner non plus : un index qui ne le porte pas — ancien, ou reconstruit
+	// depuis les doubles — ne sait pas à qui il appartient, et le dit.
+	Owner string `json:"owner,omitempty"`
 }
 
 // Open ouvre — ou crée — un cache dans le dossier indiqué.
@@ -268,6 +278,7 @@ func Open(dir string) (*Store, error) {
 	s.indexed = state.Indexed
 	s.queue = state.Queue
 	s.localOnly = state.LocalOnly
+	s.owner = state.Owner
 	migrated := state.Version != indexVersion
 	for _, entry := range s.entries {
 		// Les index de la version 1 ne portaient pas LastAccess. LocalMod est
@@ -361,6 +372,31 @@ func (s *Store) SetLocalOnly(local bool) error {
 		return nil
 	}
 	s.localOnly = local
+	if local {
+		// Le stockage d'un profil local n'appartient à aucun compte.
+		s.owner = ""
+	}
+	return s.save()
+}
+
+// Owner renvoie le compte que ce cache double, tel que SetOwner l'a retenu ;
+// vide s'il n'en sait rien.
+func (s *Store) Owner() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.owner
+}
+
+// SetOwner retient le compte que ce cache double. L'index n'est réécrit que si
+// la valeur change : la façade l'appelle à chaque enregistrement de sa
+// configuration.
+func (s *Store) SetOwner(owner string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.owner == owner {
+		return nil
+	}
+	s.owner = owner
 	return s.save()
 }
 
@@ -626,6 +662,7 @@ func (s *Store) save() error {
 		Indexed:           s.indexed,
 		Conflicts:         s.conflicts,
 		LocalOnly:         s.localOnly,
+		Owner:             s.owner,
 	}
 	data, err := json.Marshal(state)
 	if err != nil {
@@ -676,6 +713,31 @@ func writeAtomic(target string, data []byte) error {
 		}
 	}
 	return nil
+}
+
+// Peek renvoie le contenu en cache d'une note sans rien modifier — pas même la
+// date d'accès que Get met à jour en mémoire. C'est la lecture de l'export :
+// copier toutes les notes ne doit pas changer ce que l'éviction croit de leur
+// ancienneté, ni ce que le prochain enregistrement de l'index écrira.
+func (s *Store) Peek(notePath string) ([]byte, bool) {
+	s.mu.Lock()
+	entry, ok := s.entries[notePath]
+	var blob string
+	if ok {
+		blob = s.blobPath(entry.Cache)
+	}
+	s.mu.Unlock()
+	if !ok {
+		return nil, false
+	}
+	// La lecture du fichier se fait hors verrou : un export de centaines de
+	// notes ne doit pas geler l'éditeur. Une note supprimée entre-temps rend
+	// un fichier absent, traité comme une note absente.
+	content, err := os.ReadFile(blob)
+	if err != nil {
+		return nil, false
+	}
+	return content, true
 }
 
 // Get renvoie le contenu en cache d'une note.
@@ -812,6 +874,25 @@ func (s *Store) PutEncoded(notePath string, content []byte, encoding string) err
 		return nil
 	}
 	return s.putLocked(notePath, content, encoding, true)
+}
+
+// PutNew crée une note sous notePath, ou sous « nom (2) », « nom (3) »… si ce
+// chemin est pris, et renvoie le chemin retenu.
+//
+// Le choix du nom et l'écriture se font sous le même verrou. Choisi à part, le
+// même nom libre était vu par deux créations simultanées, et la seconde
+// écrasait la première — en mode local, la seule copie. « Pris » s'entend au
+// sens de takenLocked, dossiers compris : une note pouvait sinon naître au
+// chemin d'un dossier, et la supprimer emportait le dossier avec elle.
+func (s *Store) PutNew(notePath string, content []byte) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	candidat := notePath
+	for n := 2; s.takenLocked(candidat); n++ {
+		candidat = numberedPath(notePath, n)
+	}
+	return candidat, s.putLocked(candidat, content, "", true)
 }
 
 // EncodingOf renvoie l'encodage retenu pour ce contenu précis, et false si
@@ -1219,10 +1300,21 @@ func (s *Store) takenLocked(chemin string) bool {
 }
 
 // EnsureFolder retient un dossier et inscrit sa création en file d'attente.
+//
+// Refusé si une note occupe ce chemin ou l'un de ses parents : le serveur le
+// refuserait, et dans le cache la note et le dossier se confondraient —
+// supprimer l'un effaçait l'autre.
 func (s *Store) EnsureFolder(dir string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	for chemin := strings.Trim(dir, "/"); chemin != "." && chemin != ""; chemin = path.Dir(chemin) {
+		_, detenue := s.entries[chemin]
+		_, connue := s.known[chemin]
+		if detenue || connue {
+			return fmt.Errorf("store: [%s] une note occupe déjà %s", CodeTargetExists, chemin)
+		}
+	}
 	s.rememberFolderLocked(dir)
 	s.enqueueLocked(Operation{Kind: OpMkdir, Path: dir})
 	return s.save()

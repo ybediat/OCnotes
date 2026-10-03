@@ -1,5 +1,8 @@
 package eu.ocnotes.ui.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -36,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.pluralStringResource
 import eu.ocnotes.data.ConflictDto
 import androidx.compose.ui.res.stringResource
@@ -47,9 +52,11 @@ import eu.ocnotes.R
 import eu.ocnotes.appContainer
 import eu.ocnotes.data.PoliceInterface
 import eu.ocnotes.ui.common.Bandeau
+import eu.ocnotes.ui.common.BoutonDangereux
 import eu.ocnotes.ui.common.resoudre
 import eu.ocnotes.ui.theme.familleDePolice
 import android.text.format.Formatter
+import java.time.LocalDate
 
 private object QuotaCache {
     const val MO_50 = 50L * 1024 * 1024
@@ -65,6 +72,7 @@ fun SettingsScreen(
     onRetour: () -> Unit,
     onDeconnecte: () -> Unit,
     onConnecterServeur: () -> Unit,
+    onAjouterCompteServeur: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModel.factory(LocalContext.current.appContainer),
@@ -73,11 +81,47 @@ fun SettingsScreen(
     val etat by viewModel.uiState.collectAsStateWithLifecycle()
     var confirmation by remember { mutableStateOf(false) }
     var choixQuota by remember { mutableStateOf(false) }
+    var choixConnexion by remember { mutableStateOf(false) }
     var choixPolice by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
+    // Aucune permission de stockage : le sélecteur de documents donne l'accès à
+    // l'emplacement choisi, et à lui seul. Un retour nul est une annulation.
+    val choisirArchive = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip"),
+    ) { uri -> uri?.let(viewModel::exporterArchive) }
+
     LaunchedEffect(etat.deconnecte) {
         if (etat.deconnecte) onDeconnecte()
+    }
+
+    if (choixConnexion) {
+        AlertDialog(
+            onDismissRequest = { choixConnexion = false },
+            title = { Text(stringResource(R.string.reglages_local_connecter_titre)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.reglages_local_connecter_cote_explication))
+                    Text(stringResource(R.string.reglages_local_connecter_convertir_explication))
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    choixConnexion = false
+                    onAjouterCompteServeur()
+                }) {
+                    Text(stringResource(R.string.reglages_local_connecter_cote))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    choixConnexion = false
+                    onConnecterServeur()
+                }) {
+                    Text(stringResource(R.string.reglages_local_connecter_convertir))
+                }
+            },
+        )
     }
 
     Scaffold(
@@ -118,7 +162,7 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Button(onClick = onConnecterServeur, modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { choixConnexion = true }, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.reglages_local_connecter))
                 }
             } else {
@@ -312,6 +356,32 @@ fun SettingsScreen(
             ) {
                 Text(stringResource(R.string.reglages_cache_modifier_quota))
             }
+            if (etat.modeLocal) {
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Text(
+                    text = stringResource(R.string.reglages_export_titre),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    text = stringResource(R.string.reglages_export_explication),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(
+                    // Date ISO : aucun texte à traduire dans le nom proposé.
+                    onClick = { choisirArchive.launch("OCnotes-${LocalDate.now()}.zip") }, // i18n-ok
+                    enabled = !etat.exportEnCours,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (etat.exportEnCours) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                    Text(stringResource(R.string.reglages_export_bouton))
+                }
+            }
             if (!etat.modeLocal) {
                 OutlinedButton(
                     onClick = viewModel::libererEspace,
@@ -358,21 +428,17 @@ fun SettingsScreen(
                 )
             }
 
-            OutlinedButton(
+            BoutonDangereux(
+                texte = stringResource(
+                    if (etat.modeLocal) {
+                        R.string.reglages_local_effacer
+                    } else {
+                        R.string.reglages_deconnexion
+                    },
+                ),
                 onClick = { confirmation = true },
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    text = stringResource(
-                        if (etat.modeLocal) {
-                            R.string.reglages_local_effacer
-                        } else {
-                            R.string.reglages_deconnexion
-                        },
-                    ),
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
+            )
 
             Text(
                 text = stringResource(
@@ -418,6 +484,14 @@ fun SettingsScreen(
     }
 
     if (confirmation) {
+        // Des modifications jamais envoyées : la déconnexion est ici le seul
+        // geste qui détruise du travail. Elle exige un acquiescement explicite,
+        // et la sortie sûre — synchroniser — est offerte dans le même dialogue.
+        val perte = !etat.modeLocal && etat.enAttente > 0
+        // En mode local, toute la bibliothèque est l'enjeu : ces notes n'ont de
+        // copie nulle part. Même verrou, même case.
+        val verrou = perte || etat.modeLocal
+        var compris by remember { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { confirmation = false },
             title = {
@@ -425,6 +499,8 @@ fun SettingsScreen(
                     stringResource(
                         if (etat.modeLocal) {
                             R.string.reglages_local_effacer_titre
+                        } else if (perte) {
+                            R.string.reglages_deconnexion_perte_titre
                         } else {
                             R.string.reglages_deconnexion_titre
                         },
@@ -432,38 +508,77 @@ fun SettingsScreen(
                 )
             },
             text = {
-                Text(
-                    if (etat.modeLocal) {
-                        stringResource(R.string.reglages_local_effacer_confirmation)
-                    } else if (etat.enAttente > 0) {
-                        pluralStringResource(
-                            R.plurals.reglages_deconnexion_attente,
-                            etat.enAttente,
-                            etat.enAttente,
-                        )
-                    } else {
-                        stringResource(R.string.reglages_deconnexion_confirmation)
-                    },
-                )
+                if (verrou) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (perte) {
+                            Text(
+                                pluralStringResource(
+                                    R.plurals.reglages_deconnexion_attente,
+                                    etat.enAttente,
+                                    etat.enAttente,
+                                ),
+                            )
+                            OutlinedButton(
+                                onClick = {
+                                    confirmation = false
+                                    viewModel.synchroniser()
+                                },
+                                enabled = !etat.syncEnCours,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(stringResource(R.string.reglages_sync_maintenant))
+                            }
+                        } else {
+                            Text(stringResource(R.string.reglages_local_effacer_confirmation))
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.toggleable(
+                                value = compris,
+                                role = Role.Checkbox,
+                                onValueChange = { compris = it },
+                            ),
+                        ) {
+                            Checkbox(checked = compris, onCheckedChange = null)
+                            Text(
+                                text = stringResource(
+                                    if (perte) {
+                                        R.string.reglages_deconnexion_perte_case
+                                    } else {
+                                        R.string.reglages_local_effacer_case
+                                    },
+                                ),
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        if (etat.modeLocal) {
+                            stringResource(R.string.reglages_local_effacer_confirmation)
+                        } else {
+                            stringResource(R.string.reglages_deconnexion_confirmation)
+                        },
+                    )
+                }
             },
             confirmButton = {
-                TextButton(
+                BoutonDangereux(
+                    texte = stringResource(
+                        if (etat.modeLocal) {
+                            R.string.reglages_local_effacer
+                        } else if (perte) {
+                            R.string.reglages_deconnexion_perte_confirmer
+                        } else {
+                            R.string.reglages_deconnexion
+                        },
+                    ),
                     onClick = {
                         confirmation = false
                         viewModel.deconnecter()
                     },
-                ) {
-                    Text(
-                        text = stringResource(
-                            if (etat.modeLocal) {
-                                R.string.reglages_local_effacer
-                            } else {
-                                R.string.reglages_deconnexion
-                            },
-                        ),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
+                    enabled = !verrou || compris,
+                )
             },
             dismissButton = {
                 TextButton(onClick = { confirmation = false }) {

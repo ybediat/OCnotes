@@ -85,6 +85,7 @@
     <string name="err_modifications_attente">Vor dem Trennen des Servers müssen noch Änderungen synchronisiert werden.</string>
     <string name="err_compte_different">Dieses Konto entspricht nicht dem ausgewählten Profil. Wählen Sie das andere Konto im Menü aus oder fügen Sie es hinzu.</string>
     <string name="err_session_changee">Die Sitzung hat sich während der Verbindung geändert. Versuchen Sie es erneut.</string>
+    <string name="err_export_mode_local">Der Export in ein Archiv gilt nur für den lokalen Speicher. Bei einem Serverkonto liegen Ihre Notizen auf dem Server.</string>
 
     <!-- ================================================================
          Start
@@ -245,6 +246,18 @@
         <item quantity="one">%d Element kopiert</item>
         <item quantity="other">%d Elemente kopiert</item>
     </plurals>
+    <string name="browser_copier_compte_titre">In ein anderes Konto kopieren</string>
+    <string name="browser_copier_compte_aucun">Kein anderes Konto kann Notizen aufnehmen: Es braucht ein lokales Konto oder einen Server mit gewähltem Bereich.</string>
+    <plurals name="browser_copier_compte_fait">
+        <item quantity="one">%1$d Notiz nach %2$s kopiert</item>
+        <item quantity="other">%1$d Notizen nach %2$s kopiert</item>
+    </plurals>
+    <plurals name="browser_copier_compte_ecart">
+        <item quantity="one">Die Kopie von %d Notiz stimmt nicht mit dem Original überein; sie wird nicht gezählt.</item>
+        <item quantity="other">Die Kopien von %d Notizen stimmen nicht mit den Originalen überein; sie werden nicht gezählt.</item>
+    </plurals>
+    <string name="browser_copier_compte_attente">%s wird synchronisiert: Die Kopie beginnt, sobald der Durchlauf abgeschlossen ist.</string>
+    <string name="browser_copier_compte_disparu">Das Konto %s existiert nicht mehr: Es wurde nichts kopiert.</string>
     <plurals name="browser_lot_supprimes">
         <item quantity="one">%d Element gelöscht</item>
         <item quantity="other">%d Elemente gelöscht</item>
@@ -274,10 +287,20 @@
     <string name="compte_local">Lokale Notizen</string>
     <string name="compte_nouveau">Neues Konto</string>
     <string name="compte_ajouter">Konto hinzufügen</string>
+    <string name="compte_renommer">Dieses lokale Konto umbenennen</string>
+    <string name="compte_nom_label">Name</string>
     <string name="compte_geste_echec">Der Vorgang für das Konto ist fehlgeschlagen. Versuchen Sie es erneut.</string>
+    <string name="compte_deja_present">Dieses Konto ist auf diesem Gerät bereits hinzugefügt. Das vorhandene Profil wurde geöffnet; melden Sie sich dort erneut an, falls die Sitzung abgelaufen ist.</string>
+    <string name="conversion_compte_deja_present">Dieses Konto ist bereits in einem anderen Profil auf diesem Gerät geöffnet. Ihre lokalen Notizen wurden nicht verändert. Um sie dorthin zu senden, verwenden Sie „In ein anderes Konto kopieren“ in der Notizliste.</string>
     <string name="compte_supprimer">Konto entfernen</string>
     <string name="compte_supprimer_titre">Dieses Konto entfernen?</string>
     <string name="compte_supprimer_message">Das Konto %1$s, sein Cache und alle nicht synchronisierten lokalen Änderungen werden von diesem Gerät gelöscht. Dies kann nicht rückgängig gemacht werden.</string>
+    <string name="compte_supprimer_perte_titre">Notizen gehen verloren</string>
+    <string name="compte_supprimer_local_message">Die Notizen dieses lokalen Kontos existieren nirgendwo sonst: weder auf einem Server noch auf einem anderen Gerät. Das Entfernen löscht sie endgültig. Dies kann nicht rückgängig gemacht werden.</string>
+    <plurals name="compte_supprimer_attente_message">
+        <item quantity="one">Das Konto %1$s hat %2$d lokale Änderung, die noch nicht an den Server gesendet wurde. Das Entfernen des Kontos verliert sie endgültig. Öffnen Sie das Konto und synchronisieren Sie zuerst.</item>
+        <item quantity="other">Das Konto %1$s hat %2$d lokale Änderungen, die noch nicht an den Server gesendet wurden. Das Entfernen des Kontos verliert sie endgültig. Öffnen Sie das Konto und synchronisieren Sie zuerst.</item>
+    </plurals>
     <string name="menu_mode_arborescence">Nach Ordnern</string>
     <string name="menu_mode_liste">Alle Notizen</string>
 
@@ -400,10 +423,18 @@
     <string name="reglages_deconnexion">Abmelden</string>
     <string name="reglages_deconnexion_explication">Das Abmelden löscht das Token, die Konfiguration und den lokalen Cache dieses Geräts. Die Notizen bleiben auf dem Server.</string>
     <string name="reglages_deconnexion_titre">Abmelden?</string>
+    <string name="reglages_deconnexion_perte_titre">Änderungen gehen verloren</string>
+    <string name="reglages_deconnexion_perte_case">Ich verstehe, dass diese Änderungen endgültig verloren gehen</string>
+    <string name="reglages_deconnexion_perte_confirmer">Abmelden und verlieren</string>
     <string name="reglages_deconnexion_confirmation">Das Token, die Konfiguration und der lokale Cache werden gelöscht. Ihre Notizen bleiben auf dem Server.</string>
     <string name="reglages_local_titre">Lokaler Speicher</string>
     <string name="reglages_local_explication">Alle Notizen befinden sich ausschließlich auf diesem Gerät. Es findet keine Synchronisierung statt.</string>
     <string name="reglages_local_connecter">Server verbinden</string>
+    <string name="reglages_local_connecter_titre">Server verbinden</string>
+    <string name="reglages_local_connecter_cote">Konto daneben hinzufügen</string>
+    <string name="reglages_local_connecter_cote_explication">Ihre lokalen Notizen bleiben unverändert in ihrem eigenen Konto. Der Server wird in einem neuen Konto geöffnet.</string>
+    <string name="reglages_local_connecter_convertir">Dieses Konto umwandeln</string>
+    <string name="reglages_local_connecter_convertir_explication">Dieses Konto wird zu einem Serverkonto; Sie wählen, ob die lokalen Notizen hochgeladen oder gelöscht werden.</string>
     <string name="reglages_local_utiliser">Nur dieses Gerät verwenden</string>
     <string name="reglages_local_utiliser_explication">Auf dem Gerät fehlende Notizen werden zuerst heruntergeladen. Kopien auf dem Server werden nicht gelöscht.</string>
     <string name="reglages_local_plan_titre">In den lokalen Modus wechseln?</string>
@@ -433,8 +464,26 @@
     </plurals>
     <string name="reglages_local_effacer">Alle Notizen löschen</string>
     <string name="reglages_local_effacer_explication">Setzt die App zurück. Im lokalen Modus gibt es diese Notizen nirgendwo sonst.</string>
+    <string name="reglages_export_titre">Notizen exportieren</string>
+    <string name="reglages_export_bouton">Als ZIP-Archiv exportieren</string>
+    <string name="reglages_export_explication">Erstellt ein Archiv aller Ihrer Notizen mit ihren Ordnern, das jeder Computer öffnen kann. Namen, die Windows nicht zulässt, werden korrigiert und in _renommages.txt aufgeführt.</string>
+    <string name="reglages_export_espace">Auf dem Gerät ist nicht genug Platz, um das Archiv vorzubereiten. Geben Sie Speicher frei und versuchen Sie es erneut.</string>
+    <string name="reglages_export_copie">Das Archiv konnte nicht am gewählten Ort geschrieben werden. Es wurde nichts behalten.</string>
+    <plurals name="reglages_export_notes">
+        <item quantity="one">%d Notiz exportiert</item>
+        <item quantity="other">%d Notizen exportiert</item>
+    </plurals>
+    <plurals name="reglages_export_ignorees">
+        <item quantity="one">%d unlesbare Notiz übersprungen</item>
+        <item quantity="other">%d unlesbare Notizen übersprungen</item>
+    </plurals>
+    <plurals name="reglages_export_renommes">
+        <item quantity="one">%d Name geändert (siehe _renommages.txt)</item>
+        <item quantity="other">%d Namen geändert (siehe _renommages.txt)</item>
+    </plurals>
     <string name="reglages_local_effacer_titre">Alle Notizen endgültig löschen?</string>
     <string name="reglages_local_effacer_confirmation">Alle Notizen und Ordner auf diesem Gerät werden endgültig gelöscht. Dies kann nicht rückgängig gemacht werden.</string>
+    <string name="reglages_local_effacer_case">Ich verstehe, dass alle meine Notizen endgültig gelöscht werden</string>
     <!-- Nicht gesendete Änderungen würden verloren gehen: Dies ist die einzige Warnung auf dem Bildschirm,
          die angibt, was auf dem Spiel steht. -->
     <plurals name="reglages_deconnexion_attente">

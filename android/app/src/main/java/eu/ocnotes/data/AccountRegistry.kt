@@ -35,9 +35,29 @@ data class AccountProfile(
     val displayName: String = "",
 )
 
+/** Longueur maximale du nom d'un profil local. */
+const val MAX_NOM_LOCAL = 40
+
 /** Un profil ne doit réveiller WorkManager que s'il désigne un serveur utilisable. */
 internal val AccountProfile.syncEnabled: Boolean
     get() = kind == "server" && serverUrl.isNotBlank()
+
+/**
+ * Profil qu'aucune connexion n'a rempli : tout juste ajouté, ou vidé par une
+ * déconnexion. Seul un tel profil peut être retiré sans que l'utilisateur l'ait
+ * demandé — un profil local porte la seule copie de ses notes.
+ */
+internal val AccountProfile.vierge: Boolean
+    get() = kind == "server" && serverUrl.isBlank() && identityKey.isBlank()
+
+/**
+ * Ce que la suppression d'un profil détruirait, selon son cœur Go : toutes ses
+ * notes s'il est [local], sinon ses [enAttente] opérations jamais envoyées.
+ */
+data class EnjeuSuppression(
+    val local: Boolean,
+    val enAttente: Int,
+)
 
 data class AccountRegistryState(
     val active: AccountProfile,
@@ -116,6 +136,17 @@ class AccountRegistry(private val filesDir: File) {
             }
         }
 
+    /**
+     * Autre profil déjà connecté à la même identité, ou `null`.
+     *
+     * Une clé vide ne désigne personne : un profil vierge, local ou déconnecté
+     * n'a pas d'identité à comparer. La clé est opaque, on ne fait que
+     * l'égaler.
+     */
+    fun profilDeMemeIdentite(identityKey: String, sauf: String): AccountProfile? =
+        if (identityKey.isBlank()) null
+        else accounts.firstOrNull { it.id != sauf && it.identityKey == identityKey }
+
     suspend fun recordLocal(accountId: String) = withContext(Dispatchers.IO) {
         updateAccount(accountId) {
             it.copy(
@@ -124,8 +155,22 @@ class AccountRegistry(private val filesDir: File) {
                 username = "",
                 authMode = "",
                 identityKey = "",
-                displayName = "",
+                // Appelé à chaque démarrage local : le nom choisi par
+                // l'utilisateur ne doit pas s'y perdre. Un profil qui
+                // devient local (débranchement) repart sans nom.
+                displayName = if (it.kind == KIND_LOCAL) it.displayName else "",
             )
+        }
+    }
+
+    /**
+     * Nomme un profil local. Libellé Android pur, jamais transmis au cœur Go ;
+     * vide, le tiroir retombe sur « Notes locales ». Sans effet sur un profil
+     * serveur, dont le nom vient de la session.
+     */
+    suspend fun renommerLocal(accountId: String, nom: String) = withContext(Dispatchers.IO) {
+        updateAccount(accountId) {
+            if (it.kind == KIND_LOCAL) it.copy(displayName = nom.trim().take(MAX_NOM_LOCAL)) else it
         }
     }
 

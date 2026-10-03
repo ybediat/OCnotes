@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OCnotes, Markdown notes for Android</title>
+<meta name="description" content="OCnotes is an Android Markdown notes app that works locally or syncs with your OpenCloud or ownCloud Infinite Scale server. Open source, MIT license.">
+<meta name="color-scheme" content="light dark">
+<meta property="og:title" content="OCnotes, Markdown notes for Android">
+<meta property="og:description" content="Markdown notes on Android, local or synced with OpenCloud or ownCloud Infinite Scale.">
+<meta property="og:type" content="website">
+<link rel="canonical" href="https://ocnotes.fr/en/">
+<link rel="icon" type="image/png" href="../assets/favicon.png">
+<link rel="preload" href="../assets/lexend-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/faune-display-black.woff2" as="font" type="font/woff2" crossorigin>
+
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="alternate" hreflang="fr" href="https://ocnotes.fr/">
+<link rel="alternate" hreflang="en" href="https://ocnotes.fr/en/">
+<link rel="alternate" hreflang="x-default" href="https://ocnotes.fr/en/">
+</head>
+
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="../assets/icon.webp" alt="" width="32" height="32"><span class="wordmark">OCnotes</span></a>
+    <nav class="nav-links" aria-label="Main navigation">
+      <a href="#usages">Usage</a>
+      <a href="#features">Features</a>
+      <a href="https://github.com/ybediat/OCnotes">GitHub</a>
+      <span class="lang" role="group" aria-label="Language">
+        <a href="../" hreflang="fr" lang="fr" data-lang="fr">FR</a>
+        <a href="./" hreflang="en" lang="en" data-lang="en" aria-current="true">EN</a>
+      </span>
+      <a class="btn btn-primary" href="#download">Download</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ===== Hero ===== -->
+  <section class="hero">
+    <div class="wrap">
+      <div>
+        <h1>Your Markdown notes, on Android.</h1>
+        <p class="lead">A light, open source notebook. Keep everything on your phone, or sync with your OpenCloud or ownCloud Infinite Scale server.</p>
+        <div class="cta">
+          <a class="btn btn-primary" href="#download">
+            <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224 144v64a8 8 0 0 1-8 8H40a8 8 0 0 1-8-8v-64a8 8 0 0 1 16 0v56h160v-56a8 8 0 0 1 16 0Zm-101.66 5.66a8 8 0 0 0 11.32 0l40-40a8 8 0 0 0-11.32-11.32L136 124.69V32a8 8 0 0 0-16 0v92.69l-26.34-26.35a8 8 0 0 0-11.32 11.32Z"/></svg>
+            Download
+          </a>
+          <a class="btn btn-ghost" href="https://github.com/ybediat/OCnotes">View on GitHub</a>
+        </div>
+      </div>
+
+      <div class="phones">
+        <img class="phone p1" src="../assets/liste-notes.webp" width="560" height="1234" alt="OCnotes: the list of folders and notes, with search and a New note button">
+        <img class="phone p2" src="../assets/editeur.webp" width="560" height="1234" alt="OCnotes: the Markdown editor, with its formatting bar above the keyboard">
+        <img class="phone p3" src="../assets/apercu.webp" width="560" height="1234" alt="OCnotes: an .odt document opened read-only">
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Deux usages ===== -->
+  <section class="modes" id="usages">
+    <div class="wrap reveal">
+      <h2>With or without a server.</h2>
+      <p>You choose on first launch, and you can change your mind later in the settings.</p>
+      <div class="modes-grid">
+        <div>
+          <h3>Local mode</h3>
+          <p>No account, no server. Your notes stay on the device and can be sent to a server whenever you decide.</p>
+        </div>
+        <div>
+          <h3>Synced mode</h3>
+          <p>Your notes are plain .md files in your OpenCloud or ownCloud Infinite Scale space. Read them from the browser or any other client.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Fonctionnalités ===== -->
+  <section id="features" style="padding-top: 1rem;">
+    <div class="wrap">
+      <h2 class="reveal">Made for writing, not for tending the tool.</h2>
+      <div class="features-grid">
+
+        <article class="tile tile-big reveal">
+          <div class="text">
+            <h3>A complete Markdown editor</h3>
+            <p>Create and edit .md and .txt files, read .docx and .odt documents. Markdown formatting bar, rendered preview in one tap.</p>
+          </div>
+          <img src="../assets/editeur.webp" loading="lazy" width="560" height="1234" alt="The OCnotes Markdown editor with a long text">
+        </article>
+
+        <article class="tile reveal">
+          <h3>Offline first</h3>
+          <p>The app works without a network; notes sync as soon as it comes back.</p>
+        </article>
+
+        <article class="tile reveal">
+          <h3>Organized your way</h3>
+          <p>Browse by folder or by date. Interface in French, English, Spanish and German.</p>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Téléchargement ===== -->
+  <section class="download" id="download">
+    <div class="wrap">
+      <div class="reveal">
+        <h2>Install OCnotes</h2>
+        <p class="muted">The signed APK is published on GitHub, with its SHA-256 fingerprint to verify the file.</p>
+        <a class="btn btn-primary" id="dl-btn" href="https://github.com/ybediat/OCnotes/releases/latest" data-apk>
+          <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224 144v64a8 8 0 0 1-8 8H40a8 8 0 0 1-8-8v-64a8 8 0 0 1 16 0v56h160v-56a8 8 0 0 1 16 0Zm-101.66 5.66a8 8 0 0 0 11.32 0l40-40a8 8 0 0 0-11.32-11.32L136 124.69V32a8 8 0 0 0-16 0v92.69l-26.34-26.35a8 8 0 0 0-11.32 11.32Z"/></svg>
+          <span id="dl-label">Download the APK</span>
+        </a>
+        <p class="dl-meta" id="dl-meta">Latest version on GitHub. Android 8.0 or newer.</p>
+        <p class="dl-meta"><a href="https://github.com/ybediat/OCnotes/releases">All versions</a></p>
+      </div>
+
+      <div class="reveal">
+        <ol class="steps">
+          <li><strong>Download the file</strong><span>With the button, on your phone or on a computer.</span></li>
+          <li><strong>Allow the installation</strong><span>Android asks you to let your browser or file manager install apps.</span></li>
+          <li><strong>Open OCnotes</strong><span>Continue without a server, or enter your server address (OpenCloud or ownCloud Infinite Scale), your username and an App Token.</span></li>
+        </ol>
+        <p class="note">OCnotes is in beta.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span><span class="wordmark">OCnotes</span>, MIT license. <a href="https://www.cnap.fr/sites/faune/">Faune</a> (CNAP).</span>
+    <nav aria-label="Links">
+      <a href="https://github.com/ybediat/OCnotes">Source code on GitHub</a>
+      <a href="https://github.com/ybediat/OCnotes/issues">Report an issue</a>
+      <a href="https://opencloud.eu">OpenCloud</a>
+      <a href="https://owncloud.dev/ocis/">ownCloud Infinite Scale</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="../assets/site.js" defer></script>
+</body>
+</html>

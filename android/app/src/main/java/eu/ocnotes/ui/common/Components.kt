@@ -1,5 +1,6 @@
 package eu.ocnotes.ui.common
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,9 +14,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +37,41 @@ import eu.ocnotes.R
 fun ChargementPleinEcran(modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator()
+    }
+}
+
+/**
+ * Bouton d'un geste qui détruit des données : bordure et texte rouges.
+ *
+ * Le signal est porté par la bordure, pas seulement par le texte. Le réglage
+ * d'accessibilité « Texte à contraste élevé » redessine tout texte en noir ou
+ * en blanc pur : un bouton rouge par son seul texte y devenait un bouton comme
+ * les autres, et son état désactivé ne se voyait plus. Les traits n'en sont pas
+ * touchés — la bordure reste rouge, et passe au gris pâle quand le geste est
+ * verrouillé.
+ */
+@Composable
+fun BoutonDangereux(
+    texte: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier,
+        border = BorderStroke(
+            1.dp,
+            if (enabled) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+            },
+        ),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+    ) {
+        Text(texte)
     }
 }
 

@@ -2,9 +2,11 @@ package mobile
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ybediat/OpenNote/internal/config"
@@ -429,6 +431,84 @@ func TestModeLocalRefuseDEcraserUneCible(t *testing.T) {
 		if got, err := app.ReadNote(chemin); err != nil || got != attendu {
 			t.Errorf("%s = %q, %v ; attendu %q", chemin, got, err, attendu)
 		}
+	}
+}
+
+// Une note et un dossier ne partagent jamais un chemin. Le nom « Projet.md »
+// est un nom de dossier valide : la note « Projet » naissait à son chemin, et
+// supprimer cette note emportait tout le dossier, sans copie nulle part.
+func TestModeLocalNoteNeNaitPasSurUnDossier(t *testing.T) {
+	app, _ := prepareLocal(t)
+	if _, err := app.CreateFolderJSON("", "Projet.md"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.CreateNoteJSON("Projet.md", "enfant", "contenu du dossier"); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := app.CreateNoteJSON("", "Projet", "note homonyme")
+	if err != nil {
+		t.Fatalf("CreateNoteJSON: %v", err)
+	}
+	var note noteRef
+	decodeJSON(t, raw, &note)
+	if note.Path != "Projet (2).md" {
+		t.Errorf("note créée sous %q, attendu « Projet (2).md »", note.Path)
+	}
+	if err := app.Delete(note.Path); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if got, err := app.ReadNote("Projet.md/enfant.md"); err != nil || got != "contenu du dossier" {
+		t.Errorf("le dossier homonyme a perdu sa note : %q, %v", got, err)
+	}
+}
+
+// Le sens inverse : un dossier ne naît pas sur une note. Le supprimer
+// effaçait la note qui portait le même chemin.
+func TestModeLocalDossierNeNaitPasSurUneNote(t *testing.T) {
+	app, _ := prepareLocal(t)
+	if _, err := app.CreateNoteJSON("", "a", "contenu précieux"); err != nil {
+		t.Fatal(err)
+	}
+	for _, geste := range []struct{ dir, name string }{{"", "a.md"}, {"a.md", "sous"}} {
+		_, err := app.CreateFolderJSON(geste.dir, geste.name)
+		if err == nil || ErrorCode(err.Error()) != store.CodeTargetExists {
+			t.Errorf("dossier %q dans %q : erreur = %v, attendu %s", geste.name, geste.dir, err, store.CodeTargetExists)
+		}
+	}
+	if got, err := app.ReadNote("a.md"); err != nil || got != "contenu précieux" {
+		t.Errorf("a.md = %q, %v", got, err)
+	}
+}
+
+// Deux créations simultanées sous le même nom donnent deux notes. Le nom libre
+// était choisi hors du verrou du cache : les deux le voyaient libre, et la
+// seconde écriture remplaçait la première.
+func TestModeLocalCreationsSimultaneesNeSEcrasentPas(t *testing.T) {
+	app, _ := prepareLocal(t)
+	const n = 30
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			if _, err := app.CreateNoteJSON("", "Sans titre", fmt.Sprintf("contenu %d", i)); err != nil {
+				t.Error(err)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	contenus := map[string]bool{}
+	for _, entry := range app.cache.Entries() {
+		got, err := app.ReadNote(entry.Path)
+		if err != nil {
+			t.Fatalf("ReadNote(%s): %v", entry.Path, err)
+		}
+		contenus[got] = true
+	}
+	if len(contenus) != n {
+		t.Errorf("%d créations, %d contenus distincts retrouvés", n, len(contenus))
 	}
 }
 

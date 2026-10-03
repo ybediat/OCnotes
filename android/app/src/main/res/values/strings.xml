@@ -96,6 +96,7 @@
     <string name="err_modifications_attente">Des modifications doivent encore être synchronisées avant de déconnecter le serveur.</string>
     <string name="err_compte_different">Ce compte ne correspond pas au profil sélectionné. Sélectionnez l\'autre compte dans le menu ou ajoutez-le.</string>
     <string name="err_session_changee">La session a changé pendant la connexion. Réessayez.</string>
+    <string name="err_export_mode_local">L\'export en archive ne sert qu\'au stockage local. Avec un compte serveur, vos notes sont sur le serveur.</string>
 
     <!-- ================================================================
          Démarrage
@@ -261,6 +262,18 @@
         <item quantity="one">%d élément copié</item>
         <item quantity="other">%d éléments copiés</item>
     </plurals>
+    <string name="browser_copier_compte_titre">Copier vers un autre compte</string>
+    <string name="browser_copier_compte_aucun">Aucun autre compte ne peut recevoir de note : il faut un compte local, ou un serveur dont l\'espace est choisi.</string>
+    <plurals name="browser_copier_compte_fait">
+        <item quantity="one">%1$d note copiée vers %2$s</item>
+        <item quantity="other">%1$d notes copiées vers %2$s</item>
+    </plurals>
+    <plurals name="browser_copier_compte_ecart">
+        <item quantity="one">La copie de %d note ne correspond pas à l\'original ; elle n\'est pas comptée.</item>
+        <item quantity="other">La copie de %d notes ne correspond pas à l\'original ; elles ne sont pas comptées.</item>
+    </plurals>
+    <string name="browser_copier_compte_attente">%s se synchronise : la copie commencera à la fin de la passe.</string>
+    <string name="browser_copier_compte_disparu">Le compte %s n\'existe plus : rien n\'a été copié.</string>
     <plurals name="browser_lot_supprimes">
         <item quantity="one">%d élément supprimé</item>
         <item quantity="other">%d éléments supprimés</item>
@@ -290,10 +303,20 @@
     <string name="compte_local">Notes locales</string>
     <string name="compte_nouveau">Nouveau compte</string>
     <string name="compte_ajouter">Ajouter un compte</string>
+    <string name="compte_renommer">Renommer ce compte local</string>
+    <string name="compte_nom_label">Nom</string>
     <string name="compte_geste_echec">L\'opération sur le compte a échoué. Réessayez.</string>
+    <string name="compte_deja_present">Ce compte est déjà ajouté sur cet appareil. Le profil existant est ouvert ; reconnectez-vous depuis celui-ci si sa session a expiré.</string>
+    <string name="conversion_compte_deja_present">Ce compte est déjà ouvert dans un autre profil de cet appareil. Vos notes locales n\'ont pas été touchées. Pour les y envoyer, utilisez « Copier vers un autre compte » dans la liste des notes.</string>
     <string name="compte_supprimer">Supprimer le compte</string>
     <string name="compte_supprimer_titre">Supprimer ce compte ?</string>
     <string name="compte_supprimer_message">Le compte %1$s, son cache et ses modifications locales non synchronisées seront supprimés de cet appareil. Cette action est irréversible.</string>
+    <string name="compte_supprimer_perte_titre">Des notes seront perdues</string>
+    <string name="compte_supprimer_local_message">Les notes de ce compte local n\'existent nulle part ailleurs : ni sur un serveur, ni sur un autre appareil. Les supprimer les efface définitivement. Cette action est irréversible.</string>
+    <plurals name="compte_supprimer_attente_message">
+        <item quantity="one">Le compte %1$s a %2$d modification locale qui n\'a pas encore été envoyée au serveur. La supprimer la perd définitivement. Ouvrez ce compte et synchronisez d\'abord.</item>
+        <item quantity="other">Le compte %1$s a %2$d modifications locales qui n\'ont pas encore été envoyées au serveur. Les supprimer les perd définitivement. Ouvrez ce compte et synchronisez d\'abord.</item>
+    </plurals>
     <string name="menu_mode_arborescence">Par dossiers</string>
     <string name="menu_mode_liste">Toutes les notes</string>
 
@@ -427,10 +450,18 @@
     <string name="reglages_deconnexion">Se déconnecter</string>
     <string name="reglages_deconnexion_explication">La déconnexion efface le token, la configuration et le cache local de cet appareil. Les notes restent sur le serveur.</string>
     <string name="reglages_deconnexion_titre">Se déconnecter ?</string>
+    <string name="reglages_deconnexion_perte_titre">Des modifications seront perdues</string>
+    <string name="reglages_deconnexion_perte_case">Je comprends que ces modifications seront définitivement perdues</string>
+    <string name="reglages_deconnexion_perte_confirmer">Se déconnecter et les perdre</string>
     <string name="reglages_deconnexion_confirmation">Le token, la configuration et le cache local seront effacés. Vos notes restent sur le serveur.</string>
     <string name="reglages_local_titre">Stockage local</string>
     <string name="reglages_local_explication">Toutes les notes vivent uniquement sur cet appareil. Aucune synchronisation n\'est effectuée.</string>
     <string name="reglages_local_connecter">Connecter un serveur</string>
+    <string name="reglages_local_connecter_titre">Connecter un serveur</string>
+    <string name="reglages_local_connecter_cote">Ajouter un compte à côté</string>
+    <string name="reglages_local_connecter_cote_explication">Vos notes locales restent telles quelles, dans leur propre compte. Le serveur s\'ouvre dans un nouveau compte.</string>
+    <string name="reglages_local_connecter_convertir">Convertir ce compte</string>
+    <string name="reglages_local_connecter_convertir_explication">Ce compte devient un compte serveur ; vous choisirez d\'envoyer vos notes locales ou de les supprimer.</string>
     <string name="reglages_local_utiliser">Utiliser uniquement cet appareil</string>
     <string name="reglages_local_utiliser_explication">Les notes absentes de l\'appareil seront d\'abord rapatriées. Les copies présentes sur le serveur ne seront pas supprimées.</string>
     <string name="reglages_local_plan_titre">Passer en mode local ?</string>
@@ -460,8 +491,29 @@
     </plurals>
     <string name="reglages_local_effacer">Effacer toutes les notes</string>
     <string name="reglages_local_effacer_explication">Réinitialise l\'application. En mode local, ces notes n\'existent nulle part ailleurs.</string>
+    <string name="reglages_export_titre">Exporter les notes</string>
+    <string name="reglages_export_bouton">Exporter en archive zip</string>
+    <string name="reglages_export_explication">Crée une archive de toutes vos notes, avec leurs dossiers, que n\'importe quel ordinateur sait ouvrir. Les noms illégaux sous Windows sont corrigés et listés dans _renommages.txt.</string>
+    <string name="reglages_export_espace">Espace insuffisant sur l\'appareil pour préparer l\'archive. Libérez de la place et réessayez.</string>
+    <string name="reglages_export_copie">L\'archive n\'a pas pu être écrite à l\'emplacement choisi. Rien n\'a été conservé.</string>
+    <plurals name="reglages_export_notes">
+        <item quantity="one">%d note exportée</item>
+        <item quantity="many">%d notes exportées</item>
+        <item quantity="other">%d notes exportées</item>
+    </plurals>
+    <plurals name="reglages_export_ignorees">
+        <item quantity="one">%d note illisible ignorée</item>
+        <item quantity="many">%d notes illisibles ignorées</item>
+        <item quantity="other">%d notes illisibles ignorées</item>
+    </plurals>
+    <plurals name="reglages_export_renommes">
+        <item quantity="one">%d nom modifié (voir _renommages.txt)</item>
+        <item quantity="many">%d noms modifiés (voir _renommages.txt)</item>
+        <item quantity="other">%d noms modifiés (voir _renommages.txt)</item>
+    </plurals>
     <string name="reglages_local_effacer_titre">Effacer définitivement toutes les notes ?</string>
     <string name="reglages_local_effacer_confirmation">Toutes les notes et tous les dossiers de cet appareil seront définitivement supprimés. Cette action est irréversible.</string>
+    <string name="reglages_local_effacer_case">Je comprends que toutes mes notes seront définitivement effacées</string>
     <!-- Des modifications non envoyées seraient perdues : c'est la seule mise
          en garde de l'écran, elle compte ce qui est en jeu. -->
     <plurals name="reglages_deconnexion_attente">

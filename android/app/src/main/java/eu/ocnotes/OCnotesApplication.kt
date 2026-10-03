@@ -1,6 +1,7 @@
 package eu.ocnotes
 
 import android.app.Application
+import android.content.ContentResolver
 import android.content.Context
 import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -8,10 +9,18 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import eu.ocnotes.data.AccountRegistry
 import eu.ocnotes.data.AccountProfile
+import eu.ocnotes.data.AppMode
+import eu.ocnotes.data.DestinationCopie
+import eu.ocnotes.data.EnjeuSuppression
+import eu.ocnotes.data.NoteRefDto
+import eu.ocnotes.data.OCnotesException
+import eu.ocnotes.data.RestoreOutcome
+import eu.ocnotes.data.ResultatCopie
 import eu.ocnotes.data.OCnotesRepository
 import eu.ocnotes.data.PreferencesAffichage
 import eu.ocnotes.data.TokenStore
 import eu.ocnotes.data.syncEnabled
+import eu.ocnotes.data.vierge
 import eu.ocnotes.data.auth.OidcManager
 import eu.ocnotes.diagnostic.CrashReporter
 import eu.ocnotes.sync.SyncNotifier
@@ -21,6 +30,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -109,13 +119,196 @@ class AppContainer(
      * Fournit au Worker le dépôt du profil demandé, actif ou non — le même que
      * celui des écrans, jamais un second. Le verrou reste acquis pendant toute
      * la passe : une suppression du même profil attend donc sa fin.
+     *
+     * [onAttente] est appelé, une fois et avant d'attendre, si le verrou est
+     * déjà pris : l'appelant qui a une interface peut dire pourquoi rien ne se
+     * passe encore.
      */
     suspend fun <T> withAccountRepository(
         accountId: String,
+        onAttente: () -> Unit = {},
         operation: suspend (OCnotesRepository) -> T,
-    ): T? = accountLock(accountId).withLock {
-        if (accountRegistry.accounts.none { it.id == accountId }) return@withLock null
-        operation(runtimeFor(accountId).repository)
+    ): T? {
+        val verrou = accountLock(accountId)
+        if (!verrou.tryLock()) {
+            onAttente()
+            verrou.lock()
+        }
+        return try {
+            if (accountRegistry.accounts.none { it.id == accountId }) {
+                null
+            } else {
+                operation(runtimeFor(accountId).repository)
+            }
+        } finally {
+            verrou.unlock()
+        }
+    }
+
+    /**
+     * Lit dans le dépôt d'un profil sans attendre la fin d'une passe.
+     *
+     * Verrou libre : la lecture le prend, comme [withAccountRepository]. Verrou
+     * pris — une passe, ou une suppression — : le runtime existe donc déjà, et
+     * la lecture se fait à côté, comme l'écran du profil actif lit pendant que
+     * le Worker synchronise. Jamais de [runtimeFor] sans verrou : il
+     * recréerait le runtime d'un profil en cours de suppression. Une lecture
+     * qui croise une suppression échoue ; l'appelant doit le tolérer.
+     *
+     * Réservé aux lectures. Une écriture passe par [withAccountRepository].
+     */
+    private suspend fun <T> lireSansAttendre(
+        accountId: String,
+        lecture: suspend (OCnotesRepository) -> T,
+    ): T? {
+        val verrou = accountLock(accountId)
+        if (verrou.tryLock()) {
+            try {
+                if (accountRegistry.accounts.none { it.id == accountId }) return null
+                return lecture(runtimeFor(accountId).repository)
+            } finally {
+                verrou.unlock()
+            }
+        }
+        val runtime = runtimes[accountId] ?: return null
+        return lecture(runtime.repository)
+    }
+
+    /**
+     * Ce que la suppression du profil détruirait : toutes ses notes s'il est
+     * local, sinon les écritures, créations et renommages jamais envoyés. Lu
+     * dans le cœur Go du profil, actif ou non, sans réseau. Sans verrou de
+     * compte — il reste tenu pendant toute une passe, et le dialogue attendrait
+     * la fin d'une synchronisation.
+     *
+     * Le mode vient du cœur, pas du registre : `recordLocal` n'est qu'un
+     * nettoyage au mieux, et un registre reconstruit sans `config.json` classe
+     * un profil local parmi les serveurs vierges. Or un profil local n'a jamais
+     * rien en file — le registre seul l'aurait laissé supprimer sans la case.
+     *
+     * `null` si la lecture échoue : l'appelant doit alors supposer le pire.
+     */
+    suspend fun enjeuSuppression(id: String): EnjeuSuppression? =
+        runCatching { runtimeFor(id).repository.state() }.getOrNull()
+            ?.let { EnjeuSuppression(local = it.mode == AppMode.LOCAL, enAttente = it.pending) }
+
+    /**
+     * Les autres profils qui peuvent recevoir une copie, avec leurs dossiers.
+     *
+     * Chacun est remonté sans réseau (`restore`) : un profil sans session — un
+     * emplacement vierge, un serveur sans espace choisi — n'est pas une
+     * destination. Lu par [lireSansAttendre] : un dialogue ne doit pas tourner
+     * jusqu'à la fin de la synchronisation d'un autre compte. `restore` n'y
+     * écrit qu'en ouvrant une session, et un profil dont une passe tient le
+     * verrou a déjà la sienne.
+     */
+    suspend fun destinationsCopie(): List<DestinationCopie> =
+        accountRegistry.accounts.filter { it.id != activeId }.mapNotNull { profil ->
+            try {
+                lireSansAttendre(profil.id) { cible ->
+                    when (cible.restore()) {
+                        RestoreOutcome.LOCALE, RestoreOutcome.PRETE ->
+                            cible.folders().filter { it.canCreateFile }
+                                .takeIf { it.isNotEmpty() }
+                                ?.let { DestinationCopie(profil, it) }
+                        else -> null
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: OCnotesException) {
+                null
+            }
+        }
+
+    /**
+     * Copie des notes de [source] vers un autre profil, sans rien supprimer.
+     *
+     * Lecture par le dépôt source, création par celui du profil cible
+     * (`runtimeFor`) : jamais un cœur Go partagé. Chaque copie est relue dans la
+     * cible et comparée au texte lu à la source avant d'être comptée ; une
+     * copie qui diffère est un échec, pas un succès à moitié. Un nom pris reçoit
+     * un suffixe, comme une création ordinaire : aucune note de la cible n'est
+     * écrasée.
+     *
+     * Le texte passe par `ReadNote` : fins de ligne ramenées à « \n » et
+     * encodage UTF-8 dans la copie, ce qui ne change pas ce qu'on lit. Le nom
+     * passe entier, extension comprise : `CreateNoteJSON` garde une extension
+     * modifiable, et un `.txt` reste un `.txt` — l'utilisateur a demandé une
+     * copie, pas une conversion (même principe que `notes.WithExtensionOf`).
+     *
+     * Le travail tourne dans [applicationScope], pas dans la portée de
+     * l'appelant : changer de compte vide le `ViewModelStore` de l'écran, et
+     * c'est le geste naturel juste après une copie — aller voir dans la cible.
+     * Annulée, la copie s'arrêtait au milieu, sans message ni synchronisation
+     * programmée ; relancée, elle produisait des doublons « (2) ». L'appelant
+     * annulé ne reçoit pas le bilan ; la copie, elle, va au bout.
+     *
+     * [onAttente] signale que le profil cible est occupé — une passe de
+     * synchronisation tient son verrou — et que la copie attend sa fin.
+     */
+    suspend fun copierVersCompte(
+        source: OCnotesRepository,
+        chemins: List<String>,
+        destinationId: String,
+        dossier: String,
+        onAttente: () -> Unit = {},
+    ): ResultatCopie = applicationScope.async {
+        var copiees = 0
+        var echecs = 0
+        var premiere: OCnotesException? = null
+        val fait = withAccountRepository(destinationId, onAttente) { cible ->
+            try {
+                for (chemin in chemins) {
+                    try {
+                        val texte = source.readNote(chemin)
+                        val nom = chemin.substringAfterLast('/')
+                        val copie = creerCopie(cible, dossier, nom, texte)
+                        if (cible.readNote(copie.path) == texte) {
+                            copiees++
+                        } else {
+                            echecs++
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: OCnotesException) {
+                        echecs++
+                        if (premiere == null) premiere = e
+                    }
+                }
+            } finally {
+                // Même interrompue, une copie déjà écrite doit partir.
+                if (copiees > 0) runtimeFor(destinationId).syncScheduler.syncAfterLocalChange()
+            }
+        }
+        if (fait == null) {
+            ResultatCopie(0, chemins.size, null, cibleDisparue = true)
+        } else {
+            ResultatCopie(copiees, echecs, premiere)
+        }
+    }.await()
+
+    /**
+     * Crée la copie d'une note dans [cible].
+     *
+     * Le serveur accepte des noms que la création refuse (`? * : < > |`, point
+     * initial…) : une note lisible ne doit pas devenir impossible à copier. Sur
+     * un refus de nom, le nom passe par `SuggestName` puis la création est
+     * retentée une fois. Jamais avant : `SanitizeName` n'est pas idempotente sur
+     * un nom valide (carnet : `EXPORT-ZIP`), elle changerait des noms sains.
+     */
+    private suspend fun creerCopie(
+        cible: OCnotesRepository,
+        dossier: String,
+        nom: String,
+        texte: String,
+    ): NoteRefDto = try {
+        cible.createNote(dossier, nom, texte)
+    } catch (e: OCnotesException) {
+        if (!e.code.startsWith("NAME_")) throw e
+        val assaini = cible.suggestName(nom)
+        if (assaini == nom) throw e
+        cible.createNote(dossier, assaini, texte)
     }
 
     /** Installe le travail périodique de chaque compte serveur enregistré. */
@@ -141,6 +334,43 @@ class AppContainer(
     /** Ajoute un emplacement de compte vierge et l'ouvre sur la connexion. */
     suspend fun createAccount() = switchMutex.withLock {
         afficher(accountRegistry.createAndActivate())
+    }
+
+    private val mutableCompteDejaPresent = MutableStateFlow(false)
+
+    /** Vrai quand une connexion a été ramenée vers un profil existant ; l'interface le signale. */
+    val compteDejaPresent: StateFlow<Boolean> = mutableCompteDejaPresent.asStateFlow()
+
+    fun acquitterCompteDejaPresent() {
+        mutableCompteDejaPresent.value = false
+    }
+
+    /**
+     * Une connexion a révélé une identité déjà enregistrée : on rouvre le profil
+     * qui la porte et on retire le profil vide qui venait d'être créé.
+     *
+     * Deux étapes séquentielles, jamais imbriquées : [switchMutex] n'est pas
+     * réentrant. On active d'abord, pour que la suppression n'ait pas à choisir
+     * elle-même le profil suivant.
+     */
+    suspend fun adopterCompteExistant(existantId: String, nouveauId: String) {
+        activateAccount(existantId)
+        // Seul un profil vierge part sans qu'on l'ait demandé : la suppression
+        // n'a pas de retour. Un autre — profil serveur dont la configuration a
+        // été perdue, par exemple — reste dans le tiroir, où l'utilisateur le
+        // supprimera lui-même, avec la confirmation d'usage, s'il le veut.
+        //
+        // « Vierge » au registre ne suffit pas, il faut aussi un cœur sans rien
+        // en file. Un profil local qui a perdu sa configuration et son registre
+        // ensemble passe au registre pour vierge, et la connexion qui mène ici
+        // vient d'adopter ses notes (`connectClient`) : elles sont en file, et
+        // nulle part ailleurs.
+        val vierge = accountRegistry.accounts.firstOrNull { it.id == nouveauId }?.vierge == true
+        val enjeu = enjeuSuppression(nouveauId)
+        if (vierge && enjeu != null && !enjeu.local && enjeu.enAttente == 0) {
+            deleteAccount(nouveauId)
+        }
+        mutableCompteDejaPresent.value = true
     }
 
     /**
@@ -215,6 +445,15 @@ class AppContainer(
      */
     val dossierPartage = File(context.cacheDir, "partage")
 
+    /**
+     * Où Go écrit l'archive d'export avant qu'elle soit copiée vers
+     * l'emplacement choisi. **Pas** `partage/` : c'est le seul dossier que le
+     * `FileProvider` expose, et l'archive contient toutes les notes en clair.
+     */
+    val dossierExport = File(context.cacheDir, "export")
+
+    val contentResolver: ContentResolver get() = context.contentResolver
+
     init {
         if (accountRegistry.vientDeMigrer) syncScheduler.annulerTravauxSansProfil()
     }
@@ -222,9 +461,10 @@ class AppContainer(
     /**
      * Portée qui survit aux ViewModels.
      *
-     * Un seul usage, et il compte : vider le tampon de l'éditeur quand l'écran
-     * disparaît. `viewModelScope` est déjà annulé à ce moment-là, et une
-     * frappe des dernières secondes serait perdue.
+     * Pour ce qu'un écran qui disparaît ne doit pas interrompre : vider le
+     * tampon de l'éditeur — `viewModelScope` est déjà annulé à ce moment-là, et
+     * une frappe des dernières secondes serait perdue —, un geste sur les
+     * comptes, une copie vers un autre compte.
      */
     val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 

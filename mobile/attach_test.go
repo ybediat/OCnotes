@@ -285,10 +285,11 @@ func TestBranchementInterrompuResteEnModeLocal(t *testing.T) {
 	}
 }
 
-// StartLocal tué entre le cache et la configuration : l'installation reste
-// neuve, et un cache figé en « stockage unique » ferait ignorer toutes les
-// écritures du serveur branché ensuite.
-func TestDemarrageLocalInterrompuNeFigePasLeCache(t *testing.T) {
+// StartLocal tué entre le cache et la configuration : l'installation repart en
+// mode local, le choix que l'utilisateur venait de faire (recoverLocalMode). Un
+// serveur branché ensuite passe par le branchement, et ses écritures partent :
+// un cache resté figé en « stockage unique » les ferait ignorer.
+func TestDemarrageLocalInterrompuRepartEnModeLocal(t *testing.T) {
 	dataDir := t.TempDir()
 	app, err := NewApp(dataDir)
 	if err != nil {
@@ -298,11 +299,27 @@ func TestDemarrageLocalInterrompuNeFigePasLeCache(t *testing.T) {
 		t.Fatalf("SetLocalOnly: %v", err)
 	}
 
+	server := newFakeServer(t)
 	relance, err := NewApp(dataDir)
 	if err != nil {
 		t.Fatalf("NewApp au redémarrage: %v", err)
 	}
+	if _, local := relance.session(); !local {
+		t.Fatal("le démarrage local interrompu n'a pas été reconnu")
+	}
+	if err := relance.Connect(server.URL, fakeUser, fakeToken); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	attache(t, relance, true)
 	if relance.cache.LocalOnly() {
-		t.Error("cache resté en « stockage unique » sous une installation neuve")
+		t.Error("cache resté en « stockage unique » sous un serveur branché")
+	}
+
+	server.setOffline(true)
+	if _, err := relance.CreateNoteJSON("", "hors-connexion", "à envoyer"); err != nil {
+		t.Fatalf("CreateNoteJSON hors connexion: %v", err)
+	}
+	if n := relance.PendingCount(); n != 1 {
+		t.Errorf("PendingCount = %d, attendu 1 : l'écriture doit partir au retour du réseau", n)
 	}
 }

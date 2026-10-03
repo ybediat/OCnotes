@@ -102,6 +102,7 @@
     <string name="err_modifications_attente">Some changes still need to be synchronized before disconnecting the server.</string>
     <string name="err_compte_different">This account does not match the selected profile. Select the other account from the menu or add it.</string>
     <string name="err_session_changee">The session changed while connecting. Please try again.</string>
+    <string name="err_export_mode_local">Exporting to an archive only applies to local storage. With a server account, your notes are on the server.</string>
 
     <!-- ================================================================
          Démarrage
@@ -284,6 +285,18 @@
         <item quantity="one">%d item copied</item>
         <item quantity="other">%d items copied</item>
     </plurals>
+    <string name="browser_copier_compte_titre">Copy to another account</string>
+    <string name="browser_copier_compte_aucun">No other account can receive notes: you need a local account, or a server whose space is chosen.</string>
+    <plurals name="browser_copier_compte_fait">
+        <item quantity="one">%1$d note copied to %2$s</item>
+        <item quantity="other">%1$d notes copied to %2$s</item>
+    </plurals>
+    <plurals name="browser_copier_compte_ecart">
+        <item quantity="one">The copy of %d note does not match the original; it is not counted.</item>
+        <item quantity="other">The copies of %d notes do not match the originals; they are not counted.</item>
+    </plurals>
+    <string name="browser_copier_compte_attente">%s is syncing: the copy will start once it finishes.</string>
+    <string name="browser_copier_compte_disparu">The account %s no longer exists: nothing was copied.</string>
     <plurals name="browser_lot_supprimes">
         <item quantity="one">%d item deleted</item>
         <item quantity="other">%d items deleted</item>
@@ -313,10 +326,20 @@
     <string name="compte_local">Local notes</string>
     <string name="compte_nouveau">New account</string>
     <string name="compte_ajouter">Add account</string>
+    <string name="compte_renommer">Rename this local account</string>
+    <string name="compte_nom_label">Name</string>
     <string name="compte_geste_echec">The account operation failed. Please try again.</string>
+    <string name="compte_deja_present">This account is already added on this device. The existing profile has been opened; sign in again from it if its session has expired.</string>
+    <string name="conversion_compte_deja_present">This account is already open in another profile on this device. Your local notes were not touched. To send them there, use “Copy to another account” in the note list.</string>
     <string name="compte_supprimer">Remove account</string>
     <string name="compte_supprimer_titre">Remove this account?</string>
     <string name="compte_supprimer_message">The %1$s account, its cache and any unsynced local changes will be removed from this device. This cannot be undone.</string>
+    <string name="compte_supprimer_perte_titre">Notes will be lost</string>
+    <string name="compte_supprimer_local_message">The notes in this local account exist nowhere else: not on a server, not on another device. Removing it erases them permanently. This cannot be undone.</string>
+    <plurals name="compte_supprimer_attente_message">
+        <item quantity="one">The %1$s account has %2$d local change that has not been sent to the server yet. Removing the account loses it permanently. Open the account and sync first.</item>
+        <item quantity="other">The %1$s account has %2$d local changes that have not been sent to the server yet. Removing the account loses them permanently. Open the account and sync first.</item>
+    </plurals>
     <string name="menu_mode_arborescence">By folder</string>
     <string name="menu_mode_liste">All notes</string>
 
@@ -420,10 +443,18 @@
     <string name="reglages_deconnexion">Sign out</string>
     <string name="reglages_deconnexion_explication">Signing out clears the token, configuration, and local cache from this device. Your notes remain on the server.</string>
     <string name="reglages_deconnexion_titre">Sign out?</string>
+    <string name="reglages_deconnexion_perte_titre">Changes will be lost</string>
+    <string name="reglages_deconnexion_perte_case">I understand these changes will be permanently lost</string>
+    <string name="reglages_deconnexion_perte_confirmer">Sign out and lose them</string>
     <string name="reglages_deconnexion_confirmation">The token, configuration, and local cache will be cleared. Your notes remain on the server.</string>
     <string name="reglages_local_titre">Local storage</string>
     <string name="reglages_local_explication">All notes live on this device only. Nothing is synchronized.</string>
     <string name="reglages_local_connecter">Connect a server</string>
+    <string name="reglages_local_connecter_titre">Connect a server</string>
+    <string name="reglages_local_connecter_cote">Add an account alongside</string>
+    <string name="reglages_local_connecter_cote_explication">Your local notes stay untouched, in their own account. The server opens in a new account.</string>
+    <string name="reglages_local_connecter_convertir">Convert this account</string>
+    <string name="reglages_local_connecter_convertir_explication">This account becomes a server account; you will choose whether to upload your local notes or delete them.</string>
     <string name="reglages_local_utiliser">Use this device only</string>
     <string name="reglages_local_utiliser_explication">Notes missing from the device will be downloaded first. Server copies will not be deleted.</string>
     <string name="reglages_local_plan_titre">Switch to local mode?</string>
@@ -453,8 +484,26 @@
     </plurals>
     <string name="reglages_local_effacer">Delete all notes</string>
     <string name="reglages_local_effacer_explication">Resets the app. In local mode, these notes do not exist anywhere else.</string>
+    <string name="reglages_export_titre">Export notes</string>
+    <string name="reglages_export_bouton">Export as zip archive</string>
+    <string name="reglages_export_explication">Creates an archive of all your notes, with their folders, that any computer can open. Names that Windows does not allow are corrected and listed in _renommages.txt.</string>
+    <string name="reglages_export_espace">Not enough space on the device to prepare the archive. Free up some space and try again.</string>
+    <string name="reglages_export_copie">The archive could not be written to the chosen location. Nothing was kept.</string>
+    <plurals name="reglages_export_notes">
+        <item quantity="one">%d note exported</item>
+        <item quantity="other">%d notes exported</item>
+    </plurals>
+    <plurals name="reglages_export_ignorees">
+        <item quantity="one">%d unreadable note skipped</item>
+        <item quantity="other">%d unreadable notes skipped</item>
+    </plurals>
+    <plurals name="reglages_export_renommes">
+        <item quantity="one">%d name changed (see _renommages.txt)</item>
+        <item quantity="other">%d names changed (see _renommages.txt)</item>
+    </plurals>
     <string name="reglages_local_effacer_titre">Permanently delete all notes?</string>
     <string name="reglages_local_effacer_confirmation">All notes and folders on this device will be permanently deleted. This cannot be undone.</string>
+    <string name="reglages_local_effacer_case">I understand that all my notes will be permanently erased</string>
     <!-- Des modifications non envoyées seraient perdues : c'est la seule mise
          en garde de l'écran, elle compte ce qui est en jeu. -->
     <plurals name="reglages_deconnexion_attente">

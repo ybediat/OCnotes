@@ -83,6 +83,7 @@
     <string name="err_modifications_attente">Aún deben sincronizarse algunos cambios antes de desconectar el servidor.</string>
     <string name="err_compte_different">Esta cuenta no corresponde al perfil seleccionado. Seleccione la otra cuenta en el menú o añádala.</string>
     <string name="err_session_changee">La sesión cambió durante la conexión. Vuelva a intentarlo.</string>
+    <string name="err_export_mode_local">La exportación a un archivo solo sirve para el almacenamiento local. Con una cuenta de servidor, sus notas están en el servidor.</string>
 
     <!-- ================================================================
          Démarrage
@@ -265,6 +266,18 @@
         <item quantity="one">%d elemento copiado</item>
         <item quantity="other">%d elementos copiados</item>
     </plurals>
+    <string name="browser_copier_compte_titre">Copiar a otra cuenta</string>
+    <string name="browser_copier_compte_aucun">Ninguna otra cuenta puede recibir notas: hace falta una cuenta local, o un servidor con espacio elegido.</string>
+    <plurals name="browser_copier_compte_fait">
+        <item quantity="one">%1$d nota copiada a %2$s</item>
+        <item quantity="other">%1$d notas copiadas a %2$s</item>
+    </plurals>
+    <plurals name="browser_copier_compte_ecart">
+        <item quantity="one">La copia de %d nota no coincide con el original; no se cuenta.</item>
+        <item quantity="other">Las copias de %d notas no coinciden con los originales; no se cuentan.</item>
+    </plurals>
+    <string name="browser_copier_compte_attente">%s se está sincronizando: la copia empezará cuando termine.</string>
+    <string name="browser_copier_compte_disparu">La cuenta %s ya no existe: no se ha copiado nada.</string>
     <plurals name="browser_lot_supprimes">
         <item quantity="one">%d elemento eliminado</item>
         <item quantity="other">%d elementos eliminados</item>
@@ -294,10 +307,20 @@
     <string name="compte_local">Notas locales</string>
     <string name="compte_nouveau">Nueva cuenta</string>
     <string name="compte_ajouter">Añadir una cuenta</string>
+    <string name="compte_renommer">Renombrar esta cuenta local</string>
+    <string name="compte_nom_label">Nombre</string>
     <string name="compte_geste_echec">La operación en la cuenta ha fallado. Vuelva a intentarlo.</string>
+    <string name="compte_deja_present">Esta cuenta ya está añadida en este dispositivo. Se ha abierto el perfil existente; vuelva a iniciar sesión desde él si su sesión ha caducado.</string>
+    <string name="conversion_compte_deja_present">Esta cuenta ya está abierta en otro perfil de este dispositivo. Sus notas locales no se han modificado. Para enviarlas allí, use «Copiar a otra cuenta» en la lista de notas.</string>
     <string name="compte_supprimer">Eliminar cuenta</string>
     <string name="compte_supprimer_titre">¿Eliminar esta cuenta?</string>
     <string name="compte_supprimer_message">La cuenta %1$s, su caché y todos los cambios locales sin sincronizar se eliminarán de este dispositivo. Esta acción no se puede deshacer.</string>
+    <string name="compte_supprimer_perte_titre">Se perderán notas</string>
+    <string name="compte_supprimer_local_message">Las notas de esta cuenta local no existen en ningún otro lugar: ni en un servidor ni en otro dispositivo. Eliminarla las borra definitivamente. Esta acción no se puede deshacer.</string>
+    <plurals name="compte_supprimer_attente_message">
+        <item quantity="one">La cuenta %1$s tiene %2$d modificación local que todavía no se ha enviado al servidor. Eliminar la cuenta la pierde definitivamente. Abra la cuenta y sincronice primero.</item>
+        <item quantity="other">La cuenta %1$s tiene %2$d modificaciones locales que todavía no se han enviado al servidor. Eliminar la cuenta las pierde definitivamente. Abra la cuenta y sincronice primero.</item>
+    </plurals>
     <string name="menu_mode_arborescence">Por carpetas</string>
     <string name="menu_mode_liste">Todas las notas</string>
 
@@ -401,10 +424,18 @@
     <string name="reglages_deconnexion">Cerrar sesión</string>
     <string name="reglages_deconnexion_explication">Al cerrar sesión se eliminan el token, la configuración y la caché local de este dispositivo. Sus notas permanecen en el servidor.</string>
     <string name="reglages_deconnexion_titre">¿Cerrar sesión?</string>
+    <string name="reglages_deconnexion_perte_titre">Se perderán modificaciones</string>
+    <string name="reglages_deconnexion_perte_case">Entiendo que estas modificaciones se perderán definitivamente</string>
+    <string name="reglages_deconnexion_perte_confirmer">Cerrar sesión y perderlas</string>
     <string name="reglages_deconnexion_confirmation">Se eliminarán el token, la configuración y la caché local. Sus notas permanecen en el servidor.</string>
     <string name="reglages_local_titre">Almacenamiento local</string>
     <string name="reglages_local_explication">Todas las notas se guardan únicamente en este dispositivo. No se realiza ninguna sincronización.</string>
     <string name="reglages_local_connecter">Conectar un servidor</string>
+    <string name="reglages_local_connecter_titre">Conectar un servidor</string>
+    <string name="reglages_local_connecter_cote">Añadir una cuenta al lado</string>
+    <string name="reglages_local_connecter_cote_explication">Tus notas locales no cambian y siguen en su propia cuenta. El servidor se abre en una cuenta nueva.</string>
+    <string name="reglages_local_connecter_convertir">Convertir esta cuenta</string>
+    <string name="reglages_local_connecter_convertir_explication">Esta cuenta pasa a ser una cuenta de servidor; elegirás si subir tus notas locales o eliminarlas.</string>
     <string name="reglages_local_utiliser">Usar solo este dispositivo</string>
     <string name="reglages_local_utiliser_explication">Primero se descargarán las notas que faltan en el dispositivo. Las copias del servidor no se eliminarán.</string>
     <string name="reglages_local_plan_titre">¿Cambiar al modo local?</string>
@@ -438,8 +469,29 @@
     </plurals>
     <string name="reglages_local_effacer">Eliminar todas las notas</string>
     <string name="reglages_local_effacer_explication">Restablece la aplicación. En modo local, estas notas no existen en ningún otro lugar.</string>
+    <string name="reglages_export_titre">Exportar las notas</string>
+    <string name="reglages_export_bouton">Exportar como archivo zip</string>
+    <string name="reglages_export_explication">Crea un archivo con todas sus notas y sus carpetas, que cualquier ordenador puede abrir. Los nombres que Windows no admite se corrigen y se enumeran en _renommages.txt.</string>
+    <string name="reglages_export_espace">No hay espacio suficiente en el dispositivo para preparar el archivo. Libere espacio e inténtelo de nuevo.</string>
+    <string name="reglages_export_copie">No se pudo escribir el archivo en la ubicación elegida. No se conservó nada.</string>
+    <plurals name="reglages_export_notes">
+        <item quantity="one">%d nota exportada</item>
+        <item quantity="other">%d notas exportadas</item>
+        <item quantity="many">%d notas exportadas</item>
+    </plurals>
+    <plurals name="reglages_export_ignorees">
+        <item quantity="one">%d nota ilegible omitida</item>
+        <item quantity="other">%d notas ilegibles omitidas</item>
+        <item quantity="many">%d notas ilegibles omitidas</item>
+    </plurals>
+    <plurals name="reglages_export_renommes">
+        <item quantity="one">%d nombre modificado (véase _renommages.txt)</item>
+        <item quantity="other">%d nombres modificados (véase _renommages.txt)</item>
+        <item quantity="many">%d nombres modificados (véase _renommages.txt)</item>
+    </plurals>
     <string name="reglages_local_effacer_titre">¿Eliminar definitivamente todas las notas?</string>
     <string name="reglages_local_effacer_confirmation">Todas las notas y carpetas de este dispositivo se eliminarán definitivamente. Esta acción no se puede deshacer.</string>
+    <string name="reglages_local_effacer_case">Entiendo que todas mis notas se borrarán definitivamente</string>
     <!-- Des modifications non envoyées seraient perdues : c'est la seule mise
          en garde de l'écran, elle compte ce qui est en jeu. -->
     <plurals name="reglages_deconnexion_attente">

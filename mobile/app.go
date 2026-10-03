@@ -113,9 +113,14 @@ func NewApp(dataDir string) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	cfg = recoverLocalMode(dataDir, cache, cfg)
 	if err := alignCacheOnMode(cache, cfg); err != nil {
 		return nil, err
 	}
+	// Une installation antérieure n'a pas de propriétaire dans son cache : la
+	// configuration, tant qu'elle est intacte, le lui donne. Meilleur effort,
+	// comme dans persistConfig — le prochain démarrage réessaiera.
+	_ = recordCacheOwner(cache, cfg)
 	return &App{
 		dataDir:    dataDir,
 		cfg:        cfg,
@@ -126,10 +131,49 @@ func NewApp(dataDir string) (*App, error) {
 }
 
 func (a *App) persistConfig(next config.Config) error {
+	var err error
 	if a.saveConfig != nil {
-		return a.saveConfig(next)
+		err = a.saveConfig(next)
+	} else {
+		err = config.Save(a.dataDir, next)
 	}
-	return config.Save(a.dataDir, next)
+	if err != nil {
+		return err
+	}
+	// La configuration fait foi, le propriétaire du cache la suit. Meilleur
+	// effort : elle est déjà écrite, et la faire passer pour un échec ferait
+	// défaire à l'appelant un geste réussi. Le cache garde alors l'ancien
+	// propriétaire — le même compte, connectClient l'a vérifié — ou aucun, et
+	// NewApp le reprendra au démarrage suivant.
+	_ = recordCacheOwner(a.cache, next)
+	return nil
+}
+
+// recoverLocalMode reconnaît un profil local dont la configuration a été
+// perdue.
+//
+// config.json est réécrite à chaque dossier ouvert ; perdue ou tronquée, elle
+// rend le mode vide, celui d'une installation neuve. Le drapeau du cache, lui,
+// est écrit avec l'index et ne ment pas dans ce sens : aucune bascule ne laisse
+// un cache « stockage unique » sous une configuration vide, sauf un démarrage
+// local interrompu avant son commit — et l'utilisateur avait alors choisi le
+// mode local. Le cœur se reconnaît donc lui-même, sans attendre que le
+// registre Android le lui dise : celui-ci peut avoir été reconstruit depuis la
+// même configuration perdue, et prendre le profil pour un serveur vierge.
+//
+// Sans cela, l'écran de connexion s'affichait devant les notes, et s'y
+// connecter les adoptait sans le choix qu'offre AttachJSON — puis, sur un
+// compte déjà présent ailleurs, le refus de doublon retirait le profil.
+//
+// L'écriture est un meilleur effort : la configuration en mémoire suffit à ce
+// démarrage, et le suivant refera le même constat.
+func recoverLocalMode(dataDir string, cache *store.Store, cfg config.Config) config.Config {
+	if cfg.Mode != config.ModeUnset || !cache.LocalOnly() {
+		return cfg
+	}
+	recovered := config.Config{Mode: config.ModeLocal}
+	_ = config.Save(dataDir, recovered)
+	return recovered
 }
 
 // alignCacheOnMode remet le cache d'accord avec le mode enregistré.
@@ -153,12 +197,17 @@ func (a *App) persistConfig(next config.Config) error {
 //     débranchement exigeant une file vide, et l'inventaire se reconstitue au
 //     premier listing. Android, lui, n'efface le token qu'une fois DetachJSON
 //     revenu : il a encore de quoi rouvrir la session.
+//
+// Le mode vide ne fait pas foi : c'est celui d'une installation neuve, mais
+// aussi d'une configuration perdue ou tronquée. Le cache garde alors son
+// drapeau, seul témoin restant de ce qu'il était — connectClient s'en sert pour
+// n'adopter que des notes qui n'ont de copie nulle part.
 func alignCacheOnMode(cache *store.Store, cfg config.Config) error {
 	switch {
 	case cfg.IsLocal() && !cache.LocalOnly():
 		_, err := cache.GoLocal()
 		return err
-	case !cfg.IsLocal() && cache.LocalOnly():
+	case cfg.Mode != config.ModeUnset && !cfg.IsLocal() && cache.LocalOnly():
 		return cache.SetLocalOnly(false)
 	}
 	return nil
@@ -427,6 +476,9 @@ func (a *App) connectClient(serverURL, username, authMode string, client *opencl
 	if err := requireSameAccount(ancienne, serverURL, username, authMode, identityKey); err != nil {
 		return err
 	}
+	if err := requireCacheOwner(a.cache, serverURL, username, authMode, identityKey); err != nil {
+		return err
+	}
 
 	nouvelle := ancienne
 	nouvelle.ServerURL = serverURL
@@ -501,7 +553,32 @@ func (a *App) connectClient(serverURL, username, authMode string, client *opencl
 		return errSessionChanged()
 	}
 	nouvelle.LastPath = a.cfg.LastPath
+
+	// Cache « stockage unique » sous une configuration vide : un profil local
+	// dont la configuration a été perdue — le branchement ordinaire passe par
+	// AttachJSON. Second rideau : NewApp reconnaît déjà ce profil comme local
+	// (recoverLocalMode), et l'on n'arrive plus ici que si cette règle cède un
+	// jour. Ces notes n'ont de copie nulle part. Les laisser « propres »
+	// les faisait oublier en silence au premier listing, puisque le serveur ne
+	// les connaît pas : on les traite comme un travail créé hors connexion, que
+	// pushWrite envoie sans rien écraser.
+	//
+	// Le drapeau, pas la présence de notes : le cache d'un profil serveur n'a
+	// rien à adopter — ses notes propres sont sur son serveur, son travail en
+	// attente déjà en file — et ce serveur n'est peut-être pas celui qu'on
+	// branche. Adopter seulement maintenant, la session acquise : un échec plus
+	// haut laisse le cache tel qu'il était.
+	adopte := a.cache.LocalOnly()
+	if adopte {
+		if err := a.cache.Adopt(); err != nil {
+			return err
+		}
+	}
 	if err := a.persistConfig(nouvelle); err != nil {
+		if adopte {
+			_, rollback := a.cache.GoLocal()
+			return errors.Join(err, rollback)
+		}
 		return err
 	}
 	a.client, a.oidcAuth, a.lib, a.cfg = client, oidcAuth, nouvelleBibliotheque, nouvelle
@@ -543,6 +620,72 @@ func requireSameAccount(current config.Config, serverURL, username, authMode, id
 		return errAccountMismatch()
 	}
 	return nil
+}
+
+// cacheOwner est ce que le cache retient du compte qu'il double : de quoi
+// rejouer requireSameAccount quand la configuration a été perdue. Le cache le
+// garde sans le lire.
+type cacheOwner struct {
+	ServerURL   string `json:"serverUrl"`
+	Username    string `json:"username"`
+	AuthMode    string `json:"authMode,omitempty"`
+	IdentityKey string `json:"identityKey,omitempty"`
+}
+
+// recordCacheOwner inscrit dans le cache le compte d'une configuration
+// serveur. Une configuration locale ou vide n'en désigne aucun et ne change
+// rien : le cache local oublie le sien de lui-même (store.SetLocalOnly).
+func recordCacheOwner(cache *store.Store, cfg config.Config) error {
+	if !cfg.IsConnected() {
+		return nil
+	}
+	data, err := json.Marshal(cacheOwner{
+		ServerURL:   cfg.ServerURL,
+		Username:    cfg.Username,
+		AuthMode:    cfg.AuthMode,
+		IdentityKey: cfg.IdentityKey,
+	})
+	if err != nil {
+		return err
+	}
+	return cache.SetOwner(string(data))
+}
+
+// requireCacheOwner est requireSameAccount pour une configuration perdue.
+//
+// Sans configuration, requireSameAccount laisse tout passer : il n'a rien à
+// comparer. Le cache d'un profil serveur porte pourtant encore son travail en
+// attente, et la passe suivante l'enverrait au compte qu'on vient de saisir,
+// quel qu'il soit. Son propriétaire tient lieu de configuration.
+//
+// Un cache local n'appartient à personne : ses notes montent, c'est le
+// branchement. Un cache sans propriétaire laisse passer, faute de savoir : ou
+// bien il n'a jamais été rouvert sous une configuration intacte depuis la mise
+// à jour, ou bien l'index a été perdu **en même temps** que la configuration.
+// Dans ce second cas la reconstruction remet en file chaque blob orphelin, et
+// la fuite reste possible — deux fichiers écrits atomiquement, perdus ensemble.
+// Refuser bloquerait en revanche tout profil reconstruit, même sur son compte.
+func requireCacheOwner(cache *store.Store, serverURL, username, authMode, identityKey string) error {
+	if cache.LocalOnly() {
+		return nil
+	}
+	raw := cache.Owner()
+	if raw == "" {
+		return nil
+	}
+	var owner cacheOwner
+	if err := json.Unmarshal([]byte(raw), &owner); err != nil {
+		// Illisible, il ne prouve rien dans un sens ni dans l'autre. Refuser
+		// coûte un nouveau profil ; accepter peut envoyer des notes ailleurs.
+		return errAccountMismatch()
+	}
+	return requireSameAccount(config.Config{
+		Mode:        config.ModeServer,
+		ServerURL:   owner.ServerURL,
+		Username:    owner.Username,
+		AuthMode:    owner.AuthMode,
+		IdentityKey: owner.IdentityKey,
+	}, serverURL, username, authMode, identityKey)
 }
 
 func errAccountMismatch() error {
@@ -1767,13 +1910,17 @@ func (a *App) CreateNoteJSON(dir, name, content string) (string, error) {
 		}
 		return toJSON(noteRef{Path: note.Path, Name: note.Name, Display: note.DisplayName})
 	}
-	if !errors.Is(err, opencloud.ErrOffline) {
+	if !errors.Is(err, opencloud.ErrOffline) && !errors.Is(err, opencloud.ErrUnauthorized) {
 		return "", err
 	}
 
 	// Hors connexion : la note est créée dans le cache seul et poussée plus
 	// tard. Pouvoir écrire une note existante sans réseau mais pas en créer
 	// une n'aurait aucun sens pour l'utilisateur.
+	//
+	// Un token refusé est traité de même : modifier une note existante reste
+	// possible sous une session expirée, créer une note doit l'être aussi. La
+	// passe de synchronisation la poussera après la reconnexion.
 	return a.createNoteLocal(dir, name, content)
 }
 
@@ -1791,40 +1938,17 @@ func (a *App) createNoteLocal(dir, name, content string) (string, error) {
 		return "", err
 	}
 
-	dir = notes.CleanPath(dir)
-	available := a.availableNameFromCache(dir, name)
-	notePath := path.Join(dir, available)
-
-	if err := a.cache.Put(notePath, []byte(content)); err != nil {
+	// Le cache choisit le nom libre et écrit d'un même geste : voir PutNew.
+	notePath, err := a.cache.PutNew(path.Join(notes.CleanPath(dir), name), []byte(content))
+	if err != nil {
 		return "", err
 	}
+	available := path.Base(notePath)
 	return toJSON(noteRef{
 		Path:    notePath,
 		Name:    available,
 		Display: notes.DisplayName(available),
 	})
-}
-
-// availableNameFromCache ajoute un suffixe numérique tant que le nom est pris
-// dans le cache.
-func (a *App) availableNameFromCache(dir, name string) string {
-	taken := map[string]bool{}
-	for _, entry := range a.cache.Entries() {
-		taken[entry.Path] = true
-	}
-
-	ext := path.Ext(name)
-	base := strings.TrimSuffix(name, ext)
-
-	for attempt := 0; ; attempt++ {
-		candidate := name
-		if attempt > 0 {
-			candidate = fmt.Sprintf("%s (%d)%s", base, attempt+1, ext)
-		}
-		if !taken[path.Join(dir, candidate)] {
-			return candidate
-		}
-	}
 }
 
 // CreateFolderJSON crée un sous-dossier.
@@ -1851,12 +1975,12 @@ func (a *App) CreateFolderJSON(dir, name string) (string, error) {
 		}
 		return toJSON(noteRef{Path: folder.Path, Name: folder.Name, Display: folder.Name})
 	}
-	if !errors.Is(err, opencloud.ErrOffline) {
+	if !errors.Is(err, opencloud.ErrOffline) && !errors.Is(err, opencloud.ErrUnauthorized) {
 		return "", err
 	}
 
-	// Hors connexion : le dossier est retenu par le cache et créé au prochain
-	// passage. Le navigateur l'affiche entre-temps.
+	// Hors connexion, ou sous un token refusé : le dossier est retenu par le
+	// cache et créé au prochain passage. Le navigateur l'affiche entre-temps.
 	return a.createFolderLocal(dir, name)
 }
 

@@ -13,9 +13,9 @@ Deux façons d'y parvenir, selon la façon dont le serveur authentifie :
 - **IdP intégré d'OpenCloud** — possible, mais l'admin devient responsable de
   **toute** la liste des clients. Lire l'avertissement ci-dessous avant de s'y
   engager.
-- **ownCloud Infinite Scale (OCIS)** — compatibilité **expérimentale**, avec une
-  procédure différente de celle d'OpenCloud. Voir
-  [ownCloud Infinite Scale](#owncloud-infinite-scale-expérimental).
+- **ownCloud Infinite Scale (OCIS)** — compatible, avec une procédure
+  d'enregistrement différente de celle d'OpenCloud. Voir
+  [ownCloud Infinite Scale](#owncloud-infinite-scale).
 
 ## Client du serveur OpenCloud intégré
 
@@ -159,7 +159,7 @@ GET /signin/v1/identifier/_/authorize
 Après modification de la configuration, redémarrer le service IDP ou le
 conteneur OpenCloud qui le porte.
 
-## ownCloud Infinite Scale (expérimental)
+## ownCloud Infinite Scale
 
 > ⚠️ **Compatibilité expérimentale.** Testée en **7.x** (IdP 7.2.0) et en
 > **8.2.0**, en Docker : les opérations de fichiers (App Token) passent les

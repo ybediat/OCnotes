@@ -10,6 +10,8 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import eu.ocnotes.AppContainer
 import eu.ocnotes.data.AppMode
+import eu.ocnotes.data.CompteDejaPresentException
+import eu.ocnotes.data.ConversionVersCompteExistantException
 import eu.ocnotes.data.ErrorCategory
 import eu.ocnotes.data.OCnotesException
 import eu.ocnotes.data.OCnotesRepository
@@ -77,6 +79,7 @@ class LoginViewModel(
     private val tokenStore: TokenStore,
     private val oidcManager: OidcManager,
     private val savedStateHandle: SavedStateHandle,
+    private val surCompteDejaPresent: (CompteDejaPresentException) -> Unit,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LoginUiState())
@@ -155,6 +158,11 @@ class LoginViewModel(
                         },
                     )
                 }
+            } catch (_: ConversionVersCompteExistantException) {
+                refuserConversion()
+            } catch (e: CompteDejaPresentException) {
+                _uiState.update { it.copy(enCours = false) }
+                surCompteDejaPresent(e)
             } catch (e: OCnotesException) {
                 _uiState.update {
                     it.copy(
@@ -250,6 +258,11 @@ class LoginViewModel(
                 }
             } catch (e: CancellationException) {
                 throw e
+            } catch (_: ConversionVersCompteExistantException) {
+                refuserConversion()
+            } catch (e: CompteDejaPresentException) {
+                _uiState.update { it.copy(enCours = false) }
+                surCompteDejaPresent(e)
             } catch (_: Throwable) {
                 _uiState.update {
                     it.copy(enCours = false, erreur = Texte.de(eu.ocnotes.R.string.login_oidc_erreur))
@@ -275,6 +288,21 @@ class LoginViewModel(
         }
     }
 
+    /**
+     * Le compte visé est déjà ouvert dans un autre profil : la conversion est
+     * abandonnée, le profil local et ses notes restent tels quels. L'écran
+     * reste ouvert, avec « Rester en mode local » pour revenir aux notes.
+     */
+    private fun refuserConversion() {
+        _uiState.update {
+            it.copy(
+                enCours = false,
+                erreur = Texte.de(eu.ocnotes.R.string.conversion_compte_deja_present),
+                erreurEstAuth = false,
+            )
+        }
+    }
+
     /** Consommé par l'écran après la navigation, pour ne pas naviguer deux fois. */
     fun suiteConsommee() = _uiState.update { it.copy(suite = null) }
 
@@ -288,6 +316,9 @@ class LoginViewModel(
                     container.tokenStore,
                     container.oidcManager,
                     createSavedStateHandle(),
+                    surCompteDejaPresent = { e ->
+                        container.lancerGesteCompte { adopterCompteExistant(e.existantId, e.nouveauId) }
+                    },
                 )
             }
         }

@@ -3,6 +3,7 @@ package eu.ocnotes.ui.common
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -18,9 +19,11 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -30,9 +33,11 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,15 +45,20 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.ocnotes.R
 import eu.ocnotes.appContainer
 import eu.ocnotes.data.AccountProfile
+import eu.ocnotes.data.MAX_NOM_LOCAL
 import eu.ocnotes.data.AuthMode
+import eu.ocnotes.data.EnjeuSuppression
 import eu.ocnotes.ui.browser.ModeAffichage
 import eu.ocnotes.ui.theme.CouleurSignatureClaire
 import eu.ocnotes.ui.theme.CouleurSignatureSombre
@@ -99,6 +109,7 @@ fun TiroirApplication(
     val fermer: () -> Unit = { portee.launch { etatTiroir.close() } }
     var aProposOuvert by rememberSaveable { mutableStateOf(false) }
     var compteASupprimer by remember { mutableStateOf<AccountProfile?>(null) }
+    var compteARenommer by remember { mutableStateOf<AccountProfile?>(null) }
     val couleurTitre = if (isSystemInDarkTheme()) CouleurSignatureSombre else CouleurSignatureClaire
     val container = LocalContext.current.appContainer
     val comptes by container.accountRegistry.state.collectAsStateWithLifecycle()
@@ -142,11 +153,21 @@ fun TiroirApplication(
                         },
                         selected = compte.id == comptes.active.id,
                         badge = {
-                            IconButton(onClick = { compteASupprimer = compte }) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = stringResource(R.string.compte_supprimer),
-                                )
+                            Row {
+                                if (compte.kind == "local") {
+                                    IconButton(onClick = { compteARenommer = compte }) {
+                                        Icon(
+                                            Icons.Default.Edit,
+                                            contentDescription = stringResource(R.string.compte_renommer),
+                                        )
+                                    }
+                                }
+                                IconButton(onClick = { compteASupprimer = compte }) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = stringResource(R.string.compte_supprimer),
+                                    )
+                                }
                             }
                         },
                         onClick = {
@@ -245,34 +266,158 @@ fun TiroirApplication(
         AProposDialog(onFermer = { aProposOuvert = false })
     }
 
-    compteASupprimer?.let { compte ->
-        AlertDialog(
-            onDismissRequest = { compteASupprimer = null },
-            title = { Text(stringResource(R.string.compte_supprimer_titre)) },
-            text = {
-                Text(stringResource(R.string.compte_supprimer_message, nomCompte(compte)))
+    compteARenommer?.let { compte ->
+        DialogueRenommageCompte(
+            compte = compte,
+            onConfirme = { nom ->
+                compteARenommer = null
+                portee.launch { container.accountRegistry.renommerLocal(compte.id, nom) }
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        compteASupprimer = null
-                        fermer()
-                        onSupprimerCompte(compte.id)
-                    },
-                ) {
-                    Text(
-                        stringResource(R.string.compte_supprimer),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { compteASupprimer = null }) {
-                    Text(stringResource(R.string.action_annuler))
-                }
-            },
+            onAnnule = { compteARenommer = null },
         )
     }
+
+    compteASupprimer?.let { compte ->
+        DialogueSuppressionCompte(
+            compte = compte,
+            onConfirme = {
+                compteASupprimer = null
+                fermer()
+                onSupprimerCompte(compte.id)
+            },
+            onAnnule = { compteASupprimer = null },
+        )
+    }
+}
+
+/** Nom d'un profil local : un libellé Android, jamais transmis au cœur Go. */
+@Composable
+private fun DialogueRenommageCompte(
+    compte: AccountProfile,
+    onConfirme: (String) -> Unit,
+    onAnnule: () -> Unit,
+) {
+    var nom by remember(compte.id) { mutableStateOf(compte.displayName) }
+    AlertDialog(
+        onDismissRequest = onAnnule,
+        title = { Text(stringResource(R.string.compte_renommer)) },
+        text = {
+            OutlinedTextField(
+                value = nom,
+                onValueChange = { nom = it.take(MAX_NOM_LOCAL) },
+                label = { Text(stringResource(R.string.compte_nom_label)) },
+                placeholder = { Text(stringResource(R.string.compte_local)) },
+                singleLine = true,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirme(nom) }) {
+                Text(stringResource(R.string.action_renommer))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onAnnule) {
+                Text(stringResource(R.string.action_annuler))
+            }
+        },
+    )
+}
+
+/**
+ * Confirmation de la suppression d'un profil.
+ *
+ * C'est le seul geste de l'application qui détruise des notes sans copie
+ * ailleurs : celles d'un profil local, et les écritures d'un profil serveur que
+ * la synchronisation n'a pas encore envoyées. Dans ces deux cas la case est
+ * obligatoire. Une lecture du travail en attente qui échoue compte comme un
+ * risque, pas comme son absence — il faut pouvoir supprimer un profil abîmé,
+ * mais pas à l'aveugle.
+ */
+@Composable
+private fun DialogueSuppressionCompte(
+    compte: AccountProfile,
+    onConfirme: () -> Unit,
+    onAnnule: () -> Unit,
+) {
+    val container = LocalContext.current.appContainer
+    // `null` tant que la lecture est en cours ou si elle a échoué.
+    var enjeu by remember(compte.id) { mutableStateOf<EnjeuSuppression?>(null) }
+    var compris by remember(compte.id) { mutableStateOf(false) }
+    LaunchedEffect(compte.id) { enjeu = container.enjeuSuppression(compte.id) }
+
+    // Le registre peut retarder sur le cœur (voir `enjeuSuppression`) : l'un ou
+    // l'autre qui dit « local » suffit.
+    val local = compte.kind == "local" || enjeu?.local == true
+    val enAttente = enjeu?.enAttente
+
+    val perte = !local && enAttente?.let { it > 0 } == true
+    val verrou = local || enAttente != 0
+
+    AlertDialog(
+        onDismissRequest = onAnnule,
+        title = {
+            Text(
+                stringResource(
+                    if (local || perte) {
+                        R.string.compte_supprimer_perte_titre
+                    } else {
+                        R.string.compte_supprimer_titre
+                    },
+                ),
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                val attente = enAttente
+                Text(
+                    when {
+                        local -> stringResource(R.string.compte_supprimer_local_message)
+                        perte && attente != null -> pluralStringResource(
+                            R.plurals.compte_supprimer_attente_message,
+                            attente,
+                            nomCompte(compte),
+                            attente,
+                        )
+                        else -> stringResource(R.string.compte_supprimer_message, nomCompte(compte))
+                    },
+                )
+                if (verrou) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.toggleable(
+                            value = compris,
+                            role = Role.Checkbox,
+                            onValueChange = { compris = it },
+                        ),
+                    ) {
+                        Checkbox(checked = compris, onCheckedChange = null)
+                        Text(
+                            text = stringResource(
+                                if (local) {
+                                    R.string.reglages_local_effacer_case
+                                } else {
+                                    R.string.reglages_deconnexion_perte_case
+                                },
+                            ),
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            BoutonDangereux(
+                texte = stringResource(R.string.compte_supprimer),
+                onClick = onConfirme,
+                enabled = !verrou || compris,
+            )
+        },
+        dismissButton = {
+            TextButton(onClick = onAnnule) {
+                Text(stringResource(R.string.action_annuler))
+            }
+        },
+    )
 }
 
 /**
@@ -281,8 +426,8 @@ fun TiroirApplication(
  * il arrive avec la session suivante —, l'adresse du serveur en tient lieu.
  */
 @Composable
-private fun nomCompte(compte: AccountProfile): String = when {
-    compte.kind == "local" -> stringResource(R.string.compte_local)
+fun nomCompte(compte: AccountProfile): String = when {
+    compte.kind == "local" -> compte.displayName.ifBlank { stringResource(R.string.compte_local) }
     compte.displayName.isNotBlank() -> compte.displayName
     compte.authMode != AuthMode.OIDC && compte.username.isNotBlank() -> compte.username
     else -> adresseServeur(compte) ?: stringResource(R.string.compte_nouveau)
