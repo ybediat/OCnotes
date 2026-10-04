@@ -113,22 +113,75 @@ fun VueMarkdown(
     var lienAConfirmer by remember { mutableStateOf<String?>(null) }
     lienAConfirmer?.let { ConfirmationLien(it, onFermer = { lienAConfirmer = null }) }
 
+    // Vrai depuis le premier appui long (qui peut ouvrir une sélection) jusqu'au
+    // prochain toucher simple (qui l'efface) : voir [Epingle].
+    var selectionPossible by remember { mutableStateOf(false) }
+
     CompositionLocalProvider(LocalOuvrirLien provides { lienAConfirmer = it }) {
         SelectionContainer {
-            Column(
+            LazyColumn(
                 modifier = modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                    .pointerInput(Unit) { suivreSelectionPossible { selectionPossible = it } },
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                elements.forEach { element ->
+                itemsIndexed(elements) { _, element ->
+                    Epingle(actif = selectionPossible)
                     when (element) {
                         is ElementApercu.Bloc -> Bloc(element.bloc)
                         is ElementApercu.Tableau -> Tableau(element.lignes)
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Garde l'élément de liste en composition tant qu'une sélection est possible.
+ *
+ * La sélection retient l'identifiant de ses deux extrémités. Si le bloc d'une
+ * extrémité sort de la composition parce qu'on a défilé, étendre la sélection
+ * cherche un identifiant disparu et Compose lève `NoSuchElementException:
+ * Cannot find value for key N` (`SelectionManager.getSelectionLayout`), ce qui
+ * tue l'application. Constaté en Compose 1.7, 1.8.3 et 1.11.4. Un élément
+ * épinglé ne quitte plus la composition ; il est relâché quand la sélection
+ * s'efface ou que l'élément est retiré de la liste.
+ *
+ * Une `Column` défilante règlerait aussi le défaut, mais compose toute la note
+ * d'un coup : 11 s d'ouverture et 66 % d'images en retard sur 295 ko, contre
+ * 0,75 s (carnet : `ANDROID-APERCU-SELECTION`).
+ */
+@Composable
+private fun Epingle(actif: Boolean) {
+    val conteneur = LocalPinnableContainer.current
+    DisposableEffect(conteneur, actif) {
+        val prise = if (actif) conteneur?.pin() else null
+        onDispose { prise?.release() }
+    }
+}
+
+/**
+ * Signale quand une sélection de texte devient possible, ou s'efface.
+ *
+ * Compose n'expose ni la sélection ni son registre (types internes) : on
+ * déduit son existence du geste. Un appui long l'ouvre ; un toucher simple la
+ * ferme. Un défilement ne change rien. Ne consomme aucun événement. Le cas
+ * « sélection effacée autrement » (copier, retour) laisse l'épinglage actif
+ * jusqu'au prochain toucher : un peu de mémoire, jamais un plantage.
+ */
+private suspend fun PointerInputScope.suivreSelectionPossible(changer: (Boolean) -> Unit) {
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        try {
+            val leve = withTimeout(viewConfiguration.longPressTimeoutMillis) {
+                waitForUpOrCancellation(PointerEventPass.Initial)
+            }
+            // Doigt levé avant le délai, sans défilement : un toucher simple.
+            if (leve != null) changer(false)
+        } catch (_: PointerEventTimeoutCancellationException) {
+            changer(true)
         }
     }
 }

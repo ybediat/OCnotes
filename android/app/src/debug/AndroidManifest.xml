@@ -13,5 +13,10 @@
             android:exported="true"
             android:theme="@style/Theme.OCnotes"
             android:windowSoftInputMode="adjustResize|stateAlwaysHidden" />
+
+        <activity
+            android:name=".ui.editor.ApercuProbeActivity"
+            android:exported="true"
+            android:theme="@style/Theme.OCnotes" />
     </application>
 </manifest>
