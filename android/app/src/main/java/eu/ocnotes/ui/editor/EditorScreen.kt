@@ -353,6 +353,9 @@ private fun ZoneSaisie(
                 defilementInitialY = restauration?.defilementY ?: 0,
                 masque = etat.apercu,
                 saisieAutomatique = etat.saisieAutomatique,
+                // Un `.txt` n'est pas interprété : y colorer un `#` ou un `*`
+                // ferait croire à une mise en forme qui n'existera pas.
+                colorationCode = !etat.texteBrut,
                 indication = stringResource(R.string.editeur_saisie_vide),
                 descriptionDefilementRapide = stringResource(
                     R.string.editeur_defilement_rapide,

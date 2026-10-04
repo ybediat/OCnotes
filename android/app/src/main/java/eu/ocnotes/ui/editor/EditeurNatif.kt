@@ -35,6 +35,13 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.drawable.DrawableCompat
 import kotlin.math.roundToInt
 
+/** Opacité du code coloré : en retrait du texte, mais lisible. */
+private const val COLORATION_ALPHA = 0.85f
+
+private class ReferenceColoration {
+    var valeur: ColorationFenetre? = null
+}
+
 /** Sélection exprimée dans les offsets UTF-16 natifs d'Android et de Compose. */
 data class SelectionEditeurNatif(val debut: Int, val fin: Int)
 
@@ -211,6 +218,8 @@ fun EditeurNatif(
     onMutation: (Long) -> Unit = {},
     onAvantDetachement: (InstantaneEditeurNatif) -> Unit = {},
     onPret: () -> Unit = {},
+    colorationCode: Boolean = false,
+    onColoration: (spans: Int, ms: Double) -> Unit = { _, _ -> },
 ) {
     val couleurTexte = androidx.compose.material3.MaterialTheme.colorScheme.onSurface.toArgb()
     val couleurIndication =
@@ -220,6 +229,11 @@ fun EditeurNatif(
     val couleurSelection = androidx.compose.material3.MaterialTheme.colorScheme.primary
         .copy(alpha = 0.28f)
         .toArgb()
+    // Teinte tertiaire du thème, voisine du turquoise du curseur sans le
+    // doubler ; légèrement estompée pour rester en retrait du texte.
+    val couleurCode = androidx.compose.material3.MaterialTheme.colorScheme.tertiary
+        .copy(alpha = COLORATION_ALPHA)
+        .toArgb()
     val densite = LocalDensity.current
     val paddingHorizontal = with(densite) { 20.dp.roundToPx() }
     val paddingTop = with(densite) { 8.dp.roundToPx() }
@@ -228,6 +242,9 @@ fun EditeurNatif(
     val detachementCourant = rememberUpdatedState(onAvantDetachement)
     val pretCourant = rememberUpdatedState(onPret)
     var defilement by remember(session) { mutableStateOf(EtatDefilementNatif()) }
+    // Posée par `factory`, lue par `update` : une référence, jamais un état
+    // Compose — la lire ne doit rien recomposer.
+    val coloration = remember(session) { ReferenceColoration() }
 
     key(session) {
         Box(modifier = modifier) {
@@ -288,6 +305,10 @@ fun EditeurNatif(
                                 selectionInitiale.fin.coerceIn(0, length()),
                             )
 
+                            if (colorationCode) {
+                                coloration.valeur = ColorationFenetre(this@apply, couleurCode, onColoration)
+                            }
+
                             session.attacher(this@apply, revisionInitiale)
                             addTextChangedListener(
                                 object : TextWatcher {
@@ -303,7 +324,11 @@ fun EditeurNatif(
                                         start: Int,
                                         before: Int,
                                         count: Int,
-                                    ) = Unit
+                                    ) {
+                                        // Seules les lignes touchées sont relues.
+                                        val suivi = coloration.valeur ?: return
+                                        (s as? Editable)?.let { suivi.apresModification(it, start, before, count) }
+                                    }
 
                                     override fun afterTextChanged(s: Editable?) {
                                         session.signalerModification(this@apply)?.let {
@@ -314,6 +339,7 @@ fun EditeurNatif(
                             )
                             setOnScrollChangeListener { _, _, _, _, _ ->
                                 defilement = etatDefilementNatif()
+                                coloration.valeur?.suivre()
                             }
                             onInitialise(this@apply, debutInitialisation)
                             post {
@@ -326,6 +352,9 @@ fun EditeurNatif(
                                     override fun onPreDraw(): Boolean {
                                         this@apply.viewTreeObserver
                                             .removeOnPreDrawListener(this)
+                                        // La mise en page existe enfin : on sait ce
+                                        // qui est à l'écran.
+                                        coloration.valeur?.suivre(force = true)
                                         pretCourant.value()
                                         return true
                                     }
@@ -345,6 +374,7 @@ fun EditeurNatif(
                     champ.setBackgroundColor(couleurFond)
                     champ.highlightColor = couleurSelection
                     champ.teinterCurseur(couleurCurseur)
+                    coloration.valeur?.changerCouleur(couleurCode)
                 },
                 onRelease = { champ ->
                     champ.setOnScrollChangeListener(null)

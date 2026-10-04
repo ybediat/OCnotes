@@ -393,3 +393,13 @@ func TestRenderPlainDecoupeSansLigneVide(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderDecodeEntitesEtEchappements(t *testing.T) {
+	blocks := Render("a&nbsp;b &amp; c \\*non italique\\* `&nbsp;`\n")
+
+	b := bloc(t, blocks, 0)
+	want := "a b & c *non italique* &nbsp;"
+	if b.Text != want {
+		t.Errorf("Text = %q, attendu %q", b.Text, want)
+	}
+}

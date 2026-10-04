@@ -26,6 +26,8 @@ param(
     [switch] $Prechauffer,
     [switch] $Frappe,
     [switch] $Selection,
+    [switch] $Coloration,
+    [switch] $Dense,
     [int] $Caracteres = 40,
     [string] $Paquet = "eu.ocnotes.debug",
     [string] $Passe = (Get-Date -Format "yyyyMMdd-HHmmss")
@@ -74,6 +76,8 @@ function Start-Sonde {
     # `adb shell` reçoit une commande unique afin que les espaces des extras
     # restent protégés jusqu'au parseur `am` exécuté sur l'appareil.
     $commande = "am start -n $ActiviteSonde --es note '$Note' --es dossier '$Dossier'"
+    if ($Coloration) { $commande += " --ez coloration true" }
+    if ($Dense) { $commande += " --ez dense true" }
     Invoke-Adb shell $commande | Out-Null
     Write-Verbose "Activite sonde lancee, attente de READY."
     $journal = Wait-SondePrete

@@ -9,6 +9,7 @@ import (
 	"github.com/yuin/goldmark/extension"
 	east "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/util"
 )
 
 // Kind énumère les blocs qu'un aperçu sait afficher.
@@ -384,6 +385,8 @@ type inlineBuilder struct {
 	n        int
 	spans    []Span
 	trimNext bool
+	// brut est vrai dans un span de code, où `&nbsp;` et `\*` restent tels quels.
+	brut bool
 }
 
 func (b *inlineBuilder) write(s string) {
@@ -419,7 +422,14 @@ func (b *inlineBuilder) children(n ast.Node, src []byte) {
 func (b *inlineBuilder) node(n ast.Node, src []byte) {
 	switch v := n.(type) {
 	case *ast.Text:
-		b.write(string(v.Segment.Value(src)))
+		// Goldmark garde la source telle quelle dans un Text : `&nbsp;` (que
+		// l'éditeur web d'OpenCloud écrit pour une espace insécable) et `\*`
+		// ne sont décodés que par son rendu HTML, que nous n'utilisons pas.
+		val := v.Segment.Value(src)
+		if !b.brut {
+			val = util.ResolveEntityNames(util.UnescapePunctuations(val))
+		}
+		b.write(string(val))
 		// Un retour simple devient un vrai retour à la ligne, plutôt qu'une
 		// espace comme le veut CommonMark. Dans un carnet de notes, deux
 		// lignes tapées l'une sous l'autre sont deux lignes voulues ; les
@@ -433,7 +443,9 @@ func (b *inlineBuilder) node(n ast.Node, src []byte) {
 
 	case *ast.CodeSpan:
 		start := b.n
+		b.brut = true
 		b.children(v, src)
+		b.brut = false
 		b.span(start, StyleCode, "")
 
 	case *ast.Emphasis:

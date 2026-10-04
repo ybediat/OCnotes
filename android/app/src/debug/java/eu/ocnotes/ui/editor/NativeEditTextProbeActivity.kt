@@ -40,20 +40,25 @@ import kotlinx.coroutines.launch
 class NativeEditTextProbeActivity : ComponentActivity() {
 
     private var etat by mutableStateOf<EtatSonde>(EtatSonde.Chargement)
+    private var coloration = false
+    private var dense = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val note = intent.getStringExtra(EXTRA_NOTE).orEmpty().ifBlank { NOTE_PAR_DEFAUT }
         val dossier = intent.getStringExtra(EXTRA_DOSSIER).orEmpty().ifBlank { DOSSIER_PAR_DEFAUT }
 
-        Log.i(TAG, "START note=$note dossier=$dossier")
+        coloration = intent.getBooleanExtra(EXTRA_COLORATION, false)
+        dense = intent.getBooleanExtra(EXTRA_DENSE, false)
+
+        Log.i(TAG, "START note=$note dossier=$dossier coloration=$coloration dense=$dense")
         setContent {
             OCnotesTheme {
                 Surface(Modifier.fillMaxSize()) {
                     when (val courant = etat) {
                         EtatSonde.Chargement -> MessageSonde("Chargement de la note de référence…")
                         is EtatSonde.Echec -> MessageSonde("Échec : ${courant.message}")
-                        is EtatSonde.Prete -> EditTextNatif(courant.contenu)
+                        is EtatSonde.Prete -> EditTextNatif(courant.contenu, coloration)
                     }
                 }
             }
@@ -72,6 +77,13 @@ class NativeEditTextProbeActivity : ComponentActivity() {
     }
 
     private suspend fun chargerNote(note: String, dossier: String): ContenuSonde {
+        if (note == NOTE_SYNTHETIQUE) {
+            val texte = noteSynthetique()
+            Log.i(TAG, "LOADED path=synthetique chars=${texte.length} rawChars=${texte.length} images=0")
+            val effectif = if (dense) mettreUnMotSurCinqEnGras(texte) else texte
+            if (coloration) mesurerCoutDeLaColoration(effectif)
+            return ContenuSonde("synthetique", effectif)
+        }
         val repository = appContainer.repository
         check(repository.ensureSession()) { "session OCnotes indisponible" }
 
@@ -88,12 +100,23 @@ class NativeEditTextProbeActivity : ComponentActivity() {
             "LOADED path=${entree.path} chars=${prepare.text.length} " +
                 "rawChars=${brut.length} images=${prepare.images.size}",
         )
-        return ContenuSonde(entree.path, prepare.text)
+        // Mode « dense » : un mot sur cinq passe en gras, pour mesurer la
+        // coloration sur une note dont le Markdown est bien plus serré que la
+        // prose de test — dix à vingt mille marques sur 295 ko.
+        val texte = if (dense) mettreUnMotSurCinqEnGras(prepare.text) else prepare.text
+        if (dense) Log.i(TAG, "DENSE chars=${texte.length}")
+        if (coloration) mesurerCoutDeLaColoration(texte)
+        return ContenuSonde(entree.path, texte)
     }
 
     companion object {
         const val EXTRA_NOTE = "note"
         const val EXTRA_DOSSIER = "dossier"
+        const val EXTRA_COLORATION = "coloration"
+        const val EXTRA_DENSE = "dense"
+
+        /** Note générée sur place : ni session ni réseau, donc mesure reproductible. */
+        const val NOTE_SYNTHETIQUE = "@synthetique"
 
         private const val NOTE_PAR_DEFAUT = "scolarisation des enfants rrom"
         private const val DOSSIER_PAR_DEFAUT = "env test"
@@ -130,7 +153,7 @@ private fun choisirEntree(
 }
 
 @Composable
-private fun EditTextNatif(contenu: ContenuSonde) {
+private fun EditTextNatif(contenu: ContenuSonde, coloration: Boolean) {
     val focusRacine = remember { FocusRequester() }
     val session = remember { SessionEditeurNatif() }
 
@@ -150,6 +173,8 @@ private fun EditTextNatif(contenu: ContenuSonde) {
             modifier = Modifier.fillMaxSize(),
             description = DESCRIPTION_SONDE,
             creerChamp = ::ProbeEditText,
+            colorationCode = coloration,
+            onColoration = { spans, ms -> Log.i(TAG, "COLOR spans=$spans ms=$ms") },
             onInitialise = { champ, debut ->
                 Log.i(
                     TAG,
@@ -160,6 +185,84 @@ private fun EditTextNatif(contenu: ContenuSonde) {
             },
         )
     }
+}
+
+/**
+ * ~295 ko de prose coupée à 70 colonnes, comme la note de référence, avec le
+ * Markdown clairsemé d'une vraie note : un titre tous les quinze paragraphes,
+ * une liste tous les cinq, une entité `&nbsp;` de temps en temps.
+ */
+private fun noteSynthetique(): String {
+    val lorem = (
+        "Lorem ipsum dolor sit amet consectetur adipiscing elit placerat in id cursus " +
+            "mi pretium tellus duis urna tempor pulvinar vivamus fringilla lacus nec metus " +
+            "integer nunc posuere ut hendrerit semper vel class conubia nostra inceptos " +
+            "himenaeos orci varius natoque penatibus mus donec rhoncus eros lobortis nulla"
+        ).split(' ')
+    val sortie = StringBuilder(300_000)
+    var mot = 0
+    var paragraphe = 0
+    while (sortie.length < 295_000) {
+        if (paragraphe % 15 == 0) sortie.append("## Titre ").append(paragraphe).append("\n\n")
+        val liste = paragraphe % 5 == 0
+        val lignes = 3 + paragraphe % 4
+        repeat(lignes) {
+            val ligne = StringBuilder(if (liste) "- " else "")
+            while (ligne.length < 70) {
+                ligne.append(lorem[mot++ % lorem.size])
+                ligne.append(if (mot % 23 == 0) "&nbsp;" else " ")
+            }
+            sortie.append(ligne.toString().trimEnd()).append('\n')
+        }
+        sortie.append('\n')
+        paragraphe++
+    }
+    return sortie.toString()
+}
+
+/** Sépare l'analyse (pure) de la pose des spans, pour savoir lequel coûte. */
+private fun mesurerCoutDeLaColoration(texte: String) {
+    var n = 0
+    val t0 = System.nanoTime()
+    plagesDeCode(texte, 0, texte.length) { _, _ -> n++ }
+    val t1 = System.nanoTime()
+    val plages = IntArray(n * 2)
+    var k = 0
+    plagesDeCode(texte, 0, texte.length) { d, f -> plages[k++] = d; plages[k++] = f }
+    val tampon = android.text.SpannableStringBuilder(texte)
+    val t2 = System.nanoTime()
+    for (j in 0 until n) {
+        tampon.setSpan(SpanCode(0x80000000.toInt()), plages[2 * j], plages[2 * j + 1],
+            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+    val t3 = System.nanoTime()
+    val sansArbre = android.text.SpannableString(texte)
+    val t4 = System.nanoTime()
+    for (j in 0 until n) {
+        sansArbre.setSpan(SpanCode(0x80000000.toInt()), plages[2 * j], plages[2 * j + 1],
+            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+    val t5 = System.nanoTime()
+    Log.i(TAG, "SCAN plages=$n analyseMs=${(t1 - t0) / 1e6} " +
+        "poseSSBms=${(t3 - t2) / 1e6} poseSpannableStringMs=${(t5 - t4) / 1e6}")
+}
+
+private fun mettreUnMotSurCinqEnGras(texte: String): String {
+    val sortie = StringBuilder(texte.length + texte.length / 10)
+    var mot = 0
+    var i = 0
+    while (i < texte.length) {
+        if (texte[i].isWhitespace()) {
+            sortie.append(texte[i++])
+            continue
+        }
+        val d = i
+        while (i < texte.length && !texte[i].isWhitespace()) i++
+        val unMot = texte.substring(d, i)
+        if (mot++ % 5 == 0 && unMot.length < 60) sortie.append("**").append(unMot).append("**")
+        else sortie.append(unMot)
+    }
+    return sortie.toString()
 }
 
 private fun EditText.journaliserPremierDessin(debut: Long, chemin: String) {
