@@ -182,6 +182,7 @@ private fun EditTextNatif(contenu: ContenuSonde, coloration: Boolean) {
                         "ms=${(System.nanoTime() - debut) / 1_000_000.0}",
                 )
                 champ.journaliserPremierDessin(debut, contenu.chemin)
+                champ.suivreDefilement()
             },
         )
     }
@@ -265,6 +266,19 @@ private fun mettreUnMotSurCinqEnGras(texte: String): String {
     return sortie.toString()
 }
 
+/** Journalise la position de défilement une fois par seconde (essai du retour au curseur). */
+private fun EditText.suivreDefilement() {
+    postDelayed(
+        object : Runnable {
+            override fun run() {
+                Log.i(TAG, "SCROLLY y=$scrollY focused=${hasFocus()} cursor=$selectionStart")
+                postDelayed(this, 1000)
+            }
+        },
+        1000,
+    )
+}
+
 private fun EditText.journaliserPremierDessin(debut: Long, chemin: String) {
     viewTreeObserver.addOnPreDrawListener(
         object : ViewTreeObserver.OnPreDrawListener {
@@ -286,7 +300,16 @@ private fun EditText.journaliserPremierDessin(debut: Long, chemin: String) {
 /** Journalise seulement les opérations globales utilisées par le banc. */
 // Sonde : on mesure le `android.widget.EditText` brut, pas la variante AppCompat.
 @SuppressLint("AppCompatCustomView")
-private class ProbeEditText(context: Context) : EditText(context) {
+private class ProbeEditText(context: Context) : ChampEditeur(context) {
+    override fun onScrollChanged(horiz: Int, vert: Int, oldHoriz: Int, oldVert: Int) {
+        super.onScrollChanged(horiz, vert, oldHoriz, oldVert)
+        // Un retour en arrière brutal, alors qu'on défile vers le bas : qui l'a demandé ?
+        if (vert < oldVert - 200) {
+            Log.i(TAG, "RETOUR de $oldVert a $vert par :\n" +
+                Throwable().stackTrace.drop(1).take(14).joinToString("\n") { "    at $it" })
+        }
+    }
+
     override fun onSelectionChanged(selStart: Int, selEnd: Int) {
         super.onSelectionChanged(selStart, selEnd)
         val longueur = text?.length ?: return

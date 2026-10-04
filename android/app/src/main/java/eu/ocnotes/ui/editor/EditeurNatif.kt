@@ -453,8 +453,52 @@ private fun EditText.masquer(masque: Boolean) {
  * s'ajouter au champ dont les mesures sur la note de 295 ko ont été faites sans.
  */
 @SuppressLint("AppCompatCustomView")
-internal class ChampEditeur(context: Context) : EditText(context) {
+internal open class ChampEditeur(context: Context) : EditText(context) {
     var saisieAutomatique: Boolean = true
+
+    private var suiviCurseurAutorise = true
+
+    /**
+     * `TextView` ramène le curseur à l'écran à chaque dessin qui suit un
+     * changement de texte **ou de spans**. Colorer la fenêtre visible pendant
+     * un défilement en est un : au relâchement du doigt, la note retombait là
+     * où se trouvait le curseur (pile relevée sur appareil le 4 octobre 2026 :
+     * `TextView.onPreDraw` → `bringPointIntoView` → `scrollTo`). La sonde, dont
+     * le champ n'avait pas le focus, ne le montrait pas.
+     *
+     * Le suivi n'est donc accordé que si quelque chose qui concerne vraiment le
+     * curseur a bougé — sélection, texte, taille du champ (clavier), focus —, et
+     * il est consommé par le dessin qui l'exécute.
+     */
+    private fun autoriserSuiviCurseur() {
+        suiviCurseurAutorise = true
+    }
+
+    override fun onSelectionChanged(selStart: Int, selEnd: Int) {
+        autoriserSuiviCurseur()
+        super.onSelectionChanged(selStart, selEnd)
+    }
+
+    override fun onTextChanged(texte: CharSequence?, start: Int, avant: Int, apres: Int) {
+        autoriserSuiviCurseur()
+        super.onTextChanged(texte, start, avant, apres)
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        autoriserSuiviCurseur()
+        super.onSizeChanged(w, h, oldw, oldh)
+    }
+
+    override fun onFocusChanged(focused: Boolean, direction: Int, previouslyFocusedRect: android.graphics.Rect?) {
+        autoriserSuiviCurseur()
+        super.onFocusChanged(focused, direction, previouslyFocusedRect)
+    }
+
+    override fun bringPointIntoView(offset: Int): Boolean {
+        val autorise = suiviCurseurAutorise
+        suiviCurseurAutorise = false
+        return autorise && super.bringPointIntoView(offset)
+    }
 
     override fun getAutofillType(): Int =
         if (saisieAutomatique) super.getAutofillType() else AUTOFILL_TYPE_NONE
