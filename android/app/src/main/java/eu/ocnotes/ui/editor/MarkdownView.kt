@@ -5,17 +5,17 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,7 +44,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LocalPinnableContainer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
@@ -105,12 +115,14 @@ fun VueMarkdown(
 
     CompositionLocalProvider(LocalOuvrirLien provides { lienAConfirmer = it }) {
         SelectionContainer {
-            LazyColumn(
-                modifier = modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+            Column(
+                modifier = modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                itemsIndexed(elements) { _, element ->
+                elements.forEach { element ->
                     when (element) {
                         is ElementApercu.Bloc -> Bloc(element.bloc)
                         is ElementApercu.Tableau -> Tableau(element.lignes)
@@ -189,6 +201,8 @@ private fun ConfirmationLien(url: String, onFermer: () -> Unit) {
 }
 
 private const val MAX_URL_AFFICHEE = 500
+private const val LARGEUR_BARRE_DP = 3
+private const val PAS_BARRE_DP = 13 // barre de 3 dp + 10 dp d'air
 
 /** Un élément de la liste visible, avec les tableaux reconstitués. */
 private sealed interface ElementApercu {
@@ -224,27 +238,27 @@ private fun grouperPourApercu(blocs: List<NoteBlockDto>): List<ElementApercu> {
  */
 @Composable
 private fun Bloc(bloc: NoteBlockDto) {
+    val couleurBarre = MaterialTheme.colorScheme.outlineVariant
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(IntrinsicSize.Min)
-            .padding(start = (bloc.depth * RETRAIT_LISTE_DP).dp),
+            // Les barres de citation se dessinent, elles ne se mesurent pas :
+            // `height(IntrinsicSize.Min)` donne sa hauteur au bloc en contrainte
+            // fixe, et Compose lève IllegalArgumentException au-delà de
+            // 262 143 px — un seul paragraphe démesuré tuait l'application.
+            .drawBehind {
+                repeat(bloc.quote) { niveau ->
+                    val x = (bloc.depth * RETRAIT_LISTE_DP + niveau * PAS_BARRE_DP).dp.toPx()
+                    drawRoundRect(
+                        color = couleurBarre,
+                        topLeft = Offset(x, 0f),
+                        size = Size(LARGEUR_BARRE_DP.dp.toPx(), size.height),
+                        cornerRadius = CornerRadius(2.dp.toPx()),
+                    )
+                }
+            }
+            .padding(start = (bloc.depth * RETRAIT_LISTE_DP + bloc.quote * PAS_BARRE_DP).dp),
     ) {
-        // Une barre par niveau de citation : une citation dans une citation
-        // se voit, sans qu'aucun texte n'ait à le dire.
-        repeat(bloc.quote) {
-            Box(
-                Modifier
-                    .padding(end = 10.dp)
-                    .width(3.dp)
-                    .fillMaxHeight()
-                    .background(
-                        MaterialTheme.colorScheme.outlineVariant,
-                        RoundedCornerShape(2.dp),
-                    ),
-            )
-        }
-
         Column(Modifier.weight(1f)) {
             when (bloc.kind) {
                 BlockKind.TITRE -> Titre(bloc)
