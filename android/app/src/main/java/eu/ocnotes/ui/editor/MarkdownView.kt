@@ -126,7 +126,15 @@ fun VueMarkdown(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                itemsIndexed(elements) { _, element ->
+                itemsIndexed(
+                    items = elements,
+                    contentType = { _, element ->
+                        when (element) {
+                            is ElementApercu.Bloc -> element.bloc.kind
+                            is ElementApercu.Tableau -> "tableau"
+                        }
+                    }
+                ) { _, element ->
                     Epingle(actif = selectionPossible)
                     when (element) {
                         is ElementApercu.Bloc -> Bloc(element.bloc)
@@ -557,53 +565,55 @@ private fun enrichi(bloc: NoteBlockDto): AnnotatedString {
     // traverse pas la façade : « marqué » est la seule information portée.
     val fondSurligne = Color(0xFFFFF176).copy(alpha = 0.40f)
 
-    return buildAnnotatedString {
-        append(bloc.text)
-        val fin = bloc.text.length
+    return remember(bloc) {
+        buildAnnotatedString {
+            append(bloc.text)
+            val fin = bloc.text.length
 
-        bloc.spans.forEach { span ->
-            val debut = span.start.coerceIn(0, fin)
-            val terme = span.end.coerceIn(debut, fin)
-            if (debut == terme) return@forEach
+            bloc.spans.forEach { span ->
+                val debut = span.start.coerceIn(0, fin)
+                val terme = span.end.coerceIn(debut, fin)
+                if (debut == terme) return@forEach
 
-            if (span.style == SpanStyleId.LIEN) {
-                if (span.href.isNotBlank()) {
-                    // L'écouteur remplace l'ouverture directe par le
-                    // LocalUriHandler : VueMarkdown demande d'abord confirmation.
-                    val href = span.href
-                    addLink(
-                        url = LinkAnnotation.Url(
-                            url = href,
-                            styles = TextLinkStyles(
-                                style = SpanStyle(
-                                    color = couleurLien,
-                                    textDecoration = TextDecoration.Underline,
+                if (span.style == SpanStyleId.LIEN) {
+                    if (span.href.isNotBlank()) {
+                        // L'écouteur remplace l'ouverture directe par le
+                        // LocalUriHandler : VueMarkdown demande d'abord confirmation.
+                        val href = span.href
+                        addLink(
+                            url = LinkAnnotation.Url(
+                                url = href,
+                                styles = TextLinkStyles(
+                                    style = SpanStyle(
+                                        color = couleurLien,
+                                        textDecoration = TextDecoration.Underline,
+                                    ),
                                 ),
+                                linkInteractionListener = { ouvrirLien(href) },
                             ),
-                            linkInteractionListener = { ouvrirLien(href) },
-                        ),
-                        start = debut,
-                        end = terme,
-                    )
+                            start = debut,
+                            end = terme,
+                        )
+                    }
+                    return@forEach
                 }
-                return@forEach
-            }
 
-            val style = when (span.style) {
-                SpanStyleId.GRAS -> SpanStyle(fontWeight = FontWeight.Bold)
-                SpanStyleId.ITALIQUE -> SpanStyle(fontStyle = FontStyle.Italic)
-                SpanStyleId.BARRE -> SpanStyle(textDecoration = TextDecoration.LineThrough)
-                SpanStyleId.SOULIGNE -> SpanStyle(textDecoration = TextDecoration.Underline)
-                SpanStyleId.SURLIGNE -> SpanStyle(background = fondSurligne)
-                SpanStyleId.CODE -> SpanStyle(
-                    fontFamily = FontFamily.Monospace,
-                    background = fondCode,
-                )
-                // Un style inconnu vient d'un cœur Go plus récent que cette
-                // interface : on affiche le texte sans décor plutôt que rien.
-                else -> return@forEach
+                val style = when (span.style) {
+                    SpanStyleId.GRAS -> SpanStyle(fontWeight = FontWeight.Bold)
+                    SpanStyleId.ITALIQUE -> SpanStyle(fontStyle = FontStyle.Italic)
+                    SpanStyleId.BARRE -> SpanStyle(textDecoration = TextDecoration.LineThrough)
+                    SpanStyleId.SOULIGNE -> SpanStyle(textDecoration = TextDecoration.Underline)
+                    SpanStyleId.SURLIGNE -> SpanStyle(background = fondSurligne)
+                    SpanStyleId.CODE -> SpanStyle(
+                        fontFamily = FontFamily.Monospace,
+                        background = fondCode,
+                    )
+                    // Un style inconnu vient d'un cœur Go plus récent que cette
+                    // interface : on affiche le texte sans décor plutôt que rien.
+                    else -> return@forEach
+                }
+                addStyle(style, debut, terme)
             }
-            addStyle(style, debut, terme)
         }
     }
 }
