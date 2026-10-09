@@ -252,6 +252,7 @@ fun EditeurNatif(
     val paddingHorizontal = with(densite) { 20.dp.roundToPx() }
     val paddingTop = with(densite) { 8.dp.roundToPx() }
     val paddingBottom = with(densite) { 48.dp.roundToPx() }
+    val margeRognage = with(densite) { 8.dp.roundToPx() }
     val mutationCourante = rememberUpdatedState(onMutation)
     val detachementCourant = rememberUpdatedState(onAvantDetachement)
     val pretCourant = rememberUpdatedState(onPret)
@@ -300,6 +301,7 @@ fun EditeurNatif(
                             paddingHorizontal,
                             paddingBottom,
                         )
+                        (this as? ChampEditeur)?.margeRognagePx = margeRognage
                         setSelectAllOnFocus(false)
                         isSaveEnabled = false
                         teinterCurseur(couleurCurseur)
@@ -471,6 +473,21 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
     var saisieAutomatique: Boolean = true
 
     private var suiviCurseurAutorise = true
+
+    /**
+     * Hauteur, en bas du champ, où le texte est rogné pendant le défilement.
+     *
+     * `TextView.onDraw` rogne le texte à la marge basse du champ, sauf quand la
+     * note est défilée tout en bas. Avec la marge de respiration de fin de note
+     * (48 dp), le texte s'arrêtait donc 48 dp au-dessus de la barre de mise en
+     * forme, au milieu de la note : une bande vide. Le rognage lit
+     * [getExtendedPaddingBottom] ; la plage de défilement, elle, lit la marge
+     * réelle et garde son air de fin de note.
+     */
+    var margeRognagePx: Int = Int.MAX_VALUE
+
+    override fun getExtendedPaddingBottom(): Int =
+        minOf(super.getExtendedPaddingBottom(), margeRognagePx)
 
     /**
      * `TextView` ramène le curseur à l'écran à chaque dessin qui suit un
