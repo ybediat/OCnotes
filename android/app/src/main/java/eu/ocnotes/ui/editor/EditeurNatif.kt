@@ -4,18 +4,23 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Typeface
 import android.os.Build
+import android.os.SystemClock
 import android.text.Editable
 import android.text.InputType
 import android.text.Layout
 import android.text.TextWatcher
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewTreeObserver
+import android.view.inspector.WindowInspector
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.TextView
 import androidx.annotation.MainThread
+import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -33,10 +38,19 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.drawable.DrawableCompat
+import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 /** Opacité du code coloré : en retrait du texte, mais lisible. */
 private const val COLORATION_ALPHA = 0.85f
+
+/** Classe des poignées de sélection d'`Editor` : seul moyen de les reconnaître. */
+private const val CLASSE_POIGNEE = "\$SelectionHandleView"
+
+/** Après un changement de sélection, le temps qu'`Editor` montre ses poignées. */
+private const val DELAI_RECHERCHE_POIGNEES_MS = 250L
+private const val ESSAIS_RECHERCHE_POIGNEES = 8
 
 private class ReferenceColoration {
     var valeur: ColorationFenetre? = null
@@ -476,7 +490,16 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
 
     override fun onSelectionChanged(selStart: Int, selEnd: Int) {
         autoriserSuiviCurseur()
+        // Une poignée, un toucher : Android sait de nouveau quelle extrémité suivre.
+        if (!selectionAuDoigt) extremiteTiree = null
         super.onSelectionChanged(selStart, selEnd)
+        if (selStart != selEnd && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Les poignées ne s'affichent qu'après ce rappel, et `Editor` les
+            // crée à la première sélection : on les cherche un peu plus tard.
+            removeCallbacks(chercherPoignees)
+            essaisRecherchePoignees = ESSAIS_RECHERCHE_POIGNEES
+            postDelayed(chercherPoignees, DELAI_RECHERCHE_POIGNEES_MS)
+        }
     }
 
     override fun onTextChanged(texte: CharSequence?, start: Int, avant: Int, apres: Int) {
@@ -497,7 +520,396 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
     override fun bringPointIntoView(offset: Int): Boolean {
         val autorise = suiviCurseurAutorise
         suiviCurseurAutorise = false
-        return autorise && super.bringPointIntoView(offset)
+        val cible = extremiteTiree?.takeIf { it in 0..length() } ?: offset
+        return autorise && super.bringPointIntoView(cible)
+    }
+
+    // --- Défilement pendant une sélection au doigt ---------------------------
+    //
+    // Après un appui long ou un double toucher, Android étend la sélection en
+    // suivant le doigt, mais la place une hauteur de poignée *au-dessus* de
+    // lui : la ligne visée n'atteint jamais le bord du champ, et le texte ne
+    // défile pas. Constaté sur
+    // le banc (Redmi Note 12) : doigt au bas du champ, rien ne bouge ; doigt sur
+    // la barre de format, une ligne par mouvement, rien quand il s'immobilise.
+    //
+    // Le geste reste celui d'Android : on ne fait que défiler, puis lui
+    // rejouer le dernier mouvement du doigt, pour qu'il recalcule la sélection
+    // sur le texte qui vient de passer dessous.
+
+    /** Vrai d'un geste qui a ouvert ou changé une sélection, jusqu'au lever du doigt. */
+    private var selectionAuDoigt = false
+
+    /** Faux tant que le doigt n'a pas quitté l'endroit de l'appui long. */
+    private var selectionArmee = false
+    private var yAppui = 0f
+    private var dernierMouvement: MotionEvent? = null
+    private var vitesseSelection = 0f
+    private var resteDefilement = 0f
+    private var instantPrecedent = 0L
+    private var defilementLance = false
+    private val seuilGlisse = ViewConfiguration.get(context).scaledTouchSlop
+
+    private val pasDefilementSelection = object : Runnable {
+        override fun run() {
+            val mouvement = dernierMouvement
+            if (!(selectionAuDoigt || poigneeTenue != null) || vitesseSelection == 0f || mouvement == null) {
+                defilementLance = false
+                return
+            }
+            val maintenant = SystemClock.uptimeMillis()
+            // Borné : une image sautée ne doit pas faire bondir le texte.
+            val secondes = (maintenant - instantPrecedent).coerceIn(0L, 50L) / 1000f
+            instantPrecedent = maintenant
+            resteDefilement += vitesseSelection * secondes
+            val pas = resteDefilement.toInt()
+            resteDefilement -= pas
+
+            val hauteurVisible = height - compoundPaddingTop - compoundPaddingBottom
+            val maximum = ((layout?.height ?: 0) - hauteurVisible).coerceAtLeast(0)
+            val avant = scrollY
+            scrollTo(scrollX, (avant + pas).coerceIn(0, maximum))
+            if (scrollY != avant) rejouer(mouvement)
+            postOnAnimation(this)
+        }
+    }
+
+    /**
+     * Extrémité que le doigt a tirée, à garder en vue jusqu'au prochain
+     * changement de sélection.
+     *
+     * Au lever du doigt, Android ouvre le clavier ; le champ rétrécit et
+     * `TextView` ramène à l'écran la *fin* de la sélection. Après une sélection
+     * tirée vers le haut, c'est l'extrémité restée en place, parfois des écrans
+     * plus bas : le texte sautait loin de ce qu'on venait de sélectionner.
+     *
+     * Nullable plutôt que -1 : `TextView` appelle déjà ces méthodes depuis son
+     * constructeur, avant les initialiseurs de cette classe, et `null` est la
+     * valeur par défaut de la JVM.
+     */
+    private var extremiteTiree: Int? = null
+    private var debutAppui = -1
+
+    /** Sélection au moment où le doigt s'est posé : la comparer dit si le geste sélectionne. */
+    private var selectionAuPoser = -1L
+
+    // --- Double toucher ou toucher puis défilement ---------------------------
+    //
+    // Un toucher suivi, en moins de 300 ms, d'un glissé : `Editor` y voit un
+    // double toucher glissé, qui sélectionne, alors qu'on voulait souvent
+    // défiler. Relevé sur les gestes de l'utilisateur : un double toucher voulu
+    // laisse le doigt presque immobile 250 ms (32 px au plus, sur huit gestes) ;
+    // le toucher puis défilement l'avait déjà emmené de 465 px au bout de
+    // 100 ms.
+    //
+    // Défaire la sélection après coup ne tient pas (code d'`Editor`, Android 13) :
+    // seul un lever clôt son glissé de sélection — il ignore l'annulation —, et
+    // ce lever relance une classification différée qui *réapplique* la
+    // sélection, puis relâche l'interception au milieu de l'événement, ce que
+    // l'interop Compose transforme en annulation du geste entier. Tout cela
+    // constaté sur le banc.
+    //
+    // On décide donc *avant* `Editor` : le poser qui ferait un double toucher
+    // est retenu au plus [DELAI_INTENTION_MS]. Si le doigt file entre-temps,
+    // `Editor` reçoit un poser daté au-delà du délai de double toucher — un
+    // premier toucher, et le champ défile normalement ; sinon il reçoit le
+    // poser d'origine, et la sélection se fait comme avant, avec ce retard.
+
+    private var poserRetenu: MotionEvent? = null
+    private val mouvementsRetenus = ArrayList<MotionEvent>()
+    private val delaiDoubleToucher = ViewConfiguration.getDoubleTapTimeout().toLong()
+    private val ecartDoubleToucher = ViewConfiguration.get(context).scaledDoubleTapSlop
+    // `scaledDoubleTapTouchSlop` est cachée ; Android la fixe égale à celle-ci.
+    private val zoneToucher = ViewConfiguration.get(context).scaledTouchSlop
+
+    /** Le geste précédent, tel qu'`Editor` le juge pour reconnaître un double toucher. */
+    private var dernierPoser = 0L
+    private var dernierLever = Long.MIN_VALUE / 2
+    private var xDernierPoser = 0f
+    private var yDernierPoser = 0f
+    private var resteDansLaZone = false
+
+    private val deciderSelection = Runnable { libererPoser(defilement = false) }
+
+    @SuppressLint("ClickableViewAccessibility") // Le clic reste celui de TextView.
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (poserRetenu != null) return retenir(event)
+        if (event.actionMasked == MotionEvent.ACTION_DOWN && seraitDoubleToucher(event)) {
+            poserRetenu = MotionEvent.obtain(event)
+            postDelayed(deciderSelection, DELAI_INTENTION_MS)
+            return true
+        }
+        return traiter(event)
+    }
+
+    /** Même règle qu'`EditorTouchState`, un peu plus large : retenir à tort ne coûte qu'un délai. */
+    private fun seraitDoubleToucher(poser: MotionEvent): Boolean =
+        resteDansLaZone &&
+            poser.eventTime - dernierLever <= delaiDoubleToucher &&
+            dernierLever - dernierPoser <= delaiDoubleToucher &&
+            hypot(poser.x - xDernierPoser, poser.y - yDernierPoser) <= ecartDoubleToucher
+
+    private fun retenir(event: MotionEvent): Boolean {
+        val poser = poserRetenu ?: return traiter(event)
+        when (event.actionMasked) {
+            MotionEvent.ACTION_MOVE -> {
+                mouvementsRetenus += MotionEvent.obtain(event)
+                val file = abs(event.y - poser.y) >
+                    SEUIL_DEFILEMENT_DP * resources.displayMetrics.density
+                if (file) libererPoser(defilement = true)
+                return true
+            }
+            else -> {
+                libererPoser(defilement = false)
+                return traiter(event)
+            }
+        }
+    }
+
+    /**
+     * Transmet enfin le poser retenu, puis les mouvements reçus depuis. Pour un
+     * défilement, le poser est redaté : `Editor` compte le délai depuis le
+     * dernier lever, et ne voit plus de double toucher.
+     */
+    private fun libererPoser(defilement: Boolean) {
+        val poser = poserRetenu ?: return
+        poserRetenu = null
+        removeCallbacks(deciderSelection)
+        val transmis = if (defilement) {
+            poser.redate(maxOf(poser.eventTime, dernierLever + delaiDoubleToucher + 1))
+        } else {
+            poser
+        }
+        traiter(transmis)
+        if (transmis !== poser) transmis.recycle()
+        poser.recycle()
+        for (mouvement in mouvementsRetenus) {
+            traiter(mouvement)
+            mouvement.recycle()
+        }
+        mouvementsRetenus.clear()
+    }
+
+    /** Le même poser, au même endroit, daté de [instant] : `MotionEvent` n'a pas d'accesseur pour l'heure. */
+    private fun MotionEvent.redate(instant: Long): MotionEvent = MotionEvent.obtain(
+        instant,
+        instant,
+        action,
+        pointerCount,
+        Array(pointerCount) { i -> MotionEvent.PointerProperties().also { getPointerProperties(i, it) } },
+        Array(pointerCount) { i -> MotionEvent.PointerCoords().also { getPointerCoords(i, it) } },
+        metaState,
+        buttonState,
+        xPrecision,
+        yPrecision,
+        deviceId,
+        edgeFlags,
+        source,
+        flags,
+    )
+
+    private fun traiter(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                extremiteTiree = null
+                arreterDefilementSelection()
+                selectionAuPoser = bornesSelection()
+                dernierPoser = event.eventTime
+                xDernierPoser = event.x
+                yDernierPoser = event.y
+                resteDansLaZone = true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (hypot(event.x - xDernierPoser, event.y - yDernierPoser) > zoneToucher) {
+                    resteDansLaZone = false
+                }
+                suivreDoigtSelection(event)
+            }
+            MotionEvent.ACTION_UP -> dernierLever = event.eventTime
+        }
+        val traite = super.onTouchEvent(event)
+        // Le geste sélectionne dès que, doigt posé, la sélection change et
+        // n'est pas vide. Peu importe ce qui l'a ouverte : un appui long, mais
+        // aussi — champ déjà actif, clavier ouvert — un double toucher suivi
+        // d'un glissé, qui ne passe jamais par `performLongClick`. Constaté
+        // sur le banc : armé sur le seul appui long, le défilement ne partait
+        // jamais clavier ouvert. Un défilement à la main ne change pas la
+        // sélection ; un toucher la vide.
+        if (!selectionAuDoigt &&
+            (event.actionMasked == MotionEvent.ACTION_DOWN || event.actionMasked == MotionEvent.ACTION_MOVE) &&
+            hasSelection() && bornesSelection() != selectionAuPoser
+        ) {
+            selectionAuDoigt = true
+            selectionArmee = false
+            yAppui = event.y
+            debutAppui = selectionStart
+        }
+        // Après `super` : Android peut encore retoucher la sélection au lever.
+        if (event.actionMasked == MotionEvent.ACTION_UP ||
+            event.actionMasked == MotionEvent.ACTION_CANCEL
+        ) {
+            val tiree = selectionAuDoigt && hasSelection()
+            arreterDefilementSelection()
+            if (tiree) extremiteTiree = if (selectionStart < debutAppui) selectionStart else selectionEnd
+        }
+        return traite
+    }
+
+    private fun suivreDoigtSelection(event: MotionEvent) {
+        if (!selectionAuDoigt || !hasSelection()) return
+        // Un appui long près du bord ne doit pas défiler de lui-même : on
+        // attend que le doigt ait vraiment commencé à étendre.
+        if (!selectionArmee) {
+            if (abs(event.y - yAppui) < seuilGlisse) return
+            selectionArmee = true
+        }
+        relancerDefilementSelection(event, event.y)
+    }
+
+    /** Retient [mouvement] pour le rejeu, et règle la vitesse sur [y], hauteur du doigt dans le champ. */
+    private fun relancerDefilementSelection(mouvement: MotionEvent, y: Float) {
+        dernierMouvement?.recycle()
+        dernierMouvement = MotionEvent.obtainNoHistory(mouvement)
+        val densite = resources.displayMetrics.density
+        vitesseSelection = vitesseDefilementBord(
+            y = y,
+            haut = 0f,
+            bas = height.toFloat(),
+            bande = BANDE_DEFILEMENT_SELECTION_DP * densite,
+            vitesseMax = VITESSE_DEFILEMENT_SELECTION_DP_S * densite,
+        )
+        if (vitesseSelection != 0f && !defilementLance) {
+            defilementLance = true
+            resteDefilement = 0f
+            instantPrecedent = SystemClock.uptimeMillis()
+            postOnAnimation(pasDefilementSelection)
+        }
+    }
+
+    /** Rejoue le dernier mouvement à qui tient la sélection, pour qu'il la recalcule. */
+    private fun rejouer(mouvement: MotionEvent) {
+        val poignee = poigneeTenue
+        if (poignee == null) {
+            super.onTouchEvent(mouvement)
+            return
+        }
+        rejeuPoignee = true
+        try {
+            poignee.dispatchTouchEvent(mouvement)
+        } finally {
+            rejeuPoignee = false
+        }
+    }
+
+    // --- Les poignées ---------------------------------------------------------
+    //
+    // Une poignée de sélection est une vue d'`Editor` posée dans une fenêtre à
+    // elle (`PopupWindow`) : son toucher n'arrive jamais au champ. Depuis
+    // Android 10, `WindowInspector` liste les fenêtres de l'application ; on y
+    // retrouve la poignée et on lui pose un écouteur qui observe sans rien
+    // consommer. Le reste est le même mécanisme que pour le doigt : défiler,
+    // puis rejouer à la poignée son dernier mouvement. Elle calcule la
+    // sélection depuis les coordonnées d'écran du doigt (`getRawX`, code
+    // d'`Editor`, Android 13) : rejouée après un pas, elle sélectionne le texte
+    // qui vient de passer sous le doigt.
+    //
+    // On la reconnaît au nom de sa classe, `Editor$SelectionHandleView` : rien
+    // de public ne la désigne. Si une version d'Android le change, on ne la
+    // trouve plus, et la poignée retrouve le comportement natif — rien ne casse.
+
+    private var poigneeTenue: View? = null
+    private var rejeuPoignee = false
+    private val poigneesEcoutees = java.util.WeakHashMap<View, Unit>()
+    private val positionChamp = IntArray(2)
+
+    // N'observe que : renvoie toujours faux, la poignée garde son traitement.
+    @SuppressLint("ClickableViewAccessibility")
+    private val ecouteurPoignee = View.OnTouchListener { poignee, event ->
+        if (!rejeuPoignee) suivrePoignee(poignee, event)
+        false
+    }
+
+    private var essaisRecherchePoignees = 0
+
+    /**
+     * `Editor` montre ses poignées un moment après la sélection, et ce moment
+     * varie : on cherche jusqu'à les avoir toutes deux, en quelques essais.
+     */
+    private val chercherPoignees: Runnable = object : Runnable {
+        override fun run() {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || !hasSelection()) return
+            if (brancherPoignees() >= 2 || --essaisRecherchePoignees <= 0) return
+            postDelayed(this, DELAI_RECHERCHE_POIGNEES_MS)
+        }
+    }
+
+    /** Pose l'écouteur sur les poignées visibles ; renvoie combien sont écoutées. */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun brancherPoignees(): Int {
+        var ecoutees = 0
+        for (racine in WindowInspector.getGlobalWindowViews()) {
+            if (racine === rootView) continue
+            pourChaqueVue(racine) { vue ->
+                if (vue.javaClass.name.endsWith(CLASSE_POIGNEE)) {
+                    if (vue !in poigneesEcoutees) {
+                        vue.setOnTouchListener(ecouteurPoignee)
+                        poigneesEcoutees[vue] = Unit
+                    }
+                    ecoutees++
+                }
+            }
+        }
+        return ecoutees
+    }
+
+    private fun pourChaqueVue(vue: View, action: (View) -> Unit) {
+        action(vue)
+        if (vue is android.view.ViewGroup) {
+            for (i in 0 until vue.childCount) pourChaqueVue(vue.getChildAt(i), action)
+        }
+    }
+
+    private fun suivrePoignee(poignee: View, event: MotionEvent) {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                arreterDefilementSelection()
+                // Le champ peut en avoir d'autres à l'écran : n'agir que pour
+                // une poignée tenue pendant que celui-ci a une sélection.
+                poigneeTenue = if (hasSelection() && isFocused) poignee else null
+            }
+            MotionEvent.ACTION_MOVE -> if (poigneeTenue === poignee) {
+                getLocationOnScreen(positionChamp)
+                relancerDefilementSelection(event, event.rawY - positionChamp[1])
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                poigneeTenue = null
+                arreterDefilementSelection()
+            }
+        }
+    }
+
+    private fun bornesSelection(): Long =
+        (selectionStart.toLong() shl 32) or (selectionEnd.toLong() and 0xFFFFFFFFL)
+
+    private fun arreterDefilementSelection() {
+        selectionAuDoigt = false
+        vitesseSelection = 0f
+        defilementLance = false
+        removeCallbacks(pasDefilementSelection)
+        dernierMouvement?.recycle()
+        dernierMouvement = null
+    }
+
+    override fun onDetachedFromWindow() {
+        removeCallbacks(chercherPoignees)
+        poigneeTenue = null
+        removeCallbacks(deciderSelection)
+        poserRetenu?.recycle()
+        poserRetenu = null
+        mouvementsRetenus.forEach { it.recycle() }
+        mouvementsRetenus.clear()
+        arreterDefilementSelection()
+        super.onDetachedFromWindow()
     }
 
     override fun getAutofillType(): Int =

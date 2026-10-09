@@ -1,13 +1,20 @@
 package eu.ocnotes.ui.editor
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.net.Uri
+import android.os.SystemClock
+import android.view.MotionEvent
+import android.view.Window
 import android.widget.Toast
+import androidx.annotation.MainThread
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,7 +26,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -37,11 +46,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -49,13 +61,19 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.LocalPinnableContainer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -72,6 +90,7 @@ import eu.ocnotes.data.BlockKind
 import eu.ocnotes.data.NoteBlockDto
 import eu.ocnotes.data.SpanStyleId
 import eu.ocnotes.ui.theme.StyleEditeur
+import kotlinx.coroutines.flow.collectLatest
 
 /**
  * Aperçu d'une note, en lecture seule.
@@ -117,12 +136,47 @@ fun VueMarkdown(
     // prochain toucher simple (qui l'efface) : voir [Epingle].
     var selectionPossible by remember { mutableStateOf(false) }
 
+    // Le doigt qui étend une sélection, jamais lu pendant la composition : il
+    // change à chaque mouvement, et seul [defilerPendantSelection] s'en sert.
+    val doigt = remember { mutableStateOf<Float?>(null) }
+    val etatListe = rememberLazyListState()
+    val reperes = remember { ReperesListe() }
+    val suivi = remember { SuiviSelection() }
+    val vue = LocalView.current
+    val densite = LocalDensity.current.density
+    DisposableEffect(vue) {
+        val fenetre = vue.context.activite()?.window
+        val origine = fenetre?.callback
+        val enveloppe = origine?.let { EnveloppeFenetre(it, suivi) }
+        if (enveloppe != null) fenetre.callback = enveloppe
+        onDispose {
+            // Si quelqu'un a enveloppé la fenêtre après nous, on reste en
+            // place : `suivi` inactif, l'enveloppe ne fait que transmettre.
+            if (fenetre != null && fenetre.callback === enveloppe) fenetre.callback = origine
+            suivi.oublier()
+        }
+    }
+    LaunchedEffect(etatListe, densite) {
+        snapshotFlow { doigt.value != null }.collectLatest { actif ->
+            if (actif) defilerPendantSelection(etatListe, reperes, suivi, densite) { doigt.value }
+        }
+    }
+
     CompositionLocalProvider(LocalOuvrirLien provides { lienAConfirmer = it }) {
         SelectionContainer {
             LazyColumn(
+                state = etatListe,
                 modifier = modifier
                     .fillMaxSize()
-                    .pointerInput(Unit) { suivreSelectionPossible { selectionPossible = it } },
+                    .onGloballyPositioned { reperes.coordonnees = it }
+                    .pointerInput(Unit) {
+                        suivreSelection(
+                            possible = { selectionPossible = it },
+                            appuiLong = { reperes.retenirOrigine(it) },
+                            doigt = { doigt.value = it },
+                            decalage = { suivi.decalage },
+                        )
+                    },
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -134,11 +188,14 @@ fun VueMarkdown(
                             is ElementApercu.Tableau -> "tableau"
                         }
                     }
-                ) { _, element ->
+                ) { index, element ->
                     Epingle(actif = selectionPossible)
-                    when (element) {
-                        is ElementApercu.Bloc -> Bloc(element.bloc)
-                        is ElementApercu.Tableau -> Tableau(element.lignes)
+                    DisposableEffect(index) { onDispose { reperes.elements.remove(index) } }
+                    Box(Modifier.onPlaced { reperes.elements[index] = it }) {
+                        when (element) {
+                            is ElementApercu.Bloc -> Bloc(element.bloc)
+                            is ElementApercu.Tableau -> Tableau(element.lignes)
+                        }
                     }
                 }
             }
@@ -171,27 +228,289 @@ private fun Epingle(actif: Boolean) {
 }
 
 /**
- * Signale quand une sélection de texte devient possible, ou s'efface.
+ * Coordonnées de la liste et de ses éléments, posées à la mise en page, lues
+ * par le défilement pendant une sélection.
+ */
+private class ReperesListe {
+    var coordonnees: LayoutCoordinates? = null
+
+    /** Éléments composés, par index. Un élément épinglé hors de l'écran y reste. */
+    val elements = HashMap<Int, LayoutCoordinates>()
+
+    /** L'élément où l'appui long a ouvert la sélection, et sa hauteur d'alors. */
+    private var origine: LayoutCoordinates? = null
+    private var hautOrigine = 0f
+
+    /** Retient l'élément sous [y], hauteur dans la liste, au moment de l'appui long. */
+    fun retenirOrigine(y: Float) {
+        origine = null
+        val liste = coordonnees?.takeIf { it.isAttached } ?: return
+        for (element in elements.values) {
+            if (!element.isAttached) continue
+            val haut = liste.localPositionOf(element, Offset.Zero).y
+            if (y >= haut && y < haut + element.size.height) {
+                origine = element
+                hautOrigine = haut
+                return
+            }
+        }
+    }
+
+    /**
+     * De combien l'élément d'origine est monté depuis l'appui long, tel que
+     * Compose l'a *placé* — voir [SuiviSelection] ; `null` s'il n'est plus là.
+     */
+    fun montee(): Float? {
+        val liste = coordonnees?.takeIf { it.isAttached } ?: return null
+        val element = origine?.takeIf { it.isAttached } ?: return null
+        return hautOrigine - liste.localPositionOf(element, Offset.Zero).y
+    }
+}
+
+private enum class DebutGeste { TOUCHER, DEFILEMENT }
+
+/**
+ * Signale quand une sélection de texte devient possible, ou s'efface, et suit
+ * le doigt qui l'étend.
  *
  * Compose n'expose ni la sélection ni son registre (types internes) : on
  * déduit son existence du geste. Un appui long l'ouvre ; un toucher simple la
  * ferme. Un défilement ne change rien. Ne consomme aucun événement. Le cas
  * « sélection effacée autrement » (copier, retour) laisse l'épinglage actif
  * jusqu'au prochain toucher : un peu de mémoire, jamais un plantage.
+ *
+ * Après l'appui long, [doigt] reçoit la hauteur du doigt dans la liste jusqu'au
+ * lever, puis `null` — pas avant que le doigt ait quitté l'endroit de l'appui,
+ * pour qu'un appui long près du bord ne fasse pas défiler de lui-même. Les
+ * événements arrivent décalés de [decalage] (voir [SuiviSelection]) : on le
+ * retire pour rendre la vraie position.
  */
-private suspend fun PointerInputScope.suivreSelectionPossible(changer: (Boolean) -> Unit) {
+private suspend fun PointerInputScope.suivreSelection(
+    possible: (Boolean) -> Unit,
+    appuiLong: (Float) -> Unit,
+    doigt: (Float?) -> Unit,
+    decalage: () -> Float,
+) {
     awaitEachGesture {
-        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-        try {
-            val leve = withTimeout(viewConfiguration.longPressTimeoutMillis) {
-                waitForUpOrCancellation(PointerEventPass.Initial)
+        val appui = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val debut = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+            debutGeste(appui, viewConfiguration.touchSlop)
+        }
+        when (debut) {
+            DebutGeste.TOUCHER -> possible(false)
+            DebutGeste.DEFILEMENT -> Unit
+            null -> {
+                possible(true)
+                appuiLong(appui.position.y - decalage())
+                try {
+                    suivreDoigt(appui, viewConfiguration.touchSlop) { y -> doigt(y - decalage()) }
+                } finally {
+                    doigt(null)
+                }
             }
-            // Doigt levé avant le délai, sans défilement : un toucher simple.
-            if (leve != null) changer(false)
-        } catch (_: PointerEventTimeoutCancellationException) {
-            changer(true)
         }
     }
+}
+
+/** Attend que le doigt se lève (toucher) ou s'éloigne (défilement). */
+private suspend fun AwaitPointerEventScope.debutGeste(
+    appui: PointerInputChange,
+    seuil: Float,
+): DebutGeste {
+    while (true) {
+        val change = awaitPointerEvent(PointerEventPass.Initial).changes
+            .firstOrNull { it.id == appui.id } ?: return DebutGeste.DEFILEMENT
+        if (!change.pressed) return DebutGeste.TOUCHER
+        if ((change.position - appui.position).getDistance() > seuil) return DebutGeste.DEFILEMENT
+    }
+}
+
+private suspend fun AwaitPointerEventScope.suivreDoigt(
+    appui: PointerInputChange,
+    seuil: Float,
+    hauteur: (Float) -> Unit,
+) {
+    var arme = false
+    while (true) {
+        val change = awaitPointerEvent(PointerEventPass.Initial).changes
+            .firstOrNull { it.id == appui.id } ?: return
+        if (!change.pressed) return
+        if (!arme && (change.position - appui.position).getDistance() < seuil) continue
+        arme = true
+        hauteur(change.position.y)
+    }
+}
+
+/**
+ * Fait défiler la liste tant que le doigt qui sélectionne reste près d'un bord
+ * (règle de vitesse : [vitesseDefilementBord]).
+ */
+private suspend fun defilerPendantSelection(
+    etatListe: LazyListState,
+    reperes: ReperesListe,
+    suivi: SuiviSelection,
+    densite: Float,
+    doigt: () -> Float?,
+) {
+    val bande = BANDE_DEFILEMENT_SELECTION_DP * densite
+    val vitesseMax = VITESSE_DEFILEMENT_SELECTION_DP_S * densite
+    var precedent = withFrameNanos { it }
+    while (true) {
+        val maintenant = withFrameNanos { it }
+        // Borné : une image sautée ne doit pas faire bondir le texte.
+        val secondes = ((maintenant - precedent) / 1e9f).coerceIn(0f, 0.05f)
+        precedent = maintenant
+        val y = doigt() ?: return
+        // Mesuré à chaque image, défilement ou non : la mise en page qui suit
+        // un pas n'a lieu qu'après lui, et le dernier pas avant la sortie de
+        // bande doit lui aussi être compté.
+        reperes.montee()?.let(suivi::recaler)
+        val coordonnees = reperes.coordonnees?.takeIf { it.isAttached } ?: continue
+        val vitesse = vitesseDefilementBord(
+            y = y,
+            haut = 0f,
+            bas = coordonnees.size.height.toFloat(),
+            bande = bande,
+            vitesseMax = vitesseMax,
+        )
+        if (vitesse == 0f) continue
+        etatListe.scrollBy(vitesse * secondes)
+    }
+}
+
+/**
+ * Fait suivre au geste de sélection le texte qui défile sous lui.
+ *
+ * Compose 1.7 suit le glissé qui prolonge un appui long dans le repère du
+ * `Text` où l'appui a commencé, en additionnant les déplacements du doigt.
+ * Quand la liste défile, ce `Text` monte avec elle, et la position calculée
+ * avec lui : doigt immobile, la sélection restait collée au texte au lieu de
+ * s'étendre — constaté sur le banc, la poignée à mi-écran sous un doigt posé en
+ * bas.
+ *
+ * Il faut donc que le geste voie le doigt descendre d'autant que ce `Text` est
+ * monté. Tant que dure la sélection au doigt, chaque événement de la fenêtre
+ * est décalé de [decalage] ; et à chaque image, le dernier événement réel est
+ * rejoué avec le décalage du moment, pour qu'un doigt immobile étende quand
+ * même la sélection. C'est le mécanisme de Compose qui sélectionne : on ne fait
+ * que lui dire où est le doigt par rapport au texte.
+ *
+ * Le décalage est la montée du `Text` d'origine *telle que Compose l'a placé*
+ * ([ReperesListe.montee]), pas la somme des pas de défilement. Sorti de
+ * l'écran, un élément épinglé n'est plus replacé : ses coordonnées se figent,
+ * et c'est avec elles que Compose convertit la position du geste. Relevé sur le
+ * banc : défilement de 1 283 px, montée figée à 1 114 ; compter la somme
+ * mettait la fin de sélection 400 px sous le doigt.
+ *
+ * Le décalage porte sur les coordonnées brutes *et* locales d'un événement
+ * reconstruit, jamais sur un `offsetLocation` seul, qui laisse les brutes
+ * intactes. Compose lit les deux : il déduit la position de la fenêtre de leur
+ * écart (`AndroidComposeView.recalculateWindowPosition`), la relit parfois à
+ * l'écran, et écarte un mouvement dont les brutes n'ont pas bougé
+ * (`isPositionChanged`). Constaté sur le banc avec un décalage partiel : les
+ * rejeux étaient jetés en silence, puis le décalage se perdait par moments, et
+ * la sélection retombait d'autant au-dessus du doigt. Décalées ensemble, les deux
+ * coordonnées gardent la fenêtre à sa vraie place, quelle que soit la façon dont
+ * Compose la calcule. Le décalage revient à zéro au lever du doigt, et à chaque
+ * nouvel appui.
+ */
+private class SuiviSelection {
+    var decalage = 0f
+        private set
+    private var origine: Window.Callback? = null
+    private var dernier: MotionEvent? = null
+
+    @MainThread
+    fun distribuer(event: MotionEvent, suite: Window.Callback): Boolean {
+        origine = suite
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) oublier()
+        dernier?.recycle()
+        dernier = MotionEvent.obtainNoHistory(event)
+        val traite = if (decalage == 0f) {
+            suite.dispatchTouchEvent(event)
+        } else {
+            val decale = event.decale(decalage, event.eventTime)
+            suite.dispatchTouchEvent(decale).also { decale.recycle() }
+        }
+        val action = event.actionMasked
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) oublier()
+        return traite
+    }
+
+    /**
+     * Le texte d'origine est désormais monté de [nouveau] px sous le doigt : on
+     * rejoue le dernier mouvement réel avec ce décalage.
+     */
+    @MainThread
+    fun recaler(nouveau: Float) {
+        val suite = origine ?: return
+        val mouvement = dernier?.takeIf { it.actionMasked == MotionEvent.ACTION_MOVE } ?: return
+        if (nouveau == decalage) return
+        decalage = nouveau
+        val rejoue = mouvement.decale(decalage, SystemClock.uptimeMillis())
+        suite.dispatchTouchEvent(rejoue)
+        rejoue.recycle()
+    }
+
+    @MainThread
+    fun oublier() {
+        decalage = 0f
+        dernier?.recycle()
+        dernier = null
+    }
+}
+
+/** Reçoit les touchers de la fenêtre avant l'activité, pour [SuiviSelection]. */
+private class EnveloppeFenetre(
+    private val origine: Window.Callback,
+    private val suivi: SuiviSelection,
+) : Window.Callback by origine {
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean = suivi.distribuer(event, origine)
+}
+
+/**
+ * Copie de l'événement, déplacée de [dy] vers le bas, coordonnées brutes
+ * comprises (voir [SuiviSelection]).
+ *
+ * `MotionEvent.obtain` pose des brutes égales aux locales : on construit donc
+ * en coordonnées d'écran, puis `offsetLocation` ramène les locales dans le
+ * repère de la fenêtre sans toucher aux brutes.
+ */
+private fun MotionEvent.decale(dy: Float, instant: Long): MotionEvent {
+    val fenetreX = rawX - x
+    val fenetreY = rawY - y
+    val proprietes = Array(pointerCount) { i ->
+        MotionEvent.PointerProperties().also { getPointerProperties(i, it) }
+    }
+    val coordonnees = Array(pointerCount) { i ->
+        MotionEvent.PointerCoords().also {
+            getPointerCoords(i, it)
+            it.x += fenetreX
+            it.y += fenetreY + dy
+        }
+    }
+    return MotionEvent.obtain(
+        downTime,
+        instant,
+        action,
+        pointerCount,
+        proprietes,
+        coordonnees,
+        metaState,
+        buttonState,
+        xPrecision,
+        yPrecision,
+        deviceId,
+        edgeFlags,
+        source,
+        flags,
+    ).apply { offsetLocation(-fenetreX, -fenetreY) }
+}
+
+private tailrec fun Context.activite(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.activite()
+    else -> null
 }
 
 /**
