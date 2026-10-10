@@ -308,3 +308,88 @@ func TestNewDocPlaceLeCurseurALaFin(t *testing.T) {
 		t.Errorf("curseur en %d, attendu 6 unités UTF-16", d.Start)
 	}
 }
+
+// Le bouton « liste numérotée » reprend la liste qui précède immédiatement la
+// sélection, au même retrait, au lieu de repartir de 1. Il ne lit que la ligne
+// d'avant : c'est la ligne de contexte que la fenêtre de l'éditeur fournit.
+func TestListeNumeroteeReprendLaPrecedente(t *testing.T) {
+	runCases(t, []struct {
+		name   string
+		action Action
+		in     string
+		want   string
+	}{
+		{
+			"suite d'une liste",
+			ActionNumbered,
+			"1. a\n2. b\n3. c\n‹d\ne›",
+			"1. a\n2. b\n3. c\n‹4. d\n5. e›",
+		},
+		{
+			"curseur sur la ligne suivante",
+			ActionNumbered,
+			"7. a\nb‸",
+			"7. a\n8. b‸",
+		},
+		{
+			"délimiteur parenthèse conservé",
+			ActionNumbered,
+			"3) a\n‹b›",
+			"3) a\n‹4) b›",
+		},
+		{
+			"retrait différent : nouvelle liste",
+			ActionNumbered,
+			"1. a\n  b‸",
+			"1. a\n  1. b‸",
+		},
+		{
+			"liste coupée par une ligne vide : repart de 1",
+			ActionNumbered,
+			"1. a\n\n‹b›",
+			"1. a\n\n‹1. b›",
+		},
+		{
+			"ligne précédente non numérotée : repart de 1",
+			ActionNumbered,
+			"- a\n‹b›",
+			"- a\n‹1. b›",
+		},
+		{
+			// La suite qui part de 4 est reconnue comme déjà numérotée : le
+			// bouton la retire au lieu de la renuméroter.
+			"suite à partir de 4 retirée",
+			ActionNumbered,
+			"‹4. a\n5. b\n6. c›",
+			"‹a\nb\nc›",
+		},
+		{
+			"suite retirée sous une liste",
+			ActionNumbered,
+			"3. x\n‹4. a\n5. b›",
+			"3. x\n‹a\nb›",
+		},
+		{
+			// Numéros non consécutifs : ce n'est pas ce que le bouton écrit,
+			// il renumérote.
+			"numéros non consécutifs renumérotés",
+			ActionNumbered,
+			"‹1. a\n3. b›",
+			"‹1. a\n2. b›",
+		},
+		{
+			"délimiteurs mêlés renumérotés",
+			ActionNumbered,
+			"‹1. a\n2) b›",
+			"‹1. a\n2. b›",
+		},
+		{
+			// Au-delà de neuf chiffres, ce n'est plus une liste pour
+			// CommonMark : le texte est gardé, numéroté à partir de 1.
+			"numéro démesuré",
+			ActionNumbered,
+			"‹1234567890. a›",
+			"‹1. 1234567890. a›",
+		},
+	})
+}

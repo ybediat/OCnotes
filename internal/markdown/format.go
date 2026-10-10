@@ -3,6 +3,7 @@ package markdown
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode/utf16"
 )
@@ -188,7 +189,10 @@ func link(d Doc) Doc {
 //
 // L'ordre des alternatives compte : la case à cocher doit être reconnue avant
 // la puce, dont elle est un cas particulier.
-var linePrefixRe = regexp.MustCompile(`^([ \t]*)((?:#{1,6} )|(?:[-*+] \[[ xX]\] )|(?:[-*+] )|(?:\d+\. )|(?:> ))?`)
+//
+// Un numéro de liste a au plus neuf chiffres, `.` ou `)` pour délimiteur :
+// c'est la règle CommonMark, et ce qui garde `N+1` loin de tout débordement.
+var linePrefixRe = regexp.MustCompile(`^([ \t]*)((?:#{1,6} )|(?:[-*+] \[[ xX]\] )|(?:[-*+] )|(?:\d{1,9}[.)] )|(?:> ))?`)
 
 // splitLine sépare une ligne en indentation, préfixe de style et contenu.
 func splitLine(line string) (indent, prefix, rest string) {
@@ -252,19 +256,24 @@ func linePrefix(d Doc, prefix string) Doc {
 	first, last := selectedLines(lines, start, end)
 
 	// Bascule : toutes les lignes non vides portent-elles déjà ce préfixe ?
-	removing, meaningful := true, 0
-	for i := first; i <= last; i++ {
-		_, existing, rest := splitLine(lineText(units, lines[i]))
-		if existing == "" && rest == "" {
-			continue // une ligne vide ne décide pas de la bascule
-		}
-		meaningful++
-		if !samePrefix(existing, prefix, i-first) {
-			removing = false
-		}
+	var removing bool
+	if prefix == numberedPrefix {
+		removing = numberedRun(units, lines, first, last)
+	} else {
+		removing = samePrefixRun(units, lines, first, last, prefix)
 	}
-	if meaningful == 0 {
-		removing = false
+
+	// Une liste numérotée reprend celle qui la précède immédiatement, au même
+	// retrait : numéroter la ligne qui suit « 3. c » donne « 4. », pas « 1. ».
+	// Seule la ligne d'avant est lue — c'est la ligne de contexte que la
+	// fenêtre de l'éditeur fournit déjà (`fenetreMiseEnForme`).
+	numberStart, numberDelim := 1, byte('.')
+	if prefix == numberedPrefix && !removing && first > 0 {
+		prevIndent, prevPrefix, _ := splitLine(lineText(units, lines[first-1]))
+		indent, _, _ := splitLine(lineText(units, lines[first]))
+		if n, delim, ok := parseNumbered(prevPrefix); ok && prevIndent == indent {
+			numberStart, numberDelim = n+1, delim
+		}
 	}
 
 	// Réécriture ligne à ligne, en mémorisant l'ancienne et la nouvelle
@@ -286,8 +295,8 @@ func linePrefix(d Doc, prefix string) Doc {
 		wanted := ""
 		if !removing {
 			if prefix == numberedPrefix {
+				wanted = fmt.Sprintf("%d%c ", numberStart+numbering, numberDelim)
 				numbering++
-				wanted = fmt.Sprintf("%d. ", numbering)
 			} else {
 				wanted = prefix
 			}
@@ -340,13 +349,68 @@ func linePrefix(d Doc, prefix string) Doc {
 	}
 }
 
-// samePrefix compare un préfixe existant à celui demandé, en tenant compte de
-// la numérotation dynamique des listes ordonnées.
-func samePrefix(existing, wanted string, index int) bool {
-	if wanted == numberedPrefix {
-		return existing == fmt.Sprintf("%d. ", index+1)
+// samePrefixRun dit si toutes les lignes non vides de la sélection portent
+// déjà exactement [prefix]. Une ligne vide ne décide pas de la bascule ; une
+// sélection sans aucune ligne non vide n'est jamais « déjà mise en forme ».
+func samePrefixRun(units []uint16, lines []lineRange, first, last int, prefix string) bool {
+	meaningful := 0
+	for i := first; i <= last; i++ {
+		_, existing, rest := splitLine(lineText(units, lines[i]))
+		if existing == "" && rest == "" {
+			continue
+		}
+		meaningful++
+		if existing != prefix {
+			return false
+		}
 	}
-	return existing == wanted
+	return meaningful > 0
+}
+
+// numberedRun dit si la sélection est déjà une suite numérotée, quel que soit
+// son premier numéro : « 4. », « 5. », « 6. » se retire comme « 1. », « 2. »,
+// « 3. ». Sans cela, une liste qui en reprend une autre ne pourrait plus être
+// défaite par le bouton, qui la renumérotait au lieu de la retirer.
+//
+// Le rang compte les lignes vides, comme la numérotation à l'application :
+// défaire doit reconnaître exactement ce que le bouton a écrit. Le délimiteur
+// reste le même d'un bout à l'autre — en changer ouvre une autre liste.
+func numberedRun(units []uint16, lines []lineRange, first, last int) bool {
+	base, delim, meaningful := 0, byte(0), 0
+	for i := first; i <= last; i++ {
+		_, existing, rest := splitLine(lineText(units, lines[i]))
+		if existing == "" && rest == "" {
+			continue
+		}
+		n, d, ok := parseNumbered(existing)
+		if !ok {
+			return false
+		}
+		if meaningful == 0 {
+			base, delim = n-(i-first), d
+		} else if n != base+(i-first) || d != delim {
+			return false
+		}
+		meaningful++
+	}
+	return meaningful > 0
+}
+
+// parseNumbered lit un préfixe de liste numérotée tel que [splitLine] le
+// découpe — « 12. » ou « 12) », espace compris.
+func parseNumbered(prefix string) (n int, delim byte, ok bool) {
+	if len(prefix) < 3 || prefix[len(prefix)-1] != ' ' {
+		return 0, 0, false
+	}
+	delim = prefix[len(prefix)-2]
+	if delim != '.' && delim != ')' {
+		return 0, 0, false
+	}
+	n, err := strconv.Atoi(prefix[:len(prefix)-2])
+	if err != nil || n < 0 {
+		return 0, 0, false
+	}
+	return n, delim, true
 }
 
 func lineText(units []uint16, ln lineRange) string {

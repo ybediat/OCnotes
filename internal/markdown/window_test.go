@@ -79,7 +79,7 @@ func appliquerParFenetre(t *testing.T, d Doc, action Action) Doc {
 func TestFenetreEquivautAuDocumentEntier(t *testing.T) {
 	morceaux := []string{
 		"a", "mot", " ", "é", "😀", "\n", "\n", "\n", "*", "**", "~~", "`",
-		"```", "# ", "## ", "- ", "- [ ] ", "1. ", "2. ", "> ", "[", "](", ")",
+		"```", "# ", "## ", "- ", "- [ ] ", "1. ", "2. ", "3) ", "> ", "[", "](", ")",
 		"\t", "  ",
 	}
 	iterations := 20000
