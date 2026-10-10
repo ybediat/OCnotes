@@ -42,17 +42,20 @@ data class EditorUiState(
      */
     val document: String = "",
 
-    /**
-     * Version du contenu, incrémentée par le `TextWatcher` du champ natif.
-     *
-     * Elle écarte un résultat asynchrone périmé et décide qu'un instantané est
-     * encore le bon à écrire.
-     */
-    val revision: Long = 0,
     val titre: String = "",
     val actions: List<FormatAction> = emptyList(),
     val chargement: Boolean = true,
     val modifie: Boolean = false,
+
+    /**
+     * Vrai dès la première frappe de la session, jusqu'au rechargement.
+     *
+     * C'est lui, et non [modifie], qui affiche « brouillon local » : [modifie]
+     * repasse à faux à chaque enregistrement local, toutes les 700 ms de
+     * calme, et le sous-titre apparaissait puis disparaissait en faisant
+     * sauter le titre.
+     */
+    val brouillon: Boolean = false,
     val erreur: Texte? = null,
 
     /**
@@ -184,10 +187,11 @@ enum class RaisonLectureSeule {
 /** Garde pure du chemin natif : aucune ouverture ou révision périmée n'écrit. */
 internal fun doitEnregistrerInstantaneNatif(
     etat: EditorUiState,
+    revisionCourante: Long,
     instantane: InstantaneEditeurNatif,
 ): Boolean = etat.modifie &&
     etat.enregistrable &&
-    etat.revision == instantane.revision
+    revisionCourante == instantane.revision
 
 /**
  * Éditeur d'une note.
@@ -239,6 +243,17 @@ class EditorViewModel(
         ),
     )
     val uiState: StateFlow<EditorUiState> = _uiState.asStateFlow()
+
+    /**
+     * Version du contenu, incrémentée par le `TextWatcher` du champ natif.
+     *
+     * Elle écarte un résultat asynchrone périmé et décide qu'un instantané est
+     * encore le bon à écrire. Gardée hors de [uiState] : elle change à chaque
+     * frappe, et l'y publier recomposait tout l'écran à chaque caractère.
+     * L'écran ne la lit que dans une coroutine, pour l'enregistrement différé.
+     */
+    private val _revisionNative = MutableStateFlow(0L)
+    val revisionNative: StateFlow<Long> = _revisionNative.asStateFlow()
 
     private var enregistrement: Job? = null
     private var revisionNativeDeSortie: Long? = null
@@ -374,7 +389,7 @@ class EditorViewModel(
      */
     fun revenirALaDetection(instantane: InstantaneEditeurNatif?) {
         viewModelScope.launch {
-            if (instantane != null && doitEnregistrerInstantaneNatif(_uiState.value, instantane)) {
+            if (instantane != null && doitEnregistrerInstantaneNatif(_uiState.value, _revisionNative.value, instantane)) {
                 enregistrement?.cancel()
                 ecrire(instantane.texte, instantane.revision)
                 if (_uiState.value.modifie) return@launch
@@ -414,15 +429,16 @@ class EditorViewModel(
         }
         revisionNativeDeSortie = null
         instantaneNatifConserve = null
+        _revisionNative.value = 0
         _uiState.update {
             it.copy(
                 chargement = true,
                 charge = false,
                 modifie = false,
+                brouillon = false,
                 encodage = null,
                 encodageForce = false,
                 encodageForcable = null,
-                revision = 0,
                 chargements = it.chargements + 1,
             )
         }
@@ -460,11 +476,16 @@ class EditorViewModel(
         }
     }
 
-    /** Signal léger du TextWatcher : aucun texte complet ne traverse ici. */
+    /**
+     * Signal léger du TextWatcher : aucun texte complet ne traverse ici.
+     *
+     * Seule la première frappe d'une rafale change [uiState] : les suivantes
+     * produisent un état égal, que le `StateFlow` ne republie pas.
+     */
     fun signalerMutationNative(revision: Long) {
-        _uiState.update { etat ->
-            if (!etat.enregistrable) etat else etat.copy(modifie = true, revision = revision)
-        }
+        if (!_uiState.value.enregistrable) return
+        _uiState.update { it.copy(modifie = true, brouillon = true) }
+        _revisionNative.value = revision
     }
 
     /**
@@ -478,7 +499,7 @@ class EditorViewModel(
     fun instantaneNatifConserve(): InstantaneEditeurNatif? = instantaneNatifConserve
 
     private fun conserverInstantaneNatif(instantane: InstantaneEditeurNatif) {
-        if (revisionNativeToujoursCourante(instantane.revision, _uiState.value.revision)) {
+        if (revisionNativeToujoursCourante(instantane.revision, _revisionNative.value)) {
             instantaneNatifConserve = instantane
         }
     }
@@ -495,7 +516,7 @@ class EditorViewModel(
     ) {
         conserverInstantaneNatif(instantane)
         val etat = _uiState.value
-        if (!doitEnregistrerInstantaneNatif(etat, instantane)) return
+        if (!doitEnregistrerInstantaneNatif(etat, _revisionNative.value, instantane)) return
         // Le retour et le détachement portent la même photo à la même révision :
         // la seconde écriture pérenne n'a rien à faire. Ce court-circuit précède
         // `cancel()`, sinon la première serait tuée sans jamais être relancée.
@@ -545,7 +566,7 @@ class EditorViewModel(
                     end = fenetre.selection.fin - fenetre.debut,
                     action = action,
                 )
-                if (!revisionNativeToujoursCourante(fenetre.revision, _uiState.value.revision)) {
+                if (!revisionNativeToujoursCourante(fenetre.revision, _revisionNative.value)) {
                     return@launch
                 }
                 // Une fenêtre reste petite, sauf sur une sélection de tout le
@@ -553,7 +574,7 @@ class EditorViewModel(
                 val local = withContext(Dispatchers.Default) {
                     calculerRemplacementNatif(fenetre.texte, apres.text)
                 }
-                if (!revisionNativeToujoursCourante(fenetre.revision, _uiState.value.revision)) {
+                if (!revisionNativeToujoursCourante(fenetre.revision, _revisionNative.value)) {
                     return@launch
                 }
                 onAppliquer(
@@ -597,7 +618,7 @@ class EditorViewModel(
             _uiState.update { it.copy(apercu = false) }
             return
         }
-        if (instantane == null || instantane.revision != _uiState.value.revision) return
+        if (instantane == null || instantane.revision != _revisionNative.value) return
         // Le champ survit à l'aperçu, masqué : aucun détachement n'enregistre
         // plus au passage, et l'enregistrement différé est suspendu pendant la
         // lecture. Sans cet appel, la frappe des 700 dernières millisecondes
@@ -608,7 +629,7 @@ class EditorViewModel(
             try {
                 val blocs = repository.renderNote(nom, instantane.texte)
                 _uiState.update { courant ->
-                    if (!revisionNativeToujoursCourante(instantane.revision, courant.revision)) {
+                    if (!revisionNativeToujoursCourante(instantane.revision, _revisionNative.value)) {
                         courant
                     } else {
                         courant.copy(
@@ -643,7 +664,7 @@ class EditorViewModel(
                 repository.writeEditedNote(sessionEdition, chemin, contenu)
                 revisionEcrite = revision
                 _uiState.update {
-                    if (it.revision == revision) it.copy(modifie = false) else it
+                    if (_revisionNative.value == revision) it.copy(modifie = false) else it
                 }
             } catch (e: OCnotesException) {
                 // Le réseau n'entre pas en jeu ici. Ce qui reste — un cache

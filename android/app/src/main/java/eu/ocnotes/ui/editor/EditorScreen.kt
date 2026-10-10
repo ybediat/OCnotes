@@ -53,6 +53,7 @@ import eu.ocnotes.ui.common.ChargementPleinEcran
 import eu.ocnotes.ui.common.EtatVide
 import eu.ocnotes.ui.common.resoudre
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 
 /**
  * Éditeur plein écran.
@@ -143,8 +144,12 @@ fun EditorScreen(
 
     // Une frappe native ne publie que sa révision. Après 700 ms de calme, et
     // seulement alors, l'Editable devient une String immuable à enregistrer.
-    LaunchedEffect(etat.modifie, etat.revision, etat.apercu) {
-        if (etat.modifie && !etat.apercu) {
+    // La révision est suivie dans la coroutine, jamais lue par la composition :
+    // une frappe ne recompose rien, `collectLatest` relance seulement le délai.
+    LaunchedEffect(viewModel, sessionNative, etat.apercu) {
+        if (etat.apercu) return@LaunchedEffect
+        viewModel.revisionNative.collectLatest {
+            if (!viewModel.uiState.value.modifie) return@collectLatest
             delay(DELAI_ENREGISTREMENT_MS)
             sessionNative.instantane()?.let { instantane ->
                 viewModel.enregistrerInstantaneNatif(instantane, survivreEcran = false)
@@ -179,7 +184,7 @@ fun EditorScreen(
                         // rejoint sur la même ligne : il explique d'avance
                         // qu'un emoji y soit refusé.
                         val sousTitre = listOfNotNull(
-                            stringResource(R.string.editeur_brouillon).takeIf { etat.modifie },
+                            stringResource(R.string.editeur_brouillon).takeIf { etat.brouillon },
                             etat.encodage?.let { stringResource(R.string.editeur_encodage, it) },
                         )
                         if (sousTitre.isNotEmpty()) {
