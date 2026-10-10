@@ -532,7 +532,17 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
     var margeRognagePx: Int = Int.MAX_VALUE
 
     override fun getExtendedPaddingBottom(): Int =
-        minOf(super.getExtendedPaddingBottom(), margeRognagePx)
+        margeBasseLue(super.getExtendedPaddingBottom(), margeRognagePx, recadrageFinDeNote)
+
+    /**
+     * Vrai le temps d'un recadrage sur la dernière ligne de la note.
+     *
+     * `bringPointIntoView` borne lui aussi son défilement avec
+     * [getExtendedPaddingBottom] : rognée, la marge le faisait s'arrêter 40 dp
+     * avant le bas, et l'aération de fin de note disparaissait pendant la
+     * frappe. Le dessin, lui, garde la marge rognée.
+     */
+    private var recadrageFinDeNote = false
 
     /**
      * `TextView` ramène le curseur à l'écran à chaque dessin qui suit un
@@ -590,7 +600,14 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
             SuiviCurseur.DIFFERER -> super.bringPointIntoView(cible)
             SuiviCurseur.SUIVRE -> {
                 suiviCurseurAutorise = false
-                super.bringPointIntoView(cible)
+                val mise = layout
+                recadrageFinDeNote = mise != null &&
+                    mise.getLineForOffset(cible.coerceIn(0, length())) == mise.lineCount - 1
+                try {
+                    super.bringPointIntoView(cible)
+                } finally {
+                    recadrageFinDeNote = false
+                }
             }
         }
     }
@@ -1014,3 +1031,14 @@ internal fun suiviCurseur(autorise: Boolean, miseEnPageEnAttente: Boolean): Suiv
     miseEnPageEnAttente -> SuiviCurseur.DIFFERER
     else -> SuiviCurseur.SUIVRE
 }
+
+/**
+ * Marge basse que `TextView` lit, pour dessiner comme pour recadrer.
+ *
+ * Rognée à [rognage] en temps normal, pour que le texte descende jusqu'à la
+ * barre de mise en forme pendant le défilement (2f71447). Entière pendant un
+ * recadrage sur la dernière ligne ([finDeNote]) : l'aération voulue de fin de
+ * note — la marge réelle, 48 dp — reste alors visible sous le texte tapé.
+ */
+internal fun margeBasseLue(reelle: Int, rognage: Int, finDeNote: Boolean): Int =
+    if (finDeNote) reelle else minOf(reelle, rognage)
