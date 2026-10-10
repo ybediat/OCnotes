@@ -580,10 +580,19 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
     }
 
     override fun bringPointIntoView(offset: Int): Boolean {
-        val autorise = suiviCurseurAutorise
-        suiviCurseurAutorise = false
         val cible = extremiteTiree?.takeIf { it in 0..length() } ?: offset
-        return autorise && super.bringPointIntoView(cible)
+        return when (suiviCurseur(suiviCurseurAutorise, isLayoutRequested)) {
+            SuiviCurseur.REFUSER -> false
+            // Mise en page en attente : `TextView` ne fait que noter la cible
+            // et rend faux. Consommer le droit ici refuserait le vrai
+            // recadrage, au `onPreDraw` qui suit — c'est ce qui laissait une
+            // ligne tapée en bas de l'écran sous le bord du champ.
+            SuiviCurseur.DIFFERER -> super.bringPointIntoView(cible)
+            SuiviCurseur.SUIVRE -> {
+                suiviCurseurAutorise = false
+                super.bringPointIntoView(cible)
+            }
+        }
     }
 
     // --- Défilement pendant une sélection au doigt ---------------------------
@@ -976,4 +985,32 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
 
     override fun getAutofillType(): Int =
         if (saisieAutomatique) super.getAutofillType() else AUTOFILL_TYPE_NONE
+}
+
+/** Ce que [ChampEditeur.bringPointIntoView] fait d'une demande de suivi du curseur. */
+internal enum class SuiviCurseur {
+    /** Aucun droit en cours : un dessin qui ne concerne pas le curseur. */
+    REFUSER,
+
+    /** Droit accordé, mise en page en attente : `TextView` note la cible, le droit reste acquis. */
+    DIFFERER,
+
+    /** Droit accordé, mise en page à jour : le recadrage a lieu et consomme le droit. */
+    SUIVRE,
+}
+
+/**
+ * Règle du suivi du curseur, isolée pour se tester sans appareil.
+ *
+ * Après une frappe qui change la hauteur du texte — une nouvelle ligne —,
+ * `TextView.updateAfterEdit` demande une mise en page puis appelle
+ * `bringPointIntoView` : celui-ci ne peut alors que **différer** (`mDeferScroll`)
+ * et rend faux. Le vrai recadrage vient plus tard, du `onPreDraw` ; c'est lui qui
+ * doit consommer le droit, jamais l'appel différé. Lu dans les sources d'Android
+ * 15 (`TextView.bringPointIntoView`, `checkForResize`, `onLayout`).
+ */
+internal fun suiviCurseur(autorise: Boolean, miseEnPageEnAttente: Boolean): SuiviCurseur = when {
+    !autorise -> SuiviCurseur.REFUSER
+    miseEnPageEnAttente -> SuiviCurseur.DIFFERER
+    else -> SuiviCurseur.SUIVRE
 }
