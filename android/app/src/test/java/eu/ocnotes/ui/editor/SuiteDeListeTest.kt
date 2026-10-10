@@ -52,6 +52,25 @@ class SuiteDeListeTest {
     }
 
     @Test
+    fun citationImbriqueeOuListeCitee() {
+        assertEquals("> > a\n> > ‸", entree("> > a‸"))
+        assertEquals("> - a\n> - ‸", entree("> - a‸"))
+        assertEquals("> 2. a\n> 3. ‸", entree("> 2. a‸"))
+        assertEquals("> - [x] a\n> - [ ] ‸", entree("> - [x] a‸"))
+    }
+
+    @Test
+    fun ligneDeSeparationNEstPasUnePuce() {
+        assertEquals("* * *\n‸", entree("* * *‸"))
+        assertEquals("- - -\n‸", entree("- - -‸"))
+        assertEquals("***\n‸", entree("***‸"))
+        // Deux marques ne font pas une séparation : c'est une puce.
+        assertEquals("* *\n* ‸", entree("* *‸"))
+        // Une marque différente au milieu non plus.
+        assertEquals("* - *\n* ‸", entree("* - *‸"))
+    }
+
+    @Test
     fun retraitConserve() {
         assertEquals("  - a\n  - ‸", entree("  - a‸"))
         assertEquals("\t1. a\n\t2. ‸", entree("\t1. a‸"))

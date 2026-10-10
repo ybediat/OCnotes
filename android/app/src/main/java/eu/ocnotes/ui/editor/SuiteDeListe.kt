@@ -58,10 +58,22 @@ internal fun prefixeDeListe(texte: CharSequence, debut: Int, fin: Int): PrefixeL
 
     val c = texte[i]
     return when {
-        c == '>' -> if (espaceEn(texte, i + 1, fin)) PrefixeListe(i + 2, "$retrait> ") else null
+        c == '>' -> {
+            if (!espaceEn(texte, i + 1, fin)) return null
+            // Une citation peut en contenir une autre, ou une liste :
+            // `> > ` reste `> > `, `> - a` donne `> - `.
+            val interieur = prefixeDeListe(texte, i + 2, fin)
+            if (interieur != null) {
+                PrefixeListe(interieur.fin, "$retrait> ${interieur.suivant}") // i18n-ok : balisage Markdown.
+            } else {
+                PrefixeListe(i + 2, "$retrait> ")
+            }
+        }
 
         c == '-' || c == '*' || c == '+' -> {
             if (!espaceEn(texte, i + 1, fin)) return null
+            // `* * *` ou `- - -` : une ligne de séparation, pas une puce.
+            if (estSeparation(texte, i, fin)) return null
             val case = i + 2
             if (case + 3 < fin &&
                 texte[case] == '[' &&
@@ -89,6 +101,24 @@ internal fun prefixeDeListe(texte: CharSequence, debut: Int, fin: Int): PrefixeL
 
         else -> null
     }
+}
+
+/**
+ * Vrai si `[debut, fin)` est une ligne de séparation CommonMark : trois
+ * marques identiques ou plus, `-`, `*` ou `_`, et rien d'autre que des espaces.
+ */
+private fun estSeparation(texte: CharSequence, debut: Int, fin: Int): Boolean {
+    val marque = texte[debut]
+    if (marque != '-' && marque != '*' && marque != '_') return false
+    var marques = 0
+    for (k in debut until fin) {
+        when (texte[k]) {
+            marque -> marques++
+            ' ', '\t' -> {}
+            else -> return false
+        }
+    }
+    return marques >= 3
 }
 
 private fun espaceEn(texte: CharSequence, position: Int, fin: Int): Boolean =
