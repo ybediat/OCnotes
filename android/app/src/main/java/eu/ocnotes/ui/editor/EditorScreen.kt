@@ -361,6 +361,8 @@ private fun ZoneSaisie(
                 // Un `.txt` n'est pas interprété : y colorer un `#` ou un `*`
                 // ferait croire à une mise en forme qui n'existera pas.
                 colorationCode = !etat.texteBrut,
+                // Même raison : dans un `.txt`, un `- ` n'ouvre aucune liste.
+                suiteListes = !etat.texteBrut,
                 indication = stringResource(R.string.editeur_saisie_vide),
                 descriptionDefilementRapide = stringResource(
                     R.string.editeur_defilement_rapide,

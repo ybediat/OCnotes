@@ -15,6 +15,7 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewTreeObserver
 import android.view.inspector.WindowInspector
+import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
@@ -234,6 +235,8 @@ fun EditeurNatif(
     onPret: () -> Unit = {},
     colorationCode: Boolean = false,
     onColoration: (spans: Int, ms: Double) -> Unit = { _, _ -> },
+    /** Entrée poursuit les listes Markdown (voir [suiteDeListe]). Faux pour un `.txt`. */
+    suiteListes: Boolean = false,
 ) {
     val couleurTexte = androidx.compose.material3.MaterialTheme.colorScheme.onSurface.toArgb()
     val couleurIndication =
@@ -328,6 +331,12 @@ fun EditeurNatif(
                             session.attacher(this@apply, revisionInitiale)
                             addTextChangedListener(
                                 object : TextWatcher {
+                                    /** Position d'un saut de ligne tapé seul, à examiner après coup ; -1 sinon. */
+                                    private var sautDeLigne = -1
+
+                                    /** Vrai pendant la suite de liste, qui modifie elle-même le texte. */
+                                    private var enSuite = false
+
                                     override fun beforeTextChanged(
                                         s: CharSequence?,
                                         start: Int,
@@ -341,6 +350,17 @@ fun EditeurNatif(
                                         before: Int,
                                         count: Int,
                                     ) {
+                                        // Un `Editable` ne se modifie pas pendant ce rappel :
+                                        // le saut de ligne est seulement noté, et traité
+                                        // dans `afterTextChanged`.
+                                        sautDeLigne = if (
+                                            suiteListes && !enSuite &&
+                                            before == 0 && count == 1 && s?.get(start) == '\n'
+                                        ) {
+                                            start
+                                        } else {
+                                            -1
+                                        }
                                         // Seules les lignes touchées sont relues.
                                         val suivi = coloration.valeur ?: return
                                         (s as? Editable)?.let { suivi.apresModification(it, start, before, count) }
@@ -349,6 +369,31 @@ fun EditeurNatif(
                                     override fun afterTextChanged(s: Editable?) {
                                         session.signalerModification(this@apply)?.let {
                                             mutationCourante.value(it)
+                                        }
+                                        val position = sautDeLigne
+                                        sautDeLigne = -1
+                                        if (position >= 0 && s != null) poursuivreListe(s, position)
+                                    }
+
+                                    /**
+                                     * Entrée en fin d'élément de liste : un seul `replace`,
+                                     * qui garde la pile d'annulation et le clavier.
+                                     *
+                                     * Rien pendant une composition du clavier — le saut de
+                                     * ligne ferait partie d'un mot en cours —, ni quand le
+                                     * curseur n'est pas juste après lui : ce n'est alors
+                                     * pas une frappe, mais un collage ou un remplacement.
+                                     */
+                                    private fun poursuivreListe(s: Editable, position: Int) {
+                                        if (BaseInputConnection.getComposingSpanStart(s) >= 0) return
+                                        if (selectionStart != position + 1 || selectionEnd != position + 1) return
+                                        val suite = suiteDeListe(s, position) ?: return
+                                        enSuite = true
+                                        try {
+                                            s.replace(suite.debut, suite.fin, suite.texte)
+                                            setSelection(suite.debut + suite.texte.length)
+                                        } finally {
+                                            enSuite = false
                                         }
                                     }
                                 },
