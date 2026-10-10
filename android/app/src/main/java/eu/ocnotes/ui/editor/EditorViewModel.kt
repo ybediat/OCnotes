@@ -48,12 +48,14 @@ data class EditorUiState(
     val modifie: Boolean = false,
 
     /**
-     * Vrai dès la première frappe de la session, jusqu'au rechargement.
+     * Vrai de la première frappe jusqu'à ce que la file d'envoi se vide, la
+     * dernière frappe écrite (voir [brouillonApres]).
      *
-     * C'est lui, et non [modifie], qui affiche « brouillon local » : [modifie]
-     * repasse à faux à chaque enregistrement local, toutes les 700 ms de
-     * calme, et le sous-titre apparaissait puis disparaissait en faisant
-     * sauter le titre.
+     * C'est lui, et non [modifie], qui affiche « brouillon local, envoi
+     * programmé » : [modifie] repasse à faux à chaque enregistrement local,
+     * toutes les 700 ms de calme, et le sous-titre apparaissait puis
+     * disparaissait en faisant sauter le titre. Toujours faux en mode local,
+     * où rien n'est jamais envoyé.
      */
     val brouillon: Boolean = false,
     val erreur: Texte? = null,
@@ -184,6 +186,14 @@ enum class RaisonLectureSeule {
     ENCODAGE,
 }
 
+/**
+ * Le brouillon reste annoncé tant qu'il reste à écrire ([EditorUiState.modifie])
+ * ou à envoyer ([enAttente], la file du profil). Une passe de synchronisation
+ * qui vide la file l'éteint, même l'éditeur ouvert.
+ */
+internal fun brouillonApres(etat: EditorUiState, enAttente: Int): Boolean =
+    etat.brouillon && (etat.modifie || enAttente > 0)
+
 /** Garde pure du chemin natif : aucune ouverture ou révision périmée n'écrit. */
 internal fun doitEnregistrerInstantaneNatif(
     etat: EditorUiState,
@@ -289,6 +299,14 @@ class EditorViewModel(
         viewModelScope.launch {
             val actions = runCatching { repository.formatActions() }.getOrDefault(emptyList())
             _uiState.update { it.copy(actions = actions) }
+        }
+
+        // Le Worker de synchronisation partage ce dépôt : quand sa passe vide
+        // la file, l'envoi annoncé a eu lieu.
+        viewModelScope.launch {
+            repository.pendingCount.collect { enAttente ->
+                _uiState.update { it.copy(brouillon = brouillonApres(it, enAttente)) }
+            }
         }
     }
 
@@ -484,7 +502,7 @@ class EditorViewModel(
      */
     fun signalerMutationNative(revision: Long) {
         if (!_uiState.value.enregistrable) return
-        _uiState.update { it.copy(modifie = true, brouillon = true) }
+        _uiState.update { it.copy(modifie = true, brouillon = !it.modeLocal) }
         _revisionNative.value = revision
     }
 
@@ -664,7 +682,12 @@ class EditorViewModel(
                 repository.writeEditedNote(sessionEdition, chemin, contenu)
                 revisionEcrite = revision
                 _uiState.update {
-                    if (_revisionNative.value == revision) it.copy(modifie = false) else it
+                    if (_revisionNative.value == revision) {
+                        val ecrit = it.copy(modifie = false)
+                        ecrit.copy(brouillon = brouillonApres(ecrit, repository.pendingCount.value))
+                    } else {
+                        it
+                    }
                 }
             } catch (e: OCnotesException) {
                 // Le réseau n'entre pas en jeu ici. Ce qui reste — un cache
