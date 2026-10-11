@@ -20,9 +20,9 @@ class SuiteDeListeTest {
         val texte = StringBuilder(avant).deleteCharAt(curseur).insert(curseur, '\n').toString()
         val suite = suiteDeListe(texte, curseur)
             ?: return texte.substring(0, curseur + 1) + "‸" + texte.substring(curseur + 1)
-        val apres = texte.substring(0, suite.debut) + suite.texte + texte.substring(suite.fin)
-        val nouveauCurseur = suite.debut + suite.texte.length
-        return apres.substring(0, nouveauCurseur) + "‸" + apres.substring(nouveauCurseur)
+        val r = suite.remplacement
+        val apres = texte.substring(0, r.debut) + r.texte + texte.substring(r.fin)
+        return apres.substring(0, suite.curseur) + "‸" + apres.substring(suite.curseur)
     }
 
     @Test
@@ -104,6 +104,34 @@ class SuiteDeListeTest {
         assertEquals("1.a\n‸", entree("1.a‸"))
         assertEquals("---\n‸", entree("---‸"))
         assertEquals("\n‸", entree("‸"))
+    }
+
+    @Test
+    fun lesNumerosSuivantsSontDecales() {
+        assertEquals("1. a\n2. ‸\n3. b\n4. c", entree("1. a‸\n2. b\n3. c"))
+        assertEquals("3) a\n4) ‸\n5) b", entree("3) a‸\n4) b"))
+        // 9 → 10 : le numéro s'allonge sans rien abîmer autour.
+        assertEquals("8. a\n9. ‸\n10. b\n11. c", entree("8. a‸\n9. b\n10. c"))
+        // Retrait conservé, sous-éléments et suite de paragraphe enjambés.
+        assertEquals(
+            "  1. a\n  2. ‸\n     - sous\n     suite\n  3. b",
+            entree("  1. a‸\n     - sous\n     suite\n  2. b"),
+        )
+    }
+
+    @Test
+    fun laSuiteSArreteAuBordDeLaListe() {
+        // Ligne vide : une autre liste commence.
+        assertEquals("1. a\n2. ‸\n3. b\n\n3. c", entree("1. a‸\n2. b\n\n3. c"))
+        // Moins en retrait : on sort de la sous-liste.
+        assertEquals("  1. a\n  2. ‸\n  3. b\n4. x", entree("  1. a‸\n  2. b\n4. x"))
+        // Autre délimiteur : autre liste.
+        assertEquals("1. a\n2. ‸\n2) b", entree("1. a‸\n2) b"))
+        // Numérotation non consécutive, faite à la main : laissée telle quelle.
+        assertEquals("1. a\n2. ‸\n1. b\n1. c", entree("1. a‸\n1. b\n1. c"))
+        assertEquals("1. a\n2. ‸\n3. b\n7. c", entree("1. a‸\n2. b\n7. c"))
+        // Une puce n'est pas renumérotée.
+        assertEquals("- a\n- ‸\n- b", entree("- a‸\n- b"))
     }
 
     @Test

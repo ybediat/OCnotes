@@ -337,6 +337,11 @@ private fun ZoneSaisie(
     viewModel: EditorViewModel,
     paddings: PaddingValues,
 ) {
+    // Mises en forme présentes sous le curseur, surlignées dans la barre.
+    // `mutableStateOf` compare les ensembles : tant que le curseur reste dans
+    // le même contexte, la frappe ne déclenche aucune recomposition.
+    val actives = remember { mutableStateOf(emptySet<String>()) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -370,6 +375,9 @@ private fun ZoneSaisie(
                 onMutation = viewModel::signalerMutationNative,
                 onAvantDetachement = onDetachementNatif,
                 onPret = onPretNatif,
+                onSelection = { texte, debut, fin ->
+                    if (!etat.texteBrut) actives.value = misesEnFormeActives(texte, debut, fin)
+                },
                 modifier = Modifier.fillMaxSize(),
             )
 
@@ -402,6 +410,7 @@ private fun ZoneSaisie(
         if (!etat.texteBrut && !etat.apercu) {
             FormatToolbar(
                 actions = etat.actions,
+                actives = { actives.value },
                 onAction = { action ->
                     sessionNative.fenetre()?.let { fenetre ->
                         viewModel.appliquer(action, fenetre) { resultat ->

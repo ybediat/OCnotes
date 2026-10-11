@@ -531,22 +531,17 @@
     <!-- ================================================================
          Barre de mise en forme
 
-         Chaque action porte deux textes : le libellé écrit sur le bouton et
-         la description lue par TalkBack. Un libellé qui est une lettre
-         mnémonique se traduit — « G » pour gras devient « B » pour bold —
-         là où un symbole est le même partout et porte translatable="false".
+         Les boutons sont des icônes ; ces textes servent à la bulle de
+         l'appui long et à TalkBack. Seuls les titres gardent un libellé
+         sur le bouton (pas d'icône H1), qui se traduit : « Ü1 » en allemand.
 
          La liste des actions vient du cœur Go : une action qu'il ajoute
          sans clé ici s'affiche avec son identifiant brut, pas d'erreur.
          ================================================================ -->
-    <string name="format_gras_libelle">N</string>
     <string name="format_gras">Negrita</string>
-    <string name="format_italique_libelle">C</string>
     <string name="format_italique">Cursiva</string>
-    <string name="format_barre_libelle">T</string>
     <string name="format_barre">Tachado</string>
     <string name="format_code">Código en línea</string>
-    <!-- Le bouton porte le mot lui-même : libellé et description confondus. -->
     <string name="format_lien">Enlace</string>
     <string name="format_titre1_libelle">H1</string>
     <string name="format_titre1">Encabezado de nivel 1</string>

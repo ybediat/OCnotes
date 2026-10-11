@@ -49,11 +49,11 @@ func Actions() []Action {
 func Apply(d Doc, action Action) (Doc, error) {
 	switch action {
 	case ActionBold:
-		return wrap(d, "**"), nil
+		return wrap(rogneBords(d), "**"), nil
 	case ActionItalic:
-		return wrap(d, "*"), nil
+		return wrap(rogneBords(d), "*"), nil
 	case ActionStrikethrough:
-		return wrap(d, "~~"), nil
+		return wrap(rogneBords(d), "~~"), nil
 	case ActionInlineCode:
 		return wrap(d, "`"), nil
 	case ActionLink:
@@ -114,6 +114,16 @@ func wrap(d Doc, marker string) Doc {
 			units[:start-n], units[start:end], units[end+n:])
 	}
 
+	// Marqueurs plus loin sur la même ligne : le curseur est quelque part
+	// dans « **gr‸as** ». Sans ce cas, la barre surlignerait Gras mais un
+	// appui ajouterait une seconde paire au lieu de retirer la première.
+	// La règle est dupliquée côté Android (MisesEnFormeActives.kt, qui
+	// surligne le bouton) : les deux doivent rester identiques.
+	if open, closing, ok := enclosingSpan(units, start, end, m); ok {
+		return build(start-n, end-n,
+			units[:open], units[open+n:closing], units[closing+n:])
+	}
+
 	// Sinon on entoure. Sur un simple curseur, on le place entre les marqueurs
 	// pour que l'utilisateur puisse taper directement.
 	if start == end {
@@ -123,6 +133,49 @@ func wrap(d Doc, marker string) Doc {
 	return build(start+n, end+n,
 		units[:start], m, units[start:end], m, units[end:])
 }
+
+// rogneBords retire de la sélection les blancs de ses bords (voir bordRognable).
+//
+// Le Markdown n'ouvre pas un gras suivi d'une espace et ne le ferme pas
+// précédé d'une : « **printemps ** » n'est pas en gras. Un double toucher
+// sélectionne souvent l'espace qui suit le mot ; sans ce rognage, le bouton
+// écrirait un gras qui ne s'affiche pas. Le code en ligne n'a pas cette
+// règle et garde sa sélection telle quelle. Une sélection faite de blancs
+// seuls reste inchangée.
+//
+// Recopiée côté Android (rognerBords dans MisesEnFormeActives.kt).
+func rogneBords(d Doc) Doc {
+	units, start, end := d.decode()
+	debut, fin := start, end
+	for debut < fin && bordRognable(units[debut]) {
+		debut++
+	}
+	for fin > debut && bordRognable(units[fin-1]) {
+		fin--
+	}
+	if debut == fin {
+		return d
+	}
+	return Doc{Text: d.Text, Start: debut, End: fin}
+}
+
+// bordRognable dit si une unité se retire d'un bord de sélection.
+//
+// Plus large qu'isBlank : un saut de ligne pris en tirant la poignée jusqu'à
+// la ligne suivante ferait écrire « **mot\n** », et une espace insécable
+// (U+00A0, ou U+202F devant la ponctuation française) empêche autant qu'une
+// espace l'ouverture et la fermeture d'un gras. isBlank reste l'avis
+// d'enclosingSpan, qui ne lit qu'une ligne. Recopiée côté Android
+// (estBordRognable dans MisesEnFormeActives.kt).
+func bordRognable(u uint16) bool {
+	switch u {
+	case ' ', '\t', '\n', '\r', 0x00A0, 0x202F:
+		return true
+	}
+	return false
+}
+
+func isBlank(u uint16) bool { return u == ' ' || u == '\t' }
 
 // markerAt vérifie qu'un marqueur commence à la position donnée, et qu'il ne
 // fait pas partie d'une suite plus longue du même caractère.
@@ -154,6 +207,60 @@ func markerAt(units []uint16, pos int, marker []uint16, direction int) bool {
 	}
 	prev := pos - 1
 	return prev < 0 || units[prev] != ch
+}
+
+// enclosingSpan cherche, sur la ligne de la sélection, une paire de
+// marqueurs qui l'entoure : ouverture terminée avant start, fermeture
+// commençant après end.
+//
+// Les marqueurs sont appariés de gauche à droite. Un marqueur n'ouvre que
+// s'il est suivi d'un caractère non blanc et ne ferme que s'il est précédé
+// d'un caractère non blanc : « 2 * 3 * 4 » n'est pas de l'italique. Comme
+// pour markerAt, un marqueur pris dans une suite plus longue du même
+// caractère ne compte pas (« * » n'est pas lu dans « ** »).
+func enclosingSpan(units []uint16, start, end int, marker []uint16) (open, closing int, ok bool) {
+	n := len(marker)
+	ch := marker[0]
+
+	// Bornes de la ligne ; une sélection sur plusieurs lignes n'est jamais
+	// « dans » une mise en forme en ligne.
+	lineStart := start
+	for lineStart > 0 && units[lineStart-1] != '\n' {
+		lineStart--
+	}
+	lineEnd := start
+	for lineEnd < len(units) && units[lineEnd] != '\n' {
+		lineEnd++
+	}
+	if end > lineEnd {
+		return 0, 0, false
+	}
+
+	open = -1
+	for i := lineStart; i < lineEnd; {
+		if units[i] != ch {
+			i++
+			continue
+		}
+		run := i
+		for run < lineEnd && units[run] == ch {
+			run++
+		}
+		if run-i == n {
+			if open < 0 {
+				if run < lineEnd && !isBlank(units[run]) {
+					open = i
+				}
+			} else if !isBlank(units[i-1]) {
+				if open+n <= start && end <= i {
+					return open, i, true
+				}
+				open = -1
+			}
+		}
+		i = run
+	}
+	return 0, 0, false
 }
 
 // link insère un lien Markdown.

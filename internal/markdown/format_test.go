@@ -114,11 +114,53 @@ func TestMiseEnFormeEnLigne(t *testing.T) {
 		// l'italique à du gras ne doit pas défaire le gras.
 		{"italique sur du gras", ActionItalic, "**‹mot›**", "***‹mot›***"},
 
+		// Curseur au milieu d'une mise en forme : l'appui la retire au lieu
+		// d'ajouter une seconde paire (le bouton est surligné à cet endroit).
+		{"gras retiré, curseur au milieu", ActionBold, "Un **gr‸as** ici", "Un gr‸as ici"},
+		{"gras retiré, sélection partielle", ActionBold, "Un **‹gr›as** ici", "Un ‹gr›as ici"},
+		{"barré retiré, curseur au milieu", ActionStrikethrough, "~~ba‸rré~~", "ba‸rré"},
+		{"code retiré, curseur au milieu", ActionInlineCode, "a `x‸y` b", "a x‸y b"},
+		{"seconde paire de la ligne", ActionBold, "**a** et **b‸c**", "**a** et b‸c"},
+		{"curseur entre deux paires", ActionBold, "**a** et‸ **b**", "**a** et**‸** **b**"},
+		{"italique ignore le gras", ActionItalic, "**gr‸as**", "**gr*‸*as**"},
+		{"astérisques isolés", ActionItalic, "2 * 3‸ * 4", "2 * 3*‸* * 4"},
+		{"pas d'une ligne à l'autre", ActionBold, "**a\nb‸**", "**a\nb**‸****"},
+
+		// Espaces de bord sélectionnées (double toucher) : elles restent hors
+		// des marqueurs, sans quoi « **printemps ** » ne serait pas en gras.
+		{"gras, espace finale exclue", ActionBold, "un ‹printemps ›ici", "un **‹printemps›** ici"},
+		{"gras, espaces des deux bords exclues", ActionBold, "un‹ printemps\t›ici", "un **‹printemps›**\tici"},
+		{"gras retiré malgré l'espace finale", ActionBold, "‹**printemps** ›ici", "‹printemps› ici"},
+		{"italique, espace finale exclue", ActionItalic, "‹mot ›", "*‹mot›* "},
+		{"barré, espace initiale exclue", ActionStrikethrough, "a‹ mot›", "a ~~‹mot›~~"},
+		{"sélection d'espaces seules", ActionBold, "a‹ ›b", "a**‹ ›**b"},
+		{"code en ligne garde ses espaces", ActionInlineCode, "‹x ›", "`‹x ›`"},
+		{"italique retiré malgré l'espace finale", ActionItalic, "‹*mot* ›", "‹mot› "},
+		{"barré retiré malgré l'espace finale", ActionStrikethrough, "a ‹~~mot~~ ›b", "a ‹mot› b"},
+		{"gras, saut de ligne final exclu", ActionBold, "‹mot\n›suite", "**‹mot›**\nsuite"},
+		{"gras, CRLF final exclu", ActionBold, "‹mot\r\n›suite", "**‹mot›**\r\nsuite"},
+		{"gras retiré malgré le saut de ligne", ActionBold, "‹**mot**\n›suite", "‹mot›\nsuite"},
+		{"gras, insécables exclues", ActionBold, "‹ mot ›!", " **‹mot›** !"},
+
 		// Le curseur se compte en unités UTF-16 : un emoji en occupe deux.
 		{"sélection après un emoji", ActionBold, "😀 ‹mot›", "😀 **‹mot›**"},
 		{"sélection d'un emoji", ActionBold, "‹😀›", "**‹😀›**"},
 		{"sélection après un accent", ActionBold, "été ‹mot›", "été **‹mot›**"},
 	})
+}
+
+// Une sélection tirée de droite à gauche arrive avec Start > End : le
+// rognage doit s'appliquer au même texte que dans l'autre sens.
+func TestRognageSelectionInversee(t *testing.T) {
+	// « printemps » occupe [3, 12) ; la sélection inversée prend l'espace qui suit.
+	got, err := Apply(Doc{Text: "un printemps ici", Start: 13, End: 3}, ActionBold)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	want := Doc{Text: "un **printemps** ici", Start: 5, End: 14}
+	if got != want {
+		t.Errorf("obtenu %+v, attendu %+v", got, want)
+	}
 }
 
 func TestLien(t *testing.T) {
