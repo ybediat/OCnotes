@@ -55,6 +55,15 @@ class MisesEnFormeActivesTest {
     }
 
     @Test
+    fun espacesDeBordIgnorees() {
+        assertEquals(setOf("bold"), actives("‹**printemps** ›ici"))
+        assertEquals(setOf("italic"), actives("a‹ *mot*› b"))
+        assertEquals(setOf("strikethrough"), actives("‹~~mot~~\t›"))
+        // Le code en ligne n'est pas rogné, comme côté Go.
+        assertEquals(emptySet<String>(), actives("‹`x` ›"))
+    }
+
+    @Test
     fun uneMiseEnFormeNeTraversePasLesLignes() {
         assertEquals(emptySet<String>(), actives("**a\nb‸**"))
     }

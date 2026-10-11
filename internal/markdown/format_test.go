@@ -126,6 +126,16 @@ func TestMiseEnFormeEnLigne(t *testing.T) {
 		{"astérisques isolés", ActionItalic, "2 * 3‸ * 4", "2 * 3*‸* * 4"},
 		{"pas d'une ligne à l'autre", ActionBold, "**a\nb‸**", "**a\nb**‸****"},
 
+		// Espaces de bord sélectionnées (double toucher) : elles restent hors
+		// des marqueurs, sans quoi « **printemps ** » ne serait pas en gras.
+		{"gras, espace finale exclue", ActionBold, "un ‹printemps ›ici", "un **‹printemps›** ici"},
+		{"gras, espaces des deux bords exclues", ActionBold, "un‹ printemps\t›ici", "un **‹printemps›**\tici"},
+		{"gras retiré malgré l'espace finale", ActionBold, "‹**printemps** ›ici", "‹printemps› ici"},
+		{"italique, espace finale exclue", ActionItalic, "‹mot ›", "*‹mot›* "},
+		{"barré, espace initiale exclue", ActionStrikethrough, "a‹ mot›", "a ~~‹mot›~~"},
+		{"sélection d'espaces seules", ActionBold, "a‹ ›b", "a**‹ ›**b"},
+		{"code en ligne garde ses espaces", ActionInlineCode, "‹x ›", "`‹x ›`"},
+
 		// Le curseur se compte en unités UTF-16 : un emoji en occupe deux.
 		{"sélection après un emoji", ActionBold, "😀 ‹mot›", "😀 **‹mot›**"},
 		{"sélection d'un emoji", ActionBold, "‹😀›", "**‹😀›**"},

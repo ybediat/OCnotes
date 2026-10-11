@@ -20,7 +20,9 @@ internal fun misesEnFormeActives(texte: CharSequence, debut: Int, fin: Int): Set
 
     // Texte en ligne.
     for ((id, marqueur) in MARQUEURS_EN_LIGNE) {
-        if (enLigneActive(texte, bas, haut, marqueur)) actives += id
+        // Le code en ligne garde ses espaces de bord, comme côté Go.
+        val (b, h) = if (id == "code") bas to haut else rognerBords(texte, bas, haut)
+        if (enLigneActive(texte, b, h, marqueur)) actives += id
     }
 
     // Lignes touchées par la sélection, comme `selectedLines` côté Go.
@@ -103,6 +105,18 @@ private fun lignesSelectionnees(texte: CharSequence, bas: Int, haut: Int): List<
 
 private fun estDelimiteur(texte: CharSequence, debut: Int, fin: Int): Boolean =
     texte.subSequence(debut, fin).trim().startsWith("```")
+
+/**
+ * Sélection privée de ses espaces et tabulations de bord (`rogneBords` côté
+ * Go) : « **printemps** » sélectionné avec l'espace qui suit reste du gras.
+ */
+private fun rognerBords(texte: CharSequence, bas: Int, haut: Int): Pair<Int, Int> {
+    var b = bas
+    var h = haut
+    while (b < h && estBlanc(texte[b])) b++
+    while (h > b && estBlanc(texte[h - 1])) h--
+    return if (b == h) bas to haut else b to h
+}
 
 /** Équivalent de `wrap` : marqueurs dans la sélection, autour, ou plus loin sur la ligne. */
 private fun enLigneActive(texte: CharSequence, bas: Int, haut: Int, marqueur: String): Boolean {

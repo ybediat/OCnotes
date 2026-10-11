@@ -49,11 +49,11 @@ func Actions() []Action {
 func Apply(d Doc, action Action) (Doc, error) {
 	switch action {
 	case ActionBold:
-		return wrap(d, "**"), nil
+		return wrap(rogneBords(d), "**"), nil
 	case ActionItalic:
-		return wrap(d, "*"), nil
+		return wrap(rogneBords(d), "*"), nil
 	case ActionStrikethrough:
-		return wrap(d, "~~"), nil
+		return wrap(rogneBords(d), "~~"), nil
 	case ActionInlineCode:
 		return wrap(d, "`"), nil
 	case ActionLink:
@@ -134,6 +134,33 @@ func wrap(d Doc, marker string) Doc {
 		units[:start], m, units[start:end], m, units[end:])
 }
 
+// rogneBords retire de la sélection les espaces et tabulations de ses bords.
+//
+// Le Markdown n'ouvre pas un gras suivi d'une espace et ne le ferme pas
+// précédé d'une : « **printemps ** » n'est pas en gras. Un double toucher
+// sélectionne souvent l'espace qui suit le mot ; sans ce rognage, le bouton
+// écrirait un gras qui ne s'affiche pas. Le code en ligne n'a pas cette
+// règle et garde sa sélection telle quelle. Une sélection faite d'espaces
+// seules reste inchangée.
+//
+// Recopiée côté Android (rognerBords dans MisesEnFormeActives.kt).
+func rogneBords(d Doc) Doc {
+	units, start, end := d.decode()
+	debut, fin := start, end
+	for debut < fin && isBlank(units[debut]) {
+		debut++
+	}
+	for fin > debut && isBlank(units[fin-1]) {
+		fin--
+	}
+	if debut == fin {
+		return d
+	}
+	return Doc{Text: d.Text, Start: debut, End: fin}
+}
+
+func isBlank(u uint16) bool { return u == ' ' || u == '\t' }
+
 // markerAt vérifie qu'un marqueur commence à la position donnée, et qu'il ne
 // fait pas partie d'une suite plus longue du même caractère.
 //
@@ -192,8 +219,6 @@ func enclosingSpan(units []uint16, start, end int, marker []uint16) (open, closi
 	if end > lineEnd {
 		return 0, 0, false
 	}
-
-	isBlank := func(u uint16) bool { return u == ' ' || u == '\t' }
 
 	open = -1
 	for i := lineStart; i < lineEnd; {
