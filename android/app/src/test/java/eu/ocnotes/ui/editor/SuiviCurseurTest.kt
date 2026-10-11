@@ -30,23 +30,23 @@ class SuiviCurseurTest {
 }
 
 /**
- * La marge basse rognée sert au dessin ; le recadrage sur la dernière ligne lit
- * la marge réelle, pour que l'aération de fin de note reste visible à la frappe.
+ * La marge basse rognée sert au dessin, et à lui seul : tout ce qui borne le
+ * défilement lit la marge réelle, pour qu'il n'y ait qu'un bas de note.
  */
 class MargeBasseTest {
 
     @Test
-    fun enTempsNormalLaMargeEstRognee() {
-        assertEquals(22, margeBasseLue(reelle = 132, rognage = 22, finDeNote = false))
+    fun auDessinLaMargeEstRognee() {
+        assertEquals(22, margeBasseLue(reelle = 132, rognage = 22, dessin = true))
     }
 
     @Test
-    fun enFinDeNoteLaMargeEntiereEstLue() {
-        assertEquals(132, margeBasseLue(reelle = 132, rognage = 22, finDeNote = true))
+    fun horsDuDessinLaMargeEntiereEstLue() {
+        assertEquals(132, margeBasseLue(reelle = 132, rognage = 22, dessin = false))
     }
 
     @Test
     fun sansRognageLaMargeReelleReste() {
-        assertEquals(132, margeBasseLue(reelle = 132, rognage = Int.MAX_VALUE, finDeNote = false))
+        assertEquals(132, margeBasseLue(reelle = 132, rognage = Int.MAX_VALUE, dessin = true))
     }
 }

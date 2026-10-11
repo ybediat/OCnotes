@@ -527,23 +527,33 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
      * note est défilée tout en bas. Avec la marge de respiration de fin de note
      * (48 dp), le texte s'arrêtait donc 48 dp au-dessus de la barre de mise en
      * forme, au milieu de la note : une bande vide. Le rognage lit
-     * [getExtendedPaddingBottom] ; la plage de défilement, elle, lit la marge
-     * réelle et garde son air de fin de note.
+     * [getExtendedPaddingBottom] pendant [onDraw], et seulement là.
      */
     var margeRognagePx: Int = Int.MAX_VALUE
 
     override fun getExtendedPaddingBottom(): Int =
-        margeBasseLue(super.getExtendedPaddingBottom(), margeRognagePx, recadrageFinDeNote)
+        margeBasseLue(super.getExtendedPaddingBottom(), margeRognagePx, enDessin)
 
     /**
-     * Vrai le temps d'un recadrage sur la dernière ligne de la note.
+     * Vrai le temps de [onDraw] : la marge rognée ne sert qu'au dessin.
      *
-     * `bringPointIntoView` borne lui aussi son défilement avec
-     * [getExtendedPaddingBottom] : rognée, la marge le faisait s'arrêter 40 dp
-     * avant le bas, et l'aération de fin de note disparaissait pendant la
-     * frappe. Le dessin, lui, garde la marge rognée.
+     * Tout le reste lit aussi [getExtendedPaddingBottom] pour borner le
+     * défilement — `bringPointIntoView`, le glissé du doigt (`Touch`) — alors
+     * que le défilement rapide lit la marge réelle. Rognée partout, elle
+     * donnait deux bas de note différents : taper sur la dernière ligne
+     * descendait jusqu'à l'aération, et le toucher suivant faisait remonter le
+     * texte de 40 dp (constaté sur le Redmi, `scrollY` 4005 → 3895).
      */
-    private var recadrageFinDeNote = false
+    private var enDessin = false
+
+    override fun onDraw(canvas: android.graphics.Canvas) {
+        enDessin = true
+        try {
+            super.onDraw(canvas)
+        } finally {
+            enDessin = false
+        }
+    }
 
     /**
      * `TextView` ramène le curseur à l'écran à chaque dessin qui suit un
@@ -601,14 +611,7 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
             SuiviCurseur.DIFFERER -> super.bringPointIntoView(cible)
             SuiviCurseur.SUIVRE -> {
                 suiviCurseurAutorise = false
-                val mise = layout
-                recadrageFinDeNote = mise != null &&
-                    mise.getLineForOffset(cible.coerceIn(0, length())) == mise.lineCount - 1
-                try {
-                    super.bringPointIntoView(cible)
-                } finally {
-                    recadrageFinDeNote = false
-                }
+                super.bringPointIntoView(cible)
             }
         }
     }
@@ -1034,12 +1037,12 @@ internal fun suiviCurseur(autorise: Boolean, miseEnPageEnAttente: Boolean): Suiv
 }
 
 /**
- * Marge basse que `TextView` lit, pour dessiner comme pour recadrer.
+ * Marge basse que `TextView` lit, pour dessiner comme pour défiler.
  *
- * Rognée à [rognage] en temps normal, pour que le texte descende jusqu'à la
- * barre de mise en forme pendant le défilement (2f71447). Entière pendant un
- * recadrage sur la dernière ligne ([finDeNote]) : l'aération voulue de fin de
- * note — la marge réelle, 48 dp — reste alors visible sous le texte tapé.
+ * Rognée à [rognage] pendant le dessin ([dessin]), pour que le texte descende
+ * jusqu'à la barre de mise en forme pendant le défilement (2f71447). Entière
+ * partout ailleurs : recadrage sur le curseur, glissé du doigt et défilement
+ * rapide s'arrêtent tous au même bas de note, sous l'aération voulue de 48 dp.
  */
-internal fun margeBasseLue(reelle: Int, rognage: Int, finDeNote: Boolean): Int =
-    if (finDeNote) reelle else minOf(reelle, rognage)
+internal fun margeBasseLue(reelle: Int, rognage: Int, dessin: Boolean): Int =
+    if (dessin) minOf(reelle, rognage) else reelle
