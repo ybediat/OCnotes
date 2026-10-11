@@ -35,7 +35,7 @@ internal fun misesEnFormeActives(texte: CharSequence, debut: Int, fin: Int): Set
         for ((id, prefixe) in PREFIXES_LIGNE) {
             if (significatifs.all { it == prefixe }) actives += id
         }
-        if (significatifs.all { NUMERO.matches(it) }) actives += "numbered"
+        if (suiteNumerotee(prefixes)) actives += "numbered"
     }
 
     // Bloc de code : délimiteur juste au-dessus et juste en dessous.
@@ -69,10 +69,14 @@ private val PREFIXES_LIGNE = listOf(
     "quote" to "> ",
 )
 
-/** Même expression que `linePrefixRe` côté Go : indentation puis préfixe de style. */
-private val PREFIXE = Regex("""^([ \t]*)((?:#{1,6} )|(?:[-*+] \[[ xX]\] )|(?:[-*+] )|(?:\d+\. )|(?:> ))?""")
+/**
+ * Même expression que `linePrefixRe` côté Go : indentation puis préfixe de
+ * style. Un numéro a au plus neuf chiffres et `.` ou `)` pour délimiteur.
+ */
+private val PREFIXE = Regex("""^([ \t]*)((?:#{1,6} )|(?:[-*+] \[[ xX]\] )|(?:[-*+] )|(?:\d{1,9}[.)] )|(?:> ))?""")
 
-private val NUMERO = Regex("""\d+\. """)
+/** Préfixe numéroté découpé en numéro et délimiteur (`parseNumbered` côté Go). */
+private val NUMERO = Regex("""(\d{1,9})([.)]) """)
 
 /** Au-delà, la sélection couvre une bonne part de la note : on ne surligne rien. */
 private const val LIGNES_MAX = 200
@@ -86,6 +90,35 @@ private fun prefixeDe(ligne: String): String? {
     val prefixe = m.groupValues[2]
     val reste = ligne.substring(m.value.length)
     return if (prefixe.isEmpty() && reste.isEmpty()) null else prefixe
+}
+
+/**
+ * Les lignes forment-elles déjà une suite numérotée (`numberedRun` côté Go) ?
+ * C'est le seul cas où le bouton retire au lieu de renuméroter.
+ *
+ * Le numéro attendu suit le rang de la ligne, lignes vides comprises, à partir
+ * du premier numéro rencontré ; le délimiteur reste le même d'un bout à
+ * l'autre. « 1. a », « 3. b » est renuméroté, pas retiré.
+ */
+private fun suiteNumerotee(prefixes: List<String?>): Boolean {
+    var base = 0
+    var delimiteur = ' '
+    var significatives = 0
+    for ((rang, prefixe) in prefixes.withIndex()) {
+        // Ligne vide : ne décide rien, mais compte dans le rang.
+        if (prefixe == null) continue
+        val m = NUMERO.matchEntire(prefixe) ?: return false
+        val numero = m.groupValues[1].toInt()
+        val delim = m.groupValues[2][0]
+        if (significatives == 0) {
+            base = numero - rang
+            delimiteur = delim
+        } else if (numero != base + rang || delim != delimiteur) {
+            return false
+        }
+        significatives++
+    }
+    return significatives > 0
 }
 
 /** Bornes `[début, fin)` des lignes touchées, ou `null` si elles sont trop nombreuses. */
@@ -107,16 +140,25 @@ private fun estDelimiteur(texte: CharSequence, debut: Int, fin: Int): Boolean =
     texte.subSequence(debut, fin).trim().startsWith("```")
 
 /**
- * Sélection privée de ses espaces et tabulations de bord (`rogneBords` côté
- * Go) : « **printemps** » sélectionné avec l'espace qui suit reste du gras.
+ * Sélection privée de ses blancs de bord (`rogneBords` côté Go) :
+ * « **printemps** » sélectionné avec l'espace ou le saut de ligne qui suit
+ * reste du gras.
  */
 private fun rognerBords(texte: CharSequence, bas: Int, haut: Int): Pair<Int, Int> {
     var b = bas
     var h = haut
-    while (b < h && estBlanc(texte[b])) b++
-    while (h > b && estBlanc(texte[h - 1])) h--
+    while (b < h && estBordRognable(texte[b])) b++
+    while (h > b && estBordRognable(texte[h - 1])) h--
     return if (b == h) bas to haut else b to h
 }
+
+/**
+ * Blancs retirés d'un bord de sélection (`bordRognable` côté Go) : plus large
+ * qu'[estBlanc], qui reste la règle de [paireEnglobante]. Sauts de ligne et
+ * espaces insécables (U+00A0, U+202F) compris.
+ */
+private fun estBordRognable(c: Char) =
+    c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ' ' || c == ' '
 
 /** Équivalent de `wrap` : marqueurs dans la sélection, autour, ou plus loin sur la ligne. */
 private fun enLigneActive(texte: CharSequence, bas: Int, haut: Int, marqueur: String): Boolean {

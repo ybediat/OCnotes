@@ -134,29 +134,45 @@ func wrap(d Doc, marker string) Doc {
 		units[:start], m, units[start:end], m, units[end:])
 }
 
-// rogneBords retire de la sélection les espaces et tabulations de ses bords.
+// rogneBords retire de la sélection les blancs de ses bords (voir bordRognable).
 //
 // Le Markdown n'ouvre pas un gras suivi d'une espace et ne le ferme pas
 // précédé d'une : « **printemps ** » n'est pas en gras. Un double toucher
 // sélectionne souvent l'espace qui suit le mot ; sans ce rognage, le bouton
 // écrirait un gras qui ne s'affiche pas. Le code en ligne n'a pas cette
-// règle et garde sa sélection telle quelle. Une sélection faite d'espaces
-// seules reste inchangée.
+// règle et garde sa sélection telle quelle. Une sélection faite de blancs
+// seuls reste inchangée.
 //
 // Recopiée côté Android (rognerBords dans MisesEnFormeActives.kt).
 func rogneBords(d Doc) Doc {
 	units, start, end := d.decode()
 	debut, fin := start, end
-	for debut < fin && isBlank(units[debut]) {
+	for debut < fin && bordRognable(units[debut]) {
 		debut++
 	}
-	for fin > debut && isBlank(units[fin-1]) {
+	for fin > debut && bordRognable(units[fin-1]) {
 		fin--
 	}
 	if debut == fin {
 		return d
 	}
 	return Doc{Text: d.Text, Start: debut, End: fin}
+}
+
+// bordRognable dit si une unité se retire d'un bord de sélection.
+//
+// Plus large qu'isBlank : un saut de ligne pris en tirant la poignée jusqu'à
+// la ligne suivante ferait écrire « **mot\n** », et une espace insécable
+// (U+00A0, ou U+202F devant la ponctuation française) empêche autant qu'une
+// espace l'ouverture et la fermeture d'un gras. isBlank reste l'avis
+// d'enclosingSpan, qui ne lit qu'une ligne. Recopiée côté Android
+// (estBordRognable dans MisesEnFormeActives.kt).
+func bordRognable(u uint16) bool {
+	switch u {
+	case ' ', '\t', '\n', '\r', 0x00A0, 0x202F:
+		return true
+	}
+	return false
 }
 
 func isBlank(u uint16) bool { return u == ' ' || u == '\t' }

@@ -61,6 +61,21 @@ class MisesEnFormeActivesTest {
         assertEquals(setOf("strikethrough"), actives("‹~~mot~~\t›"))
         // Le code en ligne n'est pas rogné, comme côté Go.
         assertEquals(emptySet<String>(), actives("‹`x` ›"))
+        // Sélection plus loin dans une paire : tranchée par paireEnglobante.
+        assertEquals(setOf("bold"), actives("**un ‹mot ›deux**"))
+    }
+
+    @Test
+    fun selectionDEspacesSeules() {
+        // Rien à rogner : la sélection reste telle quelle, comme côté Go.
+        assertEquals(emptySet<String>(), actives("a‹ ›b"))
+    }
+
+    @Test
+    fun sautDeLigneEtInsecablesDeBordIgnores() {
+        assertEquals(setOf("bold"), actives("‹**mot**\n›suite"))
+        assertEquals(setOf("bold"), actives("‹**mot**\r\n›suite"))
+        assertEquals(setOf("bold"), actives("‹ **mot** ›!"))
     }
 
     @Test
@@ -86,6 +101,18 @@ class MisesEnFormeActivesTest {
         assertEquals(emptySet<String>(), actives("- ‹a\nb›"))
         // La sélection qui s'arrête au début d'une ligne ne la prend pas.
         assertEquals(setOf("bullet"), actives("- ‹a\n›b"))
+    }
+
+    @Test
+    fun listeNumeroteeCommeNumberedRun() {
+        // « ) » est un délimiteur reconnu par le Go : le bouton le retire.
+        assertEquals(setOf("numbered"), actives("1) a‸"))
+        // Numéros qui ne se suivent pas : le bouton renumérote, il ne retire pas.
+        assertEquals(emptySet<String>(), actives("‹1. a\n3. b›"))
+        // Une ligne vide compte dans le rang.
+        assertEquals(setOf("numbered"), actives("‹4) a\n\n6) b›"))
+        // Changer de délimiteur ouvre une autre liste.
+        assertEquals(emptySet<String>(), actives("‹1. a\n2) b›"))
     }
 
     @Test

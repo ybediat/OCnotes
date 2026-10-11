@@ -135,12 +135,32 @@ func TestMiseEnFormeEnLigne(t *testing.T) {
 		{"barré, espace initiale exclue", ActionStrikethrough, "a‹ mot›", "a ~~‹mot›~~"},
 		{"sélection d'espaces seules", ActionBold, "a‹ ›b", "a**‹ ›**b"},
 		{"code en ligne garde ses espaces", ActionInlineCode, "‹x ›", "`‹x ›`"},
+		{"italique retiré malgré l'espace finale", ActionItalic, "‹*mot* ›", "‹mot› "},
+		{"barré retiré malgré l'espace finale", ActionStrikethrough, "a ‹~~mot~~ ›b", "a ‹mot› b"},
+		{"gras, saut de ligne final exclu", ActionBold, "‹mot\n›suite", "**‹mot›**\nsuite"},
+		{"gras, CRLF final exclu", ActionBold, "‹mot\r\n›suite", "**‹mot›**\r\nsuite"},
+		{"gras retiré malgré le saut de ligne", ActionBold, "‹**mot**\n›suite", "‹mot›\nsuite"},
+		{"gras, insécables exclues", ActionBold, "‹ mot ›!", " **‹mot›** !"},
 
 		// Le curseur se compte en unités UTF-16 : un emoji en occupe deux.
 		{"sélection après un emoji", ActionBold, "😀 ‹mot›", "😀 **‹mot›**"},
 		{"sélection d'un emoji", ActionBold, "‹😀›", "**‹😀›**"},
 		{"sélection après un accent", ActionBold, "été ‹mot›", "été **‹mot›**"},
 	})
+}
+
+// Une sélection tirée de droite à gauche arrive avec Start > End : le
+// rognage doit s'appliquer au même texte que dans l'autre sens.
+func TestRognageSelectionInversee(t *testing.T) {
+	// « printemps » occupe [3, 12) ; la sélection inversée prend l'espace qui suit.
+	got, err := Apply(Doc{Text: "un printemps ici", Start: 13, End: 3}, ActionBold)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	want := Doc{Text: "un **printemps** ici", Start: 5, End: 14}
+	if got != want {
+		t.Errorf("obtenu %+v, attendu %+v", got, want)
+	}
 }
 
 func TestLien(t *testing.T) {
