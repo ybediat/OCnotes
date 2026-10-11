@@ -530,11 +530,8 @@
          Die Liste der Aktionen stammt aus dem Go-Kern: Eine Aktion, die er ohne Schlüssel hier hinzufügt,
          wird mit ihrer Roh-ID angezeigt, nicht mit einem Fehler.
          ================================================================ -->
-    <string name="format_gras_libelle">F</string>
     <string name="format_gras">Fett</string>
-    <string name="format_italique_libelle">K</string>
     <string name="format_italique">Kursiv</string>
-    <string name="format_barre_libelle">D</string>
     <string name="format_barre">Durchgestrichen</string>
     <string name="format_code">Inline-Code</string>
     <!-- Die Schaltfläche trägt das Wort selbst: Beschriftung und Beschreibung fallen zusammen. -->

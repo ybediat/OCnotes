@@ -555,23 +555,17 @@
     <!-- ================================================================
          Barre de mise en forme
 
-         Chaque action porte deux textes : le libellé écrit sur le bouton et
-         la description lue par TalkBack. Un libellé qui est une lettre
-         mnémonique se traduit — « G » pour gras devient « B » pour bold —
-         là où un symbole est le même partout et porte translatable="false".
+         Les boutons sont des icônes ; ces textes servent à la bulle de
+         l'appui long et à TalkBack. Seuls les titres gardent un libellé
+         sur le bouton (pas d'icône H1), qui se traduit : « Ü1 » en allemand.
 
          La liste des actions vient du cœur Go : une action qu'il ajoute
          sans clé ici s'affiche avec son identifiant brut, pas d'erreur.
          ================================================================ -->
-    <string name="format_gras_libelle">G</string>
     <string name="format_gras">Gras</string>
-    <string name="format_italique_libelle">I</string>
     <string name="format_italique">Italique</string>
-    <string name="format_barre_libelle">S</string>
     <string name="format_barre">Barré</string>
-    <string name="format_code_libelle" translatable="false">&lt; &gt;</string>
     <string name="format_code">Code en ligne</string>
-    <!-- Le bouton porte le mot lui-même : libellé et description confondus. -->
     <string name="format_lien">Lien</string>
     <string name="format_titre1_libelle">H1</string>
     <string name="format_titre1">Titre de niveau 1</string>
@@ -579,15 +573,10 @@
     <string name="format_titre2">Titre de niveau 2</string>
     <string name="format_titre3_libelle">H3</string>
     <string name="format_titre3">Titre de niveau 3</string>
-    <string name="format_puces_libelle" translatable="false">•</string>
     <string name="format_puces">Liste à puces</string>
-    <string name="format_numerotee_libelle" translatable="false">1.</string>
     <string name="format_numerotee">Liste numérotée</string>
-    <string name="format_case_libelle" translatable="false">[ ]</string>
     <string name="format_case">Case à cocher</string>
-    <string name="format_citation_libelle" translatable="false">&gt;</string>
     <string name="format_citation">Citation</string>
-    <string name="format_bloc_code_libelle" translatable="false">```</string>
     <string name="format_bloc_code">Bloc de code</string>
 
     <!-- ================================================================

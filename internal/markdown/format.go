@@ -114,6 +114,16 @@ func wrap(d Doc, marker string) Doc {
 			units[:start-n], units[start:end], units[end+n:])
 	}
 
+	// Marqueurs plus loin sur la même ligne : le curseur est quelque part
+	// dans « **gr‸as** ». Sans ce cas, la barre surlignerait Gras mais un
+	// appui ajouterait une seconde paire au lieu de retirer la première.
+	// La règle est dupliquée côté Android (MisesEnFormeActives.kt, qui
+	// surligne le bouton) : les deux doivent rester identiques.
+	if open, closing, ok := enclosingSpan(units, start, end, m); ok {
+		return build(start-n, end-n,
+			units[:open], units[open+n:closing], units[closing+n:])
+	}
+
 	// Sinon on entoure. Sur un simple curseur, on le place entre les marqueurs
 	// pour que l'utilisateur puisse taper directement.
 	if start == end {
@@ -154,6 +164,62 @@ func markerAt(units []uint16, pos int, marker []uint16, direction int) bool {
 	}
 	prev := pos - 1
 	return prev < 0 || units[prev] != ch
+}
+
+// enclosingSpan cherche, sur la ligne de la sélection, une paire de
+// marqueurs qui l'entoure : ouverture terminée avant start, fermeture
+// commençant après end.
+//
+// Les marqueurs sont appariés de gauche à droite. Un marqueur n'ouvre que
+// s'il est suivi d'un caractère non blanc et ne ferme que s'il est précédé
+// d'un caractère non blanc : « 2 * 3 * 4 » n'est pas de l'italique. Comme
+// pour markerAt, un marqueur pris dans une suite plus longue du même
+// caractère ne compte pas (« * » n'est pas lu dans « ** »).
+func enclosingSpan(units []uint16, start, end int, marker []uint16) (open, closing int, ok bool) {
+	n := len(marker)
+	ch := marker[0]
+
+	// Bornes de la ligne ; une sélection sur plusieurs lignes n'est jamais
+	// « dans » une mise en forme en ligne.
+	lineStart := start
+	for lineStart > 0 && units[lineStart-1] != '\n' {
+		lineStart--
+	}
+	lineEnd := start
+	for lineEnd < len(units) && units[lineEnd] != '\n' {
+		lineEnd++
+	}
+	if end > lineEnd {
+		return 0, 0, false
+	}
+
+	isBlank := func(u uint16) bool { return u == ' ' || u == '\t' }
+
+	open = -1
+	for i := lineStart; i < lineEnd; {
+		if units[i] != ch {
+			i++
+			continue
+		}
+		run := i
+		for run < lineEnd && units[run] == ch {
+			run++
+		}
+		if run-i == n {
+			if open < 0 {
+				if run < lineEnd && !isBlank(units[run]) {
+					open = i
+				}
+			} else if !isBlank(units[i-1]) {
+				if open+n <= start && end <= i {
+					return open, i, true
+				}
+				open = -1
+			}
+		}
+		i = run
+	}
+	return 0, 0, false
 }
 
 // link insère un lien Markdown.

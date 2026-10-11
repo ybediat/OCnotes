@@ -114,6 +114,18 @@ func TestMiseEnFormeEnLigne(t *testing.T) {
 		// l'italique à du gras ne doit pas défaire le gras.
 		{"italique sur du gras", ActionItalic, "**‹mot›**", "***‹mot›***"},
 
+		// Curseur au milieu d'une mise en forme : l'appui la retire au lieu
+		// d'ajouter une seconde paire (le bouton est surligné à cet endroit).
+		{"gras retiré, curseur au milieu", ActionBold, "Un **gr‸as** ici", "Un gr‸as ici"},
+		{"gras retiré, sélection partielle", ActionBold, "Un **‹gr›as** ici", "Un ‹gr›as ici"},
+		{"barré retiré, curseur au milieu", ActionStrikethrough, "~~ba‸rré~~", "ba‸rré"},
+		{"code retiré, curseur au milieu", ActionInlineCode, "a `x‸y` b", "a x‸y b"},
+		{"seconde paire de la ligne", ActionBold, "**a** et **b‸c**", "**a** et b‸c"},
+		{"curseur entre deux paires", ActionBold, "**a** et‸ **b**", "**a** et**‸** **b**"},
+		{"italique ignore le gras", ActionItalic, "**gr‸as**", "**gr*‸*as**"},
+		{"astérisques isolés", ActionItalic, "2 * 3‸ * 4", "2 * 3*‸* * 4"},
+		{"pas d'une ligne à l'autre", ActionBold, "**a\nb‸**", "**a\nb**‸****"},
+
 		// Le curseur se compte en unités UTF-16 : un emoji en occupe deux.
 		{"sélection après un emoji", ActionBold, "😀 ‹mot›", "😀 **‹mot›**"},
 		{"sélection d'un emoji", ActionBold, "‹😀›", "**‹😀›**"},

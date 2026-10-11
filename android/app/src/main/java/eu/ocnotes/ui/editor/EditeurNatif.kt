@@ -237,6 +237,7 @@ fun EditeurNatif(
     onColoration: (spans: Int, ms: Double) -> Unit = { _, _ -> },
     /** Entrée poursuit les listes Markdown (voir [suiteDeListe]). Faux pour un `.txt`. */
     suiteListes: Boolean = false,
+    onSelection: (texte: CharSequence, debut: Int, fin: Int) -> Unit = { _, _, _ -> },
 ) {
     val couleurTexte = androidx.compose.material3.MaterialTheme.colorScheme.onSurface.toArgb()
     val couleurIndication =
@@ -259,6 +260,7 @@ fun EditeurNatif(
     val mutationCourante = rememberUpdatedState(onMutation)
     val detachementCourant = rememberUpdatedState(onAvantDetachement)
     val pretCourant = rememberUpdatedState(onPret)
+    val selectionCourante = rememberUpdatedState(onSelection)
     var defilement by remember(session) { mutableStateOf(EtatDefilementNatif()) }
     // Posée par `factory`, lue par `update` : une référence, jamais un état
     // Compose — la lire ne doit rien recomposer.
@@ -306,6 +308,11 @@ fun EditeurNatif(
                         )
                         (this as? ChampEditeur)?.margeRognagePx = margeRognage
                         setSelectAllOnFocus(false)
+                        // Chaque mouvement du curseur remonte à l'écran, qui en
+                        // déduit les boutons à surligner dans la barre.
+                        (this as? ChampEditeur)?.surSelection = { debut, fin ->
+                            selectionCourante.value(text, debut, fin)
+                        }
                         isSaveEnabled = false
                         teinterCurseur(couleurCurseur)
 
@@ -520,6 +527,9 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
 
     private var suiviCurseurAutorise = true
 
+    /** Prévenu à chaque changement de sélection, curseur seul compris. */
+    var surSelection: ((debut: Int, fin: Int) -> Unit)? = null
+
     /**
      * Hauteur, en bas du champ, où le texte est rogné pendant le défilement.
      *
@@ -583,6 +593,7 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
             essaisRecherchePoignees = ESSAIS_RECHERCHE_POIGNEES
             postDelayed(chercherPoignees, DELAI_RECHERCHE_POIGNEES_MS)
         }
+        surSelection?.invoke(selStart, selEnd)
     }
 
     override fun onTextChanged(texte: CharSequence?, start: Int, avant: Int, apres: Int) {
