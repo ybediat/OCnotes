@@ -16,34 +16,32 @@ class EnregistrementNatifTest {
 
     @Test
     fun ouvertureSansModificationNecritPas() {
-        assertFalse(doitEnregistrerInstantaneNatif(etat(modifie = false), instantane))
+        assertFalse(doitEnregistrerInstantaneNatif(etat(modifie = false), 4, instantane))
     }
 
     @Test
     fun noteNonChargeeOuNonModifiableNecritPas() {
-        assertFalse(doitEnregistrerInstantaneNatif(etat(charge = false), instantane))
-        assertFalse(doitEnregistrerInstantaneNatif(etat(modifiable = false), instantane))
+        assertFalse(doitEnregistrerInstantaneNatif(etat(charge = false), 4, instantane))
+        assertFalse(doitEnregistrerInstantaneNatif(etat(modifiable = false), 4, instantane))
     }
 
     @Test
     fun revisionPerimeeNecritPas() {
-        assertFalse(doitEnregistrerInstantaneNatif(etat(revision = 5), instantane))
+        assertFalse(doitEnregistrerInstantaneNatif(etat(), 5, instantane))
     }
 
     @Test
     fun seulInstantaneNatifCourantEtModifieEstEnregistrable() {
-        assertTrue(doitEnregistrerInstantaneNatif(etat(), instantane))
+        assertTrue(doitEnregistrerInstantaneNatif(etat(), 4, instantane))
     }
 
     private fun etat(
         charge: Boolean = true,
         modifiable: Boolean = true,
         modifie: Boolean = true,
-        revision: Long = 4,
     ) = EditorUiState(
         charge = charge,
         modifiable = modifiable,
         modifie = modifie,
-        revision = revision,
     )
 }

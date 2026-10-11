@@ -259,6 +259,13 @@ internal fun colorerCode(editable: Editable, debut: Int, fin: Int, couleur: Int)
 }
 
 /**
+ * Au-delà de ce nombre de caractères insérés d'un coup, la zone insérée n'est
+ * pas colorée telle quelle : la fenêtre visible est recalculée à la place.
+ * Un écran de téléphone en montre environ deux mille.
+ */
+private const val LIMITE_RECOLORATION_LOCALE = 2048
+
+/**
  * Garde la coloration sur ce qui se voit, et seulement cela.
  *
  * **Colorer toute la note ne tient pas** (mesuré le 4 octobre 2026, 295 ko,
@@ -312,6 +319,17 @@ internal class ColorationFenetre(
     /** À appeler pour chaque modification : décale la fenêtre et relit les lignes touchées. */
     fun apresModification(editable: Editable, depart: Int, avant: Int, apres: Int) {
         if (fin <= debut) return
+        // Gros collage, annulation d'une grosse suppression, mise en forme de
+        // tout le texte : colorer toute la zone insérée poserait des milliers
+        // de spans (`setSpan` est quadratique, voir plus haut). On oublie la
+        // fenêtre et on recolore seulement l'écran, une fois la mise en page
+        // à jour — d'où le `post`.
+        if (apres > LIMITE_RECOLORATION_LOCALE) {
+            debut = 0
+            fin = 0
+            vue.post { suivre(force = true) }
+            return
+        }
         val delta = apres - avant
         when {
             depart + avant <= debut -> {

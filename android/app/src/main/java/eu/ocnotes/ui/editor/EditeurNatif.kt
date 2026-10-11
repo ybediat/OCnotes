@@ -15,6 +15,7 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewTreeObserver
 import android.view.inspector.WindowInspector
+import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
@@ -234,6 +235,8 @@ fun EditeurNatif(
     onPret: () -> Unit = {},
     colorationCode: Boolean = false,
     onColoration: (spans: Int, ms: Double) -> Unit = { _, _ -> },
+    /** Entrée poursuit les listes Markdown (voir [suiteDeListe]). Faux pour un `.txt`. */
+    suiteListes: Boolean = false,
 ) {
     val couleurTexte = androidx.compose.material3.MaterialTheme.colorScheme.onSurface.toArgb()
     val couleurIndication =
@@ -328,6 +331,12 @@ fun EditeurNatif(
                             session.attacher(this@apply, revisionInitiale)
                             addTextChangedListener(
                                 object : TextWatcher {
+                                    /** Position d'un saut de ligne tapé seul, à examiner après coup ; -1 sinon. */
+                                    private var sautDeLigne = -1
+
+                                    /** Vrai pendant la suite de liste, qui modifie elle-même le texte. */
+                                    private var enSuite = false
+
                                     override fun beforeTextChanged(
                                         s: CharSequence?,
                                         start: Int,
@@ -341,6 +350,17 @@ fun EditeurNatif(
                                         before: Int,
                                         count: Int,
                                     ) {
+                                        // Un `Editable` ne se modifie pas pendant ce rappel :
+                                        // le saut de ligne est seulement noté, et traité
+                                        // dans `afterTextChanged`.
+                                        sautDeLigne = if (
+                                            suiteListes && !enSuite &&
+                                            before == 0 && count == 1 && s?.get(start) == '\n'
+                                        ) {
+                                            start
+                                        } else {
+                                            -1
+                                        }
                                         // Seules les lignes touchées sont relues.
                                         val suivi = coloration.valeur ?: return
                                         (s as? Editable)?.let { suivi.apresModification(it, start, before, count) }
@@ -349,6 +369,31 @@ fun EditeurNatif(
                                     override fun afterTextChanged(s: Editable?) {
                                         session.signalerModification(this@apply)?.let {
                                             mutationCourante.value(it)
+                                        }
+                                        val position = sautDeLigne
+                                        sautDeLigne = -1
+                                        if (position >= 0 && s != null) poursuivreListe(s, position)
+                                    }
+
+                                    /**
+                                     * Entrée en fin d'élément de liste : un seul `replace`,
+                                     * qui garde la pile d'annulation et le clavier.
+                                     *
+                                     * Rien pendant une composition du clavier — le saut de
+                                     * ligne ferait partie d'un mot en cours —, ni quand le
+                                     * curseur n'est pas juste après lui : ce n'est alors
+                                     * pas une frappe, mais un collage ou un remplacement.
+                                     */
+                                    private fun poursuivreListe(s: Editable, position: Int) {
+                                        if (BaseInputConnection.getComposingSpanStart(s) >= 0) return
+                                        if (selectionStart != position + 1 || selectionEnd != position + 1) return
+                                        val suite = suiteDeListe(s, position) ?: return
+                                        enSuite = true
+                                        try {
+                                            s.replace(suite.debut, suite.fin, suite.texte)
+                                            setSelection(suite.debut + suite.texte.length)
+                                        } finally {
+                                            enSuite = false
                                         }
                                     }
                                 },
@@ -487,7 +532,17 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
     var margeRognagePx: Int = Int.MAX_VALUE
 
     override fun getExtendedPaddingBottom(): Int =
-        minOf(super.getExtendedPaddingBottom(), margeRognagePx)
+        margeBasseLue(super.getExtendedPaddingBottom(), margeRognagePx, recadrageFinDeNote)
+
+    /**
+     * Vrai le temps d'un recadrage sur la dernière ligne de la note.
+     *
+     * `bringPointIntoView` borne lui aussi son défilement avec
+     * [getExtendedPaddingBottom] : rognée, la marge le faisait s'arrêter 40 dp
+     * avant le bas, et l'aération de fin de note disparaissait pendant la
+     * frappe. Le dessin, lui, garde la marge rognée.
+     */
+    private var recadrageFinDeNote = false
 
     /**
      * `TextView` ramène le curseur à l'écran à chaque dessin qui suit un
@@ -535,10 +590,26 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
     }
 
     override fun bringPointIntoView(offset: Int): Boolean {
-        val autorise = suiviCurseurAutorise
-        suiviCurseurAutorise = false
         val cible = extremiteTiree?.takeIf { it in 0..length() } ?: offset
-        return autorise && super.bringPointIntoView(cible)
+        return when (suiviCurseur(suiviCurseurAutorise, isLayoutRequested)) {
+            SuiviCurseur.REFUSER -> false
+            // Mise en page en attente : `TextView` ne fait que noter la cible
+            // et rend faux. Consommer le droit ici refuserait le vrai
+            // recadrage, au `onPreDraw` qui suit — c'est ce qui laissait une
+            // ligne tapée en bas de l'écran sous le bord du champ.
+            SuiviCurseur.DIFFERER -> super.bringPointIntoView(cible)
+            SuiviCurseur.SUIVRE -> {
+                suiviCurseurAutorise = false
+                val mise = layout
+                recadrageFinDeNote = mise != null &&
+                    mise.getLineForOffset(cible.coerceIn(0, length())) == mise.lineCount - 1
+                try {
+                    super.bringPointIntoView(cible)
+                } finally {
+                    recadrageFinDeNote = false
+                }
+            }
+        }
     }
 
     // --- Défilement pendant une sélection au doigt ---------------------------
@@ -932,3 +1003,42 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
     override fun getAutofillType(): Int =
         if (saisieAutomatique) super.getAutofillType() else AUTOFILL_TYPE_NONE
 }
+
+/** Ce que [ChampEditeur.bringPointIntoView] fait d'une demande de suivi du curseur. */
+internal enum class SuiviCurseur {
+    /** Aucun droit en cours : un dessin qui ne concerne pas le curseur. */
+    REFUSER,
+
+    /** Droit accordé, mise en page en attente : `TextView` note la cible, le droit reste acquis. */
+    DIFFERER,
+
+    /** Droit accordé, mise en page à jour : le recadrage a lieu et consomme le droit. */
+    SUIVRE,
+}
+
+/**
+ * Règle du suivi du curseur, isolée pour se tester sans appareil.
+ *
+ * Après une frappe qui change la hauteur du texte — une nouvelle ligne —,
+ * `TextView.updateAfterEdit` demande une mise en page puis appelle
+ * `bringPointIntoView` : celui-ci ne peut alors que **différer** (`mDeferScroll`)
+ * et rend faux. Le vrai recadrage vient plus tard, du `onPreDraw` ; c'est lui qui
+ * doit consommer le droit, jamais l'appel différé. Lu dans les sources d'Android
+ * 15 (`TextView.bringPointIntoView`, `checkForResize`, `onLayout`).
+ */
+internal fun suiviCurseur(autorise: Boolean, miseEnPageEnAttente: Boolean): SuiviCurseur = when {
+    !autorise -> SuiviCurseur.REFUSER
+    miseEnPageEnAttente -> SuiviCurseur.DIFFERER
+    else -> SuiviCurseur.SUIVRE
+}
+
+/**
+ * Marge basse que `TextView` lit, pour dessiner comme pour recadrer.
+ *
+ * Rognée à [rognage] en temps normal, pour que le texte descende jusqu'à la
+ * barre de mise en forme pendant le défilement (2f71447). Entière pendant un
+ * recadrage sur la dernière ligne ([finDeNote]) : l'aération voulue de fin de
+ * note — la marge réelle, 48 dp — reste alors visible sous le texte tapé.
+ */
+internal fun margeBasseLue(reelle: Int, rognage: Int, finDeNote: Boolean): Int =
+    if (finDeNote) reelle else minOf(reelle, rognage)
