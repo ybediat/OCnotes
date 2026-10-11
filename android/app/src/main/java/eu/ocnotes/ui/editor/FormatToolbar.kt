@@ -110,6 +110,9 @@ fun FormatToolbar(
                     positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
                     tooltip = { PlainTooltip { Text(apparence.aide) } },
                     state = rememberTooltipState(),
+                    // Focusable, la bulle prendrait le focus du champ et
+                    // fermerait le clavier.
+                    focusable = false,
                 ) {
                     IconButton(
                         onClick = { onAction(action) },
