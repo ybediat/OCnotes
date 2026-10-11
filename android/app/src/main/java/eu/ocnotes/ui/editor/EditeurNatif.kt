@@ -390,8 +390,9 @@ fun EditeurNatif(
                                         val suite = suiteDeListe(s, position) ?: return
                                         enSuite = true
                                         try {
-                                            s.replace(suite.debut, suite.fin, suite.texte)
-                                            setSelection(suite.debut + suite.texte.length)
+                                            val r = suite.remplacement
+                                            s.replace(r.debut, r.fin, r.texte)
+                                            setSelection(suite.curseur)
                                         } finally {
                                             enSuite = false
                                         }
