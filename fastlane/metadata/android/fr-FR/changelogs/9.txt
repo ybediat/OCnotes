@@ -1,0 +1,7 @@
+Éditeur : barre de mise en forme en icônes. Un appui long affiche le nom et la syntaxe, et le bouton s'allume quand la mise en forme est active.
+
+Entrée poursuit les listes et renumérote la suite. Gras, italique et barré laissent les espaces hors des marqueurs. Les symboles Markdown sont colorés.
+
+Plus fluide : collage de long texte sans blocage, titre stable, ligne tapée en bas d'écran toujours visible.
+
+Aperçu : sélectionner en faisant défiler ne fait plus planter l'appli.

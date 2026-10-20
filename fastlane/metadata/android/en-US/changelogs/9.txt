@@ -1,0 +1,7 @@
+Editor: icon formatting bar. Long-press shows the name and syntax, and the button lights up when the formatting is active.
+
+Enter continues lists and renumbers the next items. Bold, italic and strikethrough keep edge spaces outside the markers. Markdown symbols are colored.
+
+Smoother: pasting long text no longer freezes, the title stays put, a line typed at the bottom of the screen stays visible.
+
+Preview: selecting while scrolling no longer crashes the app.
