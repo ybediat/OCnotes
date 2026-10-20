@@ -146,11 +146,14 @@ go test ./... -short
 
 gomobile init
 mkdir -p android/app/libs
+# -buildid= et -B none retirent le build ID Go et la note GNU build-id :
+# tous deux varient d'une machine à l'autre et empêchent F-Droid de
+# reproduire l'APK. Garder ces options identiques à celles de la recette.
 gomobile bind \
     -target=android/arm64,android/amd64 \
     -androidapi=26 \
     -trimpath \
-    -ldflags="-s -w" \
+    -ldflags="-s -w -buildid= -B none" \
     -o android/app/libs/ocnotes.aar \
     ./mobile
 

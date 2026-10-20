@@ -1,0 +1,1 @@
+Version technique pour F-Droid : l'application est maintenant construite de façon reproductible, sans changement visible.

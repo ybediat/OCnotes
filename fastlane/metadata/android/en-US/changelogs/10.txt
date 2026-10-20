@@ -1,0 +1,1 @@
+Technical release for F-Droid: the app is now built reproducibly, with no visible change.
