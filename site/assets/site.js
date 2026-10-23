@@ -27,7 +27,14 @@
   fetch("https://api.github.com/repos/ybediat/OCnotes/releases/latest", { headers: { Accept: "application/vnd.github+json" } })
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function (rel) {
-      var apk = (rel.assets || []).filter(function (a) { return norm(a.name).slice(-4) === ".apk"; })[0];
+      /* La release porte deux APK : celui signé (OCnotes-x.y.z.apk) et
+         l'artefact non signé de la CI (app-release-unsigned.apk), publié pour
+         la vérification de reproductibilité de F-Droid. Seul le premier
+         s'installe : on écarte tout APK « unsigned ». */
+      var apk = (rel.assets || []).filter(function (a) {
+        var n = norm(a.name);
+        return n.slice(-4) === ".apk" && n.indexOf("unsigned") === -1;
+      })[0];
       if (!apk) return;
       var v = String(rel.tag_name).replace(/^v/i, "");
 
