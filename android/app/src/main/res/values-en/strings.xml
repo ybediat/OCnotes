@@ -575,6 +575,11 @@
          ================================================================ -->
     <string name="apercu_activer">Preview</string>
     <string name="apercu_quitter">Edit</string>
+    <string name="apercu_taille_texte">Text size</string>
+    <string name="apercu_taille_reduire">Smaller text</string>
+    <string name="apercu_taille_agrandir">Larger text</string>
+    <string name="apercu_taille_normale">Back to normal size</string>
+    <string name="apercu_taille_pourcent">%1$d%%</string>
     <!-- Repère posé à la place d'une image : la source n'est pas affichée. -->
     <string name="apercu_image">Image</string>
     <!-- Repère posé à la place d'un saut de page d'un document .docx ou .odt. -->

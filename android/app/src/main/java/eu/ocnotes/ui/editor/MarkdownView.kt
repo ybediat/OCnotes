@@ -84,6 +84,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import eu.ocnotes.R
 import eu.ocnotes.data.BlockKind
@@ -110,6 +111,24 @@ import kotlinx.coroutines.flow.collectLatest
 fun VueMarkdown(
     blocs: List<NoteBlockDto>,
     modifier: Modifier = Modifier,
+    echelle: Float = 1f,
+) {
+    // La loupe agit en multipliant l'échelle de police : tout le texte de
+    // l'aperçu est en `sp`, donc titres, listes, code et tableaux grossissent
+    // ensemble sans qu'aucun bloc ait à le savoir. La densité, elle, ne bouge
+    // pas : marges, icônes et défilement de sélection restent en `dp`.
+    val densite = LocalDensity.current
+    CompositionLocalProvider(
+        LocalDensity provides Density(densite.density, densite.fontScale * echelle),
+    ) {
+        ContenuMarkdown(blocs, modifier)
+    }
+}
+
+@Composable
+private fun ContenuMarkdown(
+    blocs: List<NoteBlockDto>,
+    modifier: Modifier,
 ) {
     if (blocs.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
