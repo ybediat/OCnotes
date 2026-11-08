@@ -556,6 +556,11 @@
          ================================================================ -->
     <string name="apercu_activer">Vorschau</string>
     <string name="apercu_quitter">Bearbeiten</string>
+    <string name="apercu_taille_texte">Textgröße</string>
+    <string name="apercu_taille_reduire">Text verkleinern</string>
+    <string name="apercu_taille_agrandir">Text vergrößern</string>
+    <string name="apercu_taille_normale">Zurück zur normalen Größe</string>
+    <string name="apercu_taille_pourcent">%1$d %%</string>
     <!-- Platzhalter für ein Bild: Die Quelle wird nicht angezeigt. -->
     <string name="apercu_image">Bild</string>
     <!-- Platzhalter für einen Seitenumbruch aus einem .docx- oder .odt-Dokument. -->

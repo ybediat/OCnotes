@@ -35,6 +35,40 @@ class PreferencesAffichageTest {
             PreferencesAffichage(stockage).policeInterface.value,
         )
     }
+
+    @Test
+    fun `la taille de lecture vaut cent pour cent par defaut`() {
+        assertEquals(100, PreferencesAffichage(StockageMemoire()).tailleLecture.value)
+    }
+
+    @Test
+    fun `la taille de lecture est publiee et persiste`() {
+        val stockage = StockageMemoire()
+        PreferencesAffichage(stockage).definirTailleLecture(150)
+
+        assertEquals(150, PreferencesAffichage(stockage).tailleLecture.value)
+    }
+
+    @Test
+    fun `une taille hors palier est ramenee au palier le plus proche`() {
+        val stockage = StockageMemoire()
+        val preferences = PreferencesAffichage(stockage)
+
+        preferences.definirTailleLecture(140)
+        assertEquals(130, preferences.tailleLecture.value)
+
+        // Une valeur abîmée dans le fichier ne doit pas casser l'écran.
+        stockage.ecrireLong("taille_texte_lecture", 99_999)
+        assertEquals(200, PreferencesAffichage(stockage).tailleLecture.value)
+    }
+
+    @Test
+    fun `les paliers suivant et precedent s arretent aux bornes`() {
+        assertEquals(115, PaliersLecture.suivant(100))
+        assertEquals(85, PaliersLecture.precedent(100))
+        assertEquals(200, PaliersLecture.suivant(200))
+        assertEquals(85, PaliersLecture.precedent(85))
+    }
 }
 
 private class StockageMemoire(

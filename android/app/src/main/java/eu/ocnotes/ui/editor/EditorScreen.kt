@@ -16,7 +16,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.TextDecrease
+import androidx.compose.material.icons.filled.TextIncrease
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -42,6 +45,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
@@ -49,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.ocnotes.R
 import eu.ocnotes.appContainer
+import eu.ocnotes.data.PaliersLecture
 import eu.ocnotes.ui.common.ChargementPleinEcran
 import eu.ocnotes.ui.common.EtatVide
 import eu.ocnotes.ui.common.resoudre
@@ -166,6 +172,11 @@ fun EditorScreen(
     }
     BackHandler(onBack = quitter)
 
+    // Taille du texte de l'aperçu, commune à toutes les notes : lue
+    // directement dans les préférences, comme la police dans `MainActivity`.
+    val preferences = LocalContext.current.appContainer.preferencesAffichage
+    val tailleLecture by preferences.tailleLecture.collectAsStateWithLifecycle()
+
     Scaffold(
         modifier = modifier,
         snackbarHost = { SnackbarHost(snackbar) },
@@ -207,6 +218,16 @@ fun EditorScreen(
                     }
                 },
                 actions = {
+                    // La loupe ne règle que l'aperçu : elle n'apparaît qu'en
+                    // lecture, notes en lecture seule comprises, et se place
+                    // à gauche du crayon.
+                    if (etat.apercu) {
+                        MenuTailleLecture(
+                            pourcent = tailleLecture,
+                            onChoisir = preferences::definirTailleLecture,
+                        )
+                    }
+
                     // Rien à basculer sur une note en lecture seule : un
                     // bouton qui ne fait rien vaut moins que pas de bouton.
                     // Le menu d'encodage, lui, reste utile même en lecture
@@ -313,7 +334,72 @@ fun EditorScreen(
                             onOuvrirQuandMeme = viewModel::ouvrirQuandMeme,
                         )
                     }
-                    VueMarkdown(blocs = etat.blocs, modifier = Modifier.weight(1f))
+                    VueMarkdown(
+                        blocs = etat.blocs,
+                        modifier = Modifier.weight(1f),
+                        echelle = tailleLecture / 100f,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * La loupe et son petit menu : A−, le pourcentage (qui ramène à 100 %), A+.
+ *
+ * Le menu reste ouvert d'un palier à l'autre, pour qu'on voie le texte changer
+ * derrière lui et qu'on puisse enchaîner les appuis.
+ */
+@Composable
+private fun MenuTailleLecture(
+    pourcent: Int,
+    onChoisir: (Int) -> Unit,
+) {
+    var ouvert by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { ouvert = true }) {
+            Icon(
+                imageVector = Icons.Default.ZoomIn,
+                contentDescription = stringResource(R.string.apercu_taille_texte),
+            )
+        }
+        DropdownMenu(expanded = ouvert, onDismissRequest = { ouvert = false }) {
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(
+                    onClick = { onChoisir(PaliersLecture.precedent(pourcent)) },
+                    enabled = pourcent > PaliersLecture.valeurs.first(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.TextDecrease,
+                        contentDescription = stringResource(R.string.apercu_taille_reduire),
+                    )
+                }
+                // Le pourcentage sert aussi de bouton de retour à 100 % : le
+                // lecteur d'écran annonce les deux, la taille et l'action.
+                val normale = stringResource(R.string.apercu_taille_normale)
+                TextButton(
+                    onClick = { onChoisir(PaliersLecture.NORMAL) },
+                    modifier = Modifier.semantics {
+                        onClick(label = normale) {
+                            onChoisir(PaliersLecture.NORMAL)
+                            true
+                        }
+                    },
+                ) {
+                    Text(stringResource(R.string.apercu_taille_pourcent, pourcent))
+                }
+                IconButton(
+                    onClick = { onChoisir(PaliersLecture.suivant(pourcent)) },
+                    enabled = pourcent < PaliersLecture.valeurs.last(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.TextIncrease,
+                        contentDescription = stringResource(R.string.apercu_taille_agrandir),
+                    )
                 }
             }
         }

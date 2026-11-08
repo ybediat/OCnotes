@@ -563,6 +563,11 @@
          ================================================================ -->
     <string name="apercu_activer">Vista previa</string>
     <string name="apercu_quitter">Editar</string>
+    <string name="apercu_taille_texte">Tamaño del texto</string>
+    <string name="apercu_taille_reduire">Reducir el texto</string>
+    <string name="apercu_taille_agrandir">Ampliar el texto</string>
+    <string name="apercu_taille_normale">Volver al tamaño normal</string>
+    <string name="apercu_taille_pourcent">%1$d %%</string>
     <!-- Repère posé à la place d'une image : la source n'est pas affichée. -->
     <string name="apercu_image">Imagen</string>
     <!-- Repère posé à la place d'un saut de page d'un document .docx ou .odt. -->

@@ -18,6 +18,27 @@ enum class PoliceInterface(val valeur: String) {
 }
 
 /**
+ * Paliers de taille du texte en mode lecture, en pourcentage de la taille
+ * normale. Des paliers plutôt qu'un curseur : on retombe toujours sur la même
+ * taille, et un appui de doigt suffit à passer de l'un à l'autre.
+ */
+object PaliersLecture {
+    val valeurs = listOf(85, 100, 115, 130, 150, 175, 200)
+    const val NORMAL = 100
+
+    /** Ramène une valeur quelconque (fichier ancien, valeur abîmée) au palier le plus proche. */
+    fun normaliser(pourcent: Int): Int = valeurs.minBy { kotlin.math.abs(it - pourcent) }
+
+    /** Palier suivant, ou le même s'il n'y a rien au-dessus. */
+    fun suivant(pourcent: Int): Int =
+        valeurs.firstOrNull { it > normaliser(pourcent) } ?: valeurs.last()
+
+    /** Palier précédent, ou le même s'il n'y a rien en dessous. */
+    fun precedent(pourcent: Int): Int =
+        valeurs.lastOrNull { it < normaliser(pourcent) } ?: valeurs.first()
+}
+
+/**
  * Préférences d'affichage : ce qui décrit un écran, pas une session.
  *
  * # Pourquoi ici et pas dans `config.json`
@@ -73,6 +94,13 @@ class PreferencesAffichage internal constructor(
     private val _policeInterface = MutableStateFlow(
         PoliceInterface.depuis(stockage.lireChaine(CLE_POLICE_INTERFACE)),
     )
+    // Normalisé dès la lecture : l'écran ne voit jamais qu'un palier connu.
+    private val _tailleLecture = MutableStateFlow(
+        PaliersLecture.normaliser(
+            stockage.lireLong(CLE_TAILLE_LECTURE, PaliersLecture.NORMAL.toLong())
+                .coerceIn(0L, 1000L).toInt(),
+        ),
+    )
 
     /**
      * Ordre de tri retenu, sous sa forme brute.
@@ -118,6 +146,12 @@ class PreferencesAffichage internal constructor(
     /** Police de l'interface ; Lexend reste le choix par défaut des installations existantes. */
     val policeInterface: StateFlow<PoliceInterface> = _policeInterface.asStateFlow()
 
+    /**
+     * Taille du texte de l'aperçu, en pourcentage ; toujours un des
+     * [PaliersLecture]. Commune à toutes les notes.
+     */
+    val tailleLecture: StateFlow<Int> = _tailleLecture.asStateFlow()
+
     fun definirTri(valeur: String) = ecrire(CLE_TRI, valeur, _tri)
 
     fun definirMode(valeur: String) = ecrire(CLE_MODE, valeur, _mode)
@@ -149,6 +183,12 @@ class PreferencesAffichage internal constructor(
         stockage.ecrireChaine(CLE_POLICE_INTERFACE, valeur.valeur)
     }
 
+    fun definirTailleLecture(pourcent: Int) {
+        val palier = PaliersLecture.normaliser(pourcent)
+        _tailleLecture.value = palier
+        stockage.ecrireLong(CLE_TAILLE_LECTURE, palier.toLong())
+    }
+
     /**
      * Le flux est mis à jour avant l'écriture disque, et `apply()` diffère
      * celle-ci : l'écran se redessine sans attendre le stockage, et un disque
@@ -169,6 +209,7 @@ class PreferencesAffichage internal constructor(
         const val CLE_GARDER_ECRAN_ALLUME_EDITION = "garder_ecran_allume_edition"
         const val CLE_SAISIE_AUTOMATIQUE_EDITION = "saisie_automatique_edition"
         const val CLE_POLICE_INTERFACE = "police_interface"
+        const val CLE_TAILLE_LECTURE = "taille_texte_lecture"
         const val QUOTA_CACHE_DEFAUT = 250L * 1024 * 1024
     }
 }
