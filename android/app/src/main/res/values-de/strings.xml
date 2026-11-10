@@ -200,6 +200,7 @@
     <string name="browser_deplace">„%1$s“ verschoben.</string>
     <!-- Titel des Verschiebe-Dialogs mit dem Namen der betroffenen Notiz. -->
     <string name="browser_deplacer_titre">„%1$s“ verschieben</string>
+    <string name="browser_copier_titre">„%1$s“ kopieren</string>
     <string name="browser_dossier_parent">Übergeordneter Ordner</string>
     <string name="browser_rafraichir">Aktualisieren und synchronisieren</string>
     <string name="browser_rafraichir_local">Aktualisieren</string>

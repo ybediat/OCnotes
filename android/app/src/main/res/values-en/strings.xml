@@ -239,6 +239,7 @@
     <string name="browser_supprime">“%1$s” deleted.</string>
     <string name="browser_deplace">“%1$s” moved.</string>
     <string name="browser_deplacer_titre">Move “%1$s”</string>
+    <string name="browser_copier_titre">Copy “%1$s”</string>
     <string name="browser_dossier_parent">Parent folder</string>
     <string name="browser_rafraichir">Refresh and sync</string>
     <string name="browser_rafraichir_local">Refresh</string>

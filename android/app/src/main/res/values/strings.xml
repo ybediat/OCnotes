@@ -215,6 +215,8 @@
     <string name="browser_deplace">« %1$s » déplacé.</string>
     <!-- Titre de la boîte de déplacement, avec le nom de la note concernée. -->
     <string name="browser_deplacer_titre">Déplacer « %1$s »</string>
+    <!-- Titre de la boîte de copie, avec le nom de la note concernée. -->
+    <string name="browser_copier_titre">Copier « %1$s »</string>
     <string name="browser_dossier_parent">Dossier parent</string>
     <string name="browser_rafraichir">Rafraîchir et synchroniser</string>
     <!-- Mode local : rien à synchroniser, seulement à relire depuis le disque. -->
