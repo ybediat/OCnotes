@@ -31,6 +31,13 @@ data class FenetreNatif(
  * le document entier pour cette règle, et la voit tomber sans contexte ; il en
  * porte une copie, `fenetreLignes`, qui doit rester identique à celle-ci.
  *
+ * Seconde règle, pour le bloc de code : si la ligne au-dessus de la sélection,
+ * ou sa première ligne, est un délimiteur, Go doit savoir s'il ouvre ou ferme
+ * un bloc, et compte pour cela les délimiteurs depuis le début de la fenêtre.
+ * La fenêtre recule alors jusqu'à la dernière ligne hors de tout bloc qui le
+ * précède ([debutHorsBloc]). Le cas est rare : un parcours du texte, sans
+ * copie, seulement quand un délimiteur touche la sélection.
+ *
  * Les bornes tombent toujours à côté d'un saut de ligne : elles ne coupent
  * jamais une paire UTF-16.
  */
@@ -44,7 +51,54 @@ internal fun fenetreMiseEnForme(texte: CharSequence, debut: Int, fin: Int): Born
     var droite = finLigne(texte, haut)
     if (droite < texte.length) droite = finLigne(texte, droite + 1)
 
-    return BornesFenetre(gauche, droite)
+    return BornesFenetre(minOf(gauche, debutHorsBloc(texte, bas)), droite)
+}
+
+/**
+ * Début de la dernière ligne hors de tout bloc de code qui précède le
+ * délimiteur touchant la sélection (ligne au-dessus, sinon première ligne) ;
+ * le début de la ligne de [bas] s'il n'y en a pas. Même règle de délimiteur
+ * que `codeBlock` côté Go : une ligne qui commence par ` ``` `, blancs de bord
+ * ignorés. Copie conforme de `debutHorsBloc` dans `window_test.go`.
+ */
+internal fun debutHorsBloc(texte: CharSequence, bas: Int): Int {
+    val premiere = debutLigne(texte, bas)
+    val cible = when {
+        premiere > 0 && estDelimiteurBloc(texte, debutLigne(texte, premiere - 1)) -> debutLigne(texte, premiere - 1)
+        estDelimiteurBloc(texte, premiere) -> premiere
+        else -> return premiere
+    }
+    var hors = 0
+    var dedans = false
+    var ligne = 0
+    while (ligne <= cible) {
+        if (!dedans) hors = ligne
+        if (estDelimiteurBloc(texte, ligne)) dedans = !dedans
+        ligne = finLigne(texte, ligne) + 1
+    }
+    return hors
+}
+
+/**
+ * La ligne qui commence en [debut] est-elle un délimiteur de bloc de code ?
+ * Comme `isFence` côté Go : ` ``` ` en tête, blancs de bord ignorés.
+ */
+internal fun estDelimiteurBloc(texte: CharSequence, debut: Int): Boolean =
+    texte.subSequence(debut, finLigne(texte, debut)).trim().startsWith("```")
+
+/**
+ * Le délimiteur de la ligne qui commence en [debut] ouvre-t-il un bloc ?
+ * Vrai si un nombre pair de délimiteurs le précède depuis le début du texte
+ * (`opens` dans `codeBlock` côté Go).
+ */
+internal fun delimiteurOuvre(texte: CharSequence, debut: Int): Boolean {
+    var compte = 0
+    var ligne = 0
+    while (ligne < debut) {
+        if (estDelimiteurBloc(texte, ligne)) compte++
+        ligne = finLigne(texte, ligne) + 1
+    }
+    return compte % 2 == 0
 }
 
 /** Bornes d'une fenêtre, [fin] exclue, comme `substring`. */

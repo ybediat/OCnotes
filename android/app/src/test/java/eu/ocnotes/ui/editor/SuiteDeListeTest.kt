@@ -165,4 +165,19 @@ class SuiteDeListeTest {
         // Le caractère en position n'est pas un saut de ligne.
         assertNull(suiteDeListe("1. ab", 4))
     }
+
+    @Test
+    fun lesZerosDeTeteSontConserves() {
+        // Le nouvel élément garde le zéro, et la suite est décalée sans être faussée.
+        assertEquals("07. a\n08. ‸\n09. b", entree("07. a‸\n08. b"))
+        assertEquals("08. a\n09. ‸\n10. b", entree("08. a‸\n09. b"))
+        assertEquals("09. a\n10. ‸", entree("09. a‸"))
+        assertEquals("001. a\n002. ‸\n003. b", entree("001. a‸\n002. b"))
+    }
+
+    @Test
+    fun sansZeroDeTeteRienNeChange() {
+        assertEquals("1. a\n2. ‸\n3. b", entree("1. a‸\n2. b"))
+        assertEquals("9. a\n10. ‸\n11. b", entree("9. a‸\n10. b"))
+    }
 }

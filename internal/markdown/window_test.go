@@ -29,7 +29,40 @@ func fenetreLignes(units []uint16, start, end int) (debut, fin int) {
 	if fin < len(units) {
 		fin = finLigne(units, fin+1)
 	}
-	return debut, fin
+	return min(debut, debutHorsBloc(units, start)), fin
+}
+
+// debutHorsBloc recopie la seconde règle de `fenetreMiseEnForme` : si la ligne
+// au-dessus de la sélection, ou sa première ligne, est un délimiteur de bloc
+// de code, la fenêtre recule jusqu'à la dernière ligne hors de tout bloc qui
+// le précède. codeBlock compte les délimiteurs depuis le début de la fenêtre
+// pour savoir si celui du haut ouvre un bloc.
+func debutHorsBloc(units []uint16, start int) int {
+	premiere := debutLigne(units, start)
+	cible := -1
+	if premiere > 0 && estDelimiteurTest(units, debutLigne(units, premiere-1)) {
+		cible = debutLigne(units, premiere-1)
+	} else if estDelimiteurTest(units, premiere) {
+		cible = premiere
+	}
+	if cible < 0 {
+		return premiere
+	}
+	hors, dedans := 0, false
+	for ligne := 0; ligne <= cible; ligne = finLigne(units, ligne) + 1 {
+		if !dedans {
+			hors = ligne
+		}
+		if estDelimiteurTest(units, ligne) {
+			dedans = !dedans
+		}
+	}
+	return hors
+}
+
+func estDelimiteurTest(units []uint16, debut int) bool {
+	ligne := decodeUnits(units[debut:finLigne(units, debut)])
+	return strings.HasPrefix(strings.TrimSpace(ligne), "```")
 }
 
 func debutLigne(units []uint16, pos int) int {
@@ -80,7 +113,7 @@ func TestFenetreEquivautAuDocumentEntier(t *testing.T) {
 	morceaux := []string{
 		"a", "mot", " ", "é", "😀", "\n", "\n", "\n", "*", "**", "~~", "`",
 		"```", "# ", "## ", "- ", "- [ ] ", "1. ", "2. ", "3) ", "> ", "[", "](", ")",
-		"\t", "  ",
+		"\t", "  ", "\n```", "\n```\n",
 	}
 	iterations := 20000
 	if testing.Short() {
@@ -113,6 +146,25 @@ func TestFenetreEquivautAuDocumentEntier(t *testing.T) {
 					entier.Text, entier.Start, entier.End,
 					fenetre.Text, fenetre.Start, fenetre.End)
 			}
+		}
+	}
+}
+
+// Entre deux blocs de code, le délimiteur du dessus ferme le premier bloc :
+// la fenêtre doit le savoir, sinon elle le prendrait pour une ouverture.
+func TestFenetreEntreDeuxBlocs(t *testing.T) {
+	texte := "intro\n```\na\n```\nb\n```\nc\n```"
+	for _, pos := range []int{len("intro\n```\na\n```\n"), len("intro\n```\na\n```\nb")} {
+		d := Doc{Text: texte, Start: pos, End: pos}
+		entier, err := Apply(d, ActionCodeBlock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fenetre := appliquerParFenetre(t, d, ActionCodeBlock); fenetre != entier {
+			t.Fatalf("fenêtre %q, entier %q", fenetre.Text, entier.Text)
+		}
+		if entier.Text != "intro\n```\na\n```\n```\nb\n```\n```\nc\n```" {
+			t.Errorf("curseur sur b : %q", entier.Text)
 		}
 	}
 }

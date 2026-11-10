@@ -99,4 +99,41 @@ class ColorationCodeTest {
         assertEquals("", code("Un paragraphe, avec des virgules. Et un point !"))
         assertEquals("", code(""))
     }
+
+    // --- Fenêtre colorée après une modification (decalerFenetre) ---
+
+    @Test
+    fun frappeEnFinDeNoteAgranditLaFenetre() {
+        // Fenêtre [0, 10) sur une note de 10 caractères : on tape « x » à la fin.
+        assertEquals(0 to 11, decalerFenetre(0, 10, 10, 0, 1, 10))
+    }
+
+    @Test
+    fun noteVideSeColoreDesLaPremiereFrappe() {
+        assertEquals(0 to 9, decalerFenetre(0, 0, 0, 0, 9, 0))
+    }
+
+    @Test
+    fun frappeJusteApresUneFenetreAuMilieuEstIgnoree() {
+        // La fenêtre s'arrête à 10 mais le texte continue : hors de l'écran.
+        assertEquals(null, decalerFenetre(0, 10, 10, 0, 1, 50))
+        assertEquals(null, decalerFenetre(0, 10, 30, 0, 1, 50))
+    }
+
+    @Test
+    fun frappeAvantLaFenetreLaFaitGlisser() {
+        assertEquals(22 to 42, decalerFenetre(20, 40, 5, 0, 2, 100))
+        assertEquals(17 to 37, decalerFenetre(20, 40, 5, 3, 0, 100))
+    }
+
+    @Test
+    fun frappeDansLaFenetreLaRedimensionne() {
+        assertEquals(20 to 43, decalerFenetre(20, 40, 25, 0, 3, 100))
+        assertEquals(20 to 38, decalerFenetre(20, 40, 25, 2, 0, 100))
+    }
+
+    @Test
+    fun effacementEnFinDeNoteRetrecitLaFenetre() {
+        assertEquals(0 to 9, decalerFenetre(0, 10, 9, 1, 0, 10))
+    }
 }

@@ -91,8 +91,8 @@ class MisesEnFormeActivesTest {
         assertEquals(setOf("task"), actives("- [ ] pain‸"))
         assertEquals(setOf("numbered"), actives("3. lait‸"))
         assertEquals(setOf("quote"), actives("> cit‸ation"))
-        // « - [x] » n'est pas le préfixe posé par le bouton : il ne le retirerait pas.
-        assertEquals(emptySet<String>(), actives("- [x] fait‸"))
+        // Une case cochée se retire aussi avec le bouton Tâche.
+        assertEquals(setOf("task"), actives("- [x] fait‸"))
     }
 
     @Test

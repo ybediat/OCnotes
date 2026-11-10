@@ -75,6 +75,17 @@ internal fun progressionDepuisContact(
 }
 
 /**
+ * Le doigt posé sur la bande a-t-il assez glissé pour lancer le défilement ?
+ *
+ * Un simple toucher ne fait rien : la bande longe le bord droit du texte, et
+ * un doigt posé là pour placer le curseur en fin de ligne téléportait la note.
+ * Seul un glisser vertical au-delà du seuil tactile du système ([seuil], en
+ * pixels) démarre le défilement, où qu'il commence sur la bande.
+ */
+internal fun glisserDemarreDefilement(deplacementY: Float, seuil: Float): Boolean =
+    kotlin.math.abs(deplacementY) > seuil
+
+/**
  * Rail fin, avec une zone tactile de 20 dp limitée au bord droit.
  *
  * Il ne consomme aucun geste commencé ailleurs dans le texte. La sémantique
@@ -127,28 +138,30 @@ fun BandeDefilementRapideNatif(
                 if (hauteurPiste <= 0) return@pointerInput
                 awaitEachGesture {
                     val debut = awaitFirstDown(requireUnconsumed = false)
-                    onDefiler(
-                        progressionDepuisContact(
-                            positionY = debut.position.y,
-                            hauteurPiste = hauteurPiste,
-                            hauteurCurseur = hauteurCurseur,
-                        ),
-                    )
-                    debut.consume()
+                    // Rien au simple toucher : on attend que le doigt glisse.
+                    var defilementLance = false
 
                     while (true) {
                         val changement = awaitPointerEvent().changes
                             .firstOrNull { it.id == debut.id }
                             ?: break
                         if (!changement.pressed) break
-                        onDefiler(
-                            progressionDepuisContact(
-                                positionY = changement.position.y,
-                                hauteurPiste = hauteurPiste,
-                                hauteurCurseur = hauteurCurseur,
-                            ),
-                        )
-                        changement.consume()
+                        if (!defilementLance) {
+                            defilementLance = glisserDemarreDefilement(
+                                deplacementY = changement.position.y - debut.position.y,
+                                seuil = viewConfiguration.touchSlop,
+                            )
+                        }
+                        if (defilementLance) {
+                            onDefiler(
+                                progressionDepuisContact(
+                                    positionY = changement.position.y,
+                                    hauteurPiste = hauteurPiste,
+                                    hauteurCurseur = hauteurCurseur,
+                                ),
+                            )
+                            changement.consume()
+                        }
                     }
                 }
             },

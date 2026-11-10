@@ -18,15 +18,21 @@ internal fun misesEnFormeActives(texte: CharSequence, debut: Int, fin: Int): Set
     val haut = maxOf(debut, fin).coerceIn(0, texte.length)
     val actives = mutableSetOf<String>()
 
-    // Texte en ligne.
+    // Lignes touchées par la sélection, comme `selectedLines` côté Go.
+    val lignes = lignesSelectionnees(texte, bas, haut) ?: return actives
+
+    // Texte en ligne. Sur plusieurs blocs, chacun doit porter la paire, comme
+    // `wrapBlocks` côté Go.
+    val segments = segmentsParBloc(texte, lignes, bas, haut)
     for ((id, marqueur) in MARQUEURS_EN_LIGNE) {
+        if (segments.size >= 2) {
+            if (segments.all { (d, f) -> paireAutour(texte, d, f, marqueur) }) actives += id
+            continue
+        }
         // Le code en ligne garde ses espaces de bord, comme côté Go.
         val (b, h) = if (id == "code") bas to haut else rognerBords(texte, bas, haut)
         if (enLigneActive(texte, b, h, marqueur)) actives += id
     }
-
-    // Lignes touchées par la sélection, comme `selectedLines` côté Go.
-    val lignes = lignesSelectionnees(texte, bas, haut) ?: return actives
 
     // Préfixes de ligne : actif si toutes les lignes non vides le portent.
     val prefixes = lignes.map { (d, f) -> prefixeDe(texte.subSequence(d, f).toString()) }
@@ -35,18 +41,28 @@ internal fun misesEnFormeActives(texte: CharSequence, debut: Int, fin: Int): Set
         for ((id, prefixe) in PREFIXES_LIGNE) {
             if (significatifs.all { it == prefixe }) actives += id
         }
+        // Une case cochée se retire avec le bouton Tâche (`isTaskPrefix`).
+        if (significatifs.all { estPrefixeTache(it) }) actives += "task"
         if (suiteNumerotee(prefixes)) actives += "numbered"
     }
 
-    // Bloc de code : délimiteur juste au-dessus et juste en dessous.
+    // Bloc de code, comme `codeBlock` côté Go : délimiteurs sélectionnés avec
+    // le code, ou juste au-dessus et juste en dessous. Celui du haut doit
+    // ouvrir un bloc, et aucun autre ne doit se trouver entre les deux. Le
+    // décompte depuis le début du texte n'est fait que si les délimiteurs
+    // sont là.
     val (premierDebut, _) = lignes.first()
-    val (_, dernierFin) = lignes.last()
-    if (premierDebut > 0 && dernierFin < texte.length &&
-        estDelimiteur(texte, debutLigne(texte, premierDebut - 1), premierDebut - 1) &&
-        estDelimiteur(texte, dernierFin + 1, finLigne(texte, dernierFin + 1))
-    ) {
-        actives += "codeblock"
-    }
+    val (dernierDebut, dernierFin) = lignes.last()
+    val dedans = lignes.size >= 2 &&
+        estDelimiteurBloc(texte, premierDebut) && estDelimiteurBloc(texte, dernierDebut) &&
+        lignes.subList(1, lignes.size - 1).none { (d, _) -> estDelimiteurBloc(texte, d) } &&
+        delimiteurOuvre(texte, premierDebut)
+    val autour = !dedans && premierDebut > 0 && dernierFin < texte.length &&
+        estDelimiteurBloc(texte, debutLigne(texte, premierDebut - 1)) &&
+        estDelimiteurBloc(texte, dernierFin + 1) &&
+        lignes.none { (d, _) -> estDelimiteurBloc(texte, d) } &&
+        delimiteurOuvre(texte, debutLigne(texte, premierDebut - 1))
+    if (dedans || autour) actives += "codeblock"
 
     return actives
 }
@@ -136,8 +152,80 @@ private fun lignesSelectionnees(texte: CharSequence, bas: Int, haut: Int): List<
     return lignes
 }
 
-private fun estDelimiteur(texte: CharSequence, debut: Int, fin: Int): Boolean =
-    texte.subSequence(debut, fin).trim().startsWith("```")
+/**
+ * Case à cocher, cochée ou non, quelle que soit la puce (`isTaskPrefix` côté
+ * Go).
+ */
+private fun estPrefixeTache(prefixe: String) =
+    prefixe.length == 6 && prefixe[0] in "-*+" && prefixe.substring(1, 3) == " [" &&
+        prefixe[3] in " xX" && prefixe.substring(4) == "] "
+
+/**
+ * Découpe la sélection en un segment par bloc Markdown, comme
+ * `blockSegments` côté Go : une ligne vide sépare deux blocs, une ligne à
+ * préfixe en ouvre un, une ligne sans préfixe prolonge le bloc en cours sauf
+ * après un titre. Chaque segment exclut retrait, préfixe et blancs de bord ;
+ * les segments vides sont omis.
+ */
+internal fun segmentsParBloc(
+    texte: CharSequence,
+    lignes: List<Pair<Int, Int>>,
+    bas: Int,
+    haut: Int,
+): List<Pair<Int, Int>> {
+    if (bas == haut) return emptyList()
+    val segments = mutableListOf<Pair<Int, Int>>()
+    var debutCourant = -1
+    var finCourante = -1
+    var titreCourant = false
+
+    fun clore() {
+        if (debutCourant >= 0) {
+            var d = debutCourant
+            var f = finCourante
+            while (d < f && estBordRognable(texte[d])) d++
+            while (f > d && estBordRognable(texte[f - 1])) f--
+            if (d < f) segments += d to f
+        }
+        debutCourant = -1
+    }
+
+    for ((debutL, finL) in lignes) {
+        val ligne = texte.subSequence(debutL, finL).toString()
+        if (ligne.isBlank()) {
+            clore()
+            continue
+        }
+        val m = PREFIXE.find(ligne)
+        val retrait = m?.groupValues?.get(1)?.length ?: 0
+        val prefixe = m?.groupValues?.get(2) ?: ""
+        if (prefixe.isNotEmpty() || titreCourant) clore()
+        titreCourant = prefixe.startsWith("#")
+        val d = maxOf(bas, debutL + retrait + prefixe.length)
+        val f = maxOf(minOf(haut, finL), d)
+        if (debutCourant < 0) {
+            debutCourant = d
+        }
+        finCourante = f
+    }
+    clore()
+    return segments
+}
+
+/**
+ * Le segment `[debut, fin)` est-il entouré du marqueur, chaque côté pris
+ * dedans ou juste dehors (`pairOf` dans `wrapBlocks` côté Go) ?
+ */
+private fun paireAutour(texte: CharSequence, debut: Int, fin: Int, marqueur: String): Boolean {
+    val n = marqueur.length
+    val gauche = when {
+        marqueurA(texte, debut, marqueur, +1) -> debut
+        marqueurA(texte, debut - n, marqueur, -1) -> debut - n
+        else -> return false
+    }
+    return (fin - n >= gauche + n && marqueurA(texte, fin - n, marqueur, -1)) ||
+        marqueurA(texte, fin, marqueur, +1)
+}
 
 /**
  * Sélection privée de ses blancs de bord (`rogneBords` côté Go) :
@@ -164,6 +252,11 @@ private fun estBordRognable(c: Char) =
 private fun enLigneActive(texte: CharSequence, bas: Int, haut: Int, marqueur: String): Boolean {
     val n = marqueur.length
     if (haut - bas >= 2 * n && marqueurA(texte, bas, marqueur, +1) && marqueurA(texte, haut - n, marqueur, -1)) {
+        return true
+    }
+    // Marqueurs juste à l'extérieur, même sur plusieurs lignes : `**a\nb**`
+    // avec `a\nb` sélectionné. Un appui les retire côté Go.
+    if (marqueurA(texte, bas - n, marqueur, -1) && marqueurA(texte, haut, marqueur, +1)) {
         return true
     }
     return paireEnglobante(texte, bas, haut, marqueur)

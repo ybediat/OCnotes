@@ -70,7 +70,7 @@ func Apply(d Doc, action Action) (Doc, error) {
 	case ActionNumbered:
 		return linePrefix(d, numberedPrefix), nil
 	case ActionTask:
-		return linePrefix(d, "- [ ] "), nil
+		return linePrefix(d, taskPrefix), nil
 	case ActionQuote:
 		return linePrefix(d, "> "), nil
 	case ActionCodeBlock:
@@ -98,6 +98,14 @@ func wrap(d Doc, marker string) Doc {
 	m := utf16.Encode([]rune(marker))
 	n := len(m)
 
+	// Une sélection à cheval sur plusieurs blocs (paragraphes, éléments de
+	// liste, titres, citations) reçoit une paire de marqueurs par bloc :
+	// une seule paire autour de « - a\n- b » écrirait « - **a\n- b** »,
+	// qui n'est pas du gras.
+	if segs := blockSegments(units, start, end); len(segs) >= 2 {
+		return wrapBlocks(units, segs, m)
+	}
+
 	// Marqueurs à l'intérieur de la sélection.
 	if end-start >= 2*n &&
 		markerAt(units, start, m, +1) &&
@@ -124,6 +132,20 @@ func wrap(d Doc, marker string) Doc {
 			units[:open], units[open+n:closing], units[closing+n:])
 	}
 
+	// Italique sur un simple curseur, à l'intérieur d'un gras : la paire
+	// « ** » qu'on insérerait se lirait comme une fermeture du gras
+	// (« **g**ras** »). On écrit l'italique avec « _ » à la place, et un
+	// second appui retire cette paire vide.
+	if start == end && marker == "*" {
+		if _, _, ok := enclosingSpan(units, start, end, []uint16{'*', '*'}); ok {
+			if start > 0 && start < len(units) && units[start-1] == '_' && units[start] == '_' {
+				return build(start-1, start-1, units[:start-1], units[start+1:])
+			}
+			u := []uint16{'_'}
+			return build(start+1, start+1, units[:start], u, u, units[end:])
+		}
+	}
+
 	// Sinon on entoure. Sur un simple curseur, on le place entre les marqueurs
 	// pour que l'utilisateur puisse taper directement.
 	if start == end {
@@ -132,6 +154,150 @@ func wrap(d Doc, marker string) Doc {
 	}
 	return build(start+n, end+n,
 		units[:start], m, units[start:end], m, units[end:])
+}
+
+// blockSegments découpe la sélection [start, end) en un segment par bloc
+// Markdown : une ligne vide sépare deux blocs, et chaque ligne qui porte un
+// préfixe de style (titre, élément de liste, citation) en ouvre un. Une ligne
+// sans préfixe qui suit une ligne non vide prolonge le bloc en cours, comme
+// la suite d'un paragraphe, sauf après un titre, qui tient sur une ligne.
+//
+// Chaque segment exclut l'indentation et le préfixe de ses lignes, et ses
+// blancs de bord (bordRognable) ; un segment vide est omis. Ne lit que les
+// lignes de la sélection : la fenêtre de l'éditeur suffit.
+//
+// La règle est recopiée côté Android (segmentsParBloc dans
+// MisesEnFormeActives.kt), qui surligne le bouton.
+func blockSegments(units []uint16, start, end int) []lineRange {
+	if start == end {
+		return nil
+	}
+	var segs []lineRange
+	cur := lineRange{-1, -1}
+	curHeading := false
+	flush := func() {
+		if cur.start >= 0 {
+			for cur.start < cur.end && bordRognable(units[cur.start]) {
+				cur.start++
+			}
+			for cur.end > cur.start && bordRognable(units[cur.end-1]) {
+				cur.end--
+			}
+			if cur.start < cur.end {
+				segs = append(segs, cur)
+			}
+		}
+		cur = lineRange{-1, -1}
+	}
+	for _, ln := range splitLines(units) {
+		// Lignes hors sélection ; une sélection qui s'arrête au début d'une
+		// ligne ne la prend pas.
+		if ln.end < start || ln.start > end || (ln.start == end && ln.start > start) {
+			continue
+		}
+		text := lineText(units, ln)
+		if strings.TrimSpace(text) == "" {
+			flush()
+			continue
+		}
+		indent, prefix, _ := splitLine(text)
+		if prefix != "" || curHeading {
+			flush()
+		}
+		curHeading = strings.HasPrefix(prefix, "#")
+		// Indentation et préfixe sont en ASCII : octets = unités UTF-16.
+		debut := max(start, ln.start+len(indent)+len(prefix))
+		fin := max(min(end, ln.end), debut)
+		if cur.start < 0 {
+			cur = lineRange{debut, fin}
+		} else {
+			cur.end = fin
+		}
+	}
+	flush()
+	return segs
+}
+
+// wrapBlocks applique un marqueur bloc par bloc (voir blockSegments).
+//
+// Bascule, comme wrap : si chaque segment porte déjà la paire, à l'intérieur
+// ou juste autour, elle est retirée partout ; sinon elle est ajoutée aux
+// segments qui ne l'ont pas. La sélection rendue va du début du premier
+// segment à la fin du dernier, marqueurs exclus.
+func wrapBlocks(units []uint16, segs []lineRange, m []uint16) Doc {
+	n := len(m)
+	// pairOf rend la position des marqueurs gauche et droit qui entourent le
+	// segment, chacun pris dedans ou juste dehors : une sélection rendue par
+	// un premier appui commence après le marqueur d'ouverture du premier
+	// bloc et finit avant la fermeture du dernier, mais contient celles des
+	// blocs du milieu.
+	pairOf := func(sg lineRange) (left, right int, ok bool) {
+		switch {
+		case markerAt(units, sg.start, m, +1):
+			left = sg.start
+		case markerAt(units, sg.start-n, m, -1):
+			left = sg.start - n
+		default:
+			return 0, 0, false
+		}
+		switch {
+		case sg.end-n >= left+n && markerAt(units, sg.end-n, m, -1):
+			right = sg.end - n
+		case markerAt(units, sg.end, m, +1):
+			right = sg.end
+		default:
+			return 0, 0, false
+		}
+		return left, right, true
+	}
+	removing := true
+	for _, sg := range segs {
+		if _, _, ok := pairOf(sg); !ok {
+			removing = false
+			break
+		}
+	}
+
+	var parts [][]uint16
+	copie, total := 0, 0
+	add := func(p []uint16) {
+		parts = append(parts, p)
+		total += len(p)
+	}
+	newStart, newEnd := 0, 0
+	for i, sg := range segs {
+		var contentStart, contentEnd int
+		left, right, wrapped := pairOf(sg)
+		switch {
+		case removing:
+			add(units[copie:left])
+			contentStart = total
+			add(units[left+n : right])
+			contentEnd = total
+			copie = right + n
+		case wrapped:
+			// Déjà mis en forme : laissé tel quel.
+			add(units[copie:left])
+			contentStart = total + n
+			add(units[left : right+n])
+			contentEnd = total - n
+			copie = right + n
+		default:
+			add(units[copie:sg.start])
+			add(m)
+			contentStart = total
+			add(units[sg.start:sg.end])
+			contentEnd = total
+			add(m)
+			copie = sg.end
+		}
+		if i == 0 {
+			newStart = contentStart
+		}
+		newEnd = contentEnd
+	}
+	add(units[copie:])
+	return build(newStart, newEnd, parts...)
 }
 
 // rogneBords retire de la sélection les blancs de ses bords (voir bordRognable).
@@ -268,6 +434,11 @@ func enclosingSpan(units []uint16, start, end int, marker []uint16) (open, closi
 // Avec une sélection, celle-ci devient le libellé et le curseur se place dans
 // l'URL, qui est ce qu'il reste à saisir. Sans sélection, le curseur se place
 // dans le libellé.
+//
+// Une sélection qui est elle-même une adresse (voir looksLikeURL) devient
+// l'URL, et le curseur va dans le libellé. Une sélection à cheval sur
+// plusieurs blocs ne garde que le premier : un libellé ne traverse pas un
+// paragraphe.
 func link(d Doc) Doc {
 	units, start, end := d.decode()
 
@@ -280,9 +451,41 @@ func link(d Doc) Doc {
 		return build(pos, pos, units[:start], open, middle, closing, units[end:])
 	}
 
+	if segs := blockSegments(units, start, end); len(segs) >= 2 {
+		start, end = segs[0].start, segs[0].end
+	} else {
+		r := rogneBords(Doc{Text: d.Text, Start: start, End: end})
+		_, start, end = r.decode()
+	}
+
+	if url, ok := looksLikeURL(decodeUnits(units[start:end])); ok {
+		pos := start + len(open)
+		return build(pos, pos,
+			units[:start], open, middle, utf16.Encode([]rune(url)), closing, units[end:])
+	}
+
 	pos := start + len(open) + (end - start) + len(middle)
 	return build(pos, pos,
 		units[:start], open, units[start:end], middle, closing, units[end:])
+}
+
+// looksLikeURL dit si s est une adresse web à mettre dans l'URL d'un lien :
+// http://, https:// ou www., sans tenir compte de la casse, et sans blanc
+// (espaces insécables comprises). Une adresse en www. reçoit https:// : sans
+// schéma, le lien serait relatif à la note.
+func looksLikeURL(s string) (string, bool) {
+	if strings.ContainsAny(s, " \t\n\r\u00a0\u202f") {
+		return "", false
+	}
+	bas := strings.ToLower(s)
+	switch {
+	case strings.HasPrefix(bas, "http://") && len(s) > len("http://"),
+		strings.HasPrefix(bas, "https://") && len(s) > len("https://"):
+		return s, true
+	case strings.HasPrefix(bas, "www.") && len(s) > len("www."):
+		return "https://" + s, true
+	}
+	return "", false
 }
 
 // --- Mise en forme par ligne ------------------------------------------------
@@ -467,11 +670,23 @@ func samePrefixRun(units []uint16, lines []lineRange, first, last int, prefix st
 			continue
 		}
 		meaningful++
-		if existing != prefix {
+		if existing != prefix && !(prefix == taskPrefix && isTaskPrefix(existing)) {
 			return false
 		}
 	}
 	return meaningful > 0
+}
+
+// taskPrefix est le préfixe que pose le bouton Tâche.
+const taskPrefix = "- [ ] "
+
+// isTaskPrefix reconnaît une case à cocher, cochée ou non, quelle que soit la
+// puce : « - [x] fait » se retire avec le bouton Tâche au lieu d'être
+// décoché, ce qui perdait l'état sans prévenir. Recopiée côté Android
+// (estPrefixeTache dans MisesEnFormeActives.kt).
+func isTaskPrefix(prefix string) bool {
+	return len(prefix) == 6 && strings.ContainsRune("-*+", rune(prefix[0])) &&
+		prefix[1:3] == " [" && strings.ContainsRune(" xX", rune(prefix[3])) && prefix[4:] == "] "
 }
 
 // numberedRun dit si la sélection est déjà une suite numérotée, quel que soit
@@ -530,6 +745,14 @@ const fence = "```"
 
 // codeBlock entoure les lignes sélectionnées d'une paire de délimiteurs, ou
 // les retire si le bloc est déjà délimité.
+//
+// Le bloc est reconnu de deux façons : délimiteurs sélectionnés avec le code,
+// ou juste au-dessus et juste en dessous de la sélection. Dans les deux cas,
+// le délimiteur du haut doit être une ouverture, ce que dit le nombre de
+// délimiteurs qui le précèdent depuis le début du texte : sans ce contrôle,
+// un curseur placé entre deux blocs les cassait tous les deux. L'éditeur
+// étend sa fenêtre jusqu'à une ligne hors de tout bloc quand c'est utile
+// (fenetreMiseEnForme, côté Android).
 func codeBlock(d Doc) Doc {
 	units, start, end := d.decode()
 	lines := splitLines(units)
@@ -541,11 +764,51 @@ func codeBlock(d Doc) Doc {
 		}
 		return strings.HasPrefix(strings.TrimSpace(lineText(units, lines[i])), fence)
 	}
+	// opens dit si le délimiteur de la ligne i ouvre un bloc : un nombre
+	// pair de délimiteurs le précède.
+	opens := func(i int) bool {
+		count := 0
+		for k := 0; k < i; k++ {
+			if isFence(k) {
+				count++
+			}
+		}
+		return count%2 == 0
+	}
+	// fencesBetween dit si une ligne de [a, b] est un délimiteur.
+	fencesBetween := func(a, b int) bool {
+		for k := a; k <= b; k++ {
+			if isFence(k) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Délimiteurs compris dans la sélection : on les retire, et la sélection
+	// couvre le code qui reste.
+	if first < last && isFence(first) && isFence(last) && opens(first) && !fencesBetween(first+1, last-1) {
+		var kept []string
+		for i, ln := range lines {
+			if i == first || i == last {
+				continue
+			}
+			kept = append(kept, lineText(units, ln))
+		}
+		text := strings.Join(kept, "\n")
+		n := len(utf16.Encode([]rune(text)))
+		removed := lines[first].end - lines[first].start + 1
+		selStart, selEnd := lines[first].start, lines[first].start
+		if first+1 < last {
+			selEnd = lines[last-1].end - removed
+		}
+		return Doc{Text: text, Start: clamp(selStart, 0, n), End: clamp(selEnd, 0, n)}
+	}
 
 	var kept []string
 	var shift int
 
-	if isFence(first-1) && isFence(last+1) {
+	if isFence(first-1) && isFence(last+1) && opens(first-1) && !fencesBetween(first, last) {
 		for i, ln := range lines {
 			if i == first-1 || i == last+1 {
 				continue

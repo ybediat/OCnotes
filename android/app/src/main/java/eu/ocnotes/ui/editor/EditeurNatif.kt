@@ -9,6 +9,7 @@ import android.text.Editable
 import android.text.InputType
 import android.text.Layout
 import android.text.TextWatcher
+import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -51,6 +52,9 @@ private const val CLASSE_POIGNEE = "\$SelectionHandleView"
 
 /** Après un changement de sélection, le temps qu'`Editor` montre ses poignées. */
 private const val DELAI_RECHERCHE_POIGNEES_MS = 250L
+
+/** Étiquette des traces de diagnostic de l'éditeur (logcat). */
+private const val TAG_EDITEUR = "OCnotes.Editeur"
 private const val ESSAIS_RECHERCHE_POIGNEES = 8
 
 private class ReferenceColoration {
@@ -941,7 +945,13 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
     private val chercherPoignees: Runnable = object : Runnable {
         override fun run() {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || !hasSelection()) return
-            if (brancherPoignees() >= 2 || --essaisRecherchePoignees <= 0) return
+            val trouvees = brancherPoignees()
+            if (trouvees > 0) TracePoignees.trouvees = true
+            if (trouvees >= 2) return
+            if (--essaisRecherchePoignees <= 0) {
+                TracePoignees.signalerSiJamaisTrouvees()
+                return
+            }
             postDelayed(this, DELAI_RECHERCHE_POIGNEES_MS)
         }
     }
@@ -963,6 +973,31 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
             }
         }
         return ecoutees
+    }
+
+    /**
+     * Trace de diagnostic quand le mécanisme des poignées ne s'accroche plus.
+     *
+     * Les poignées sont reconnues au nom d'une classe interne d'Android : si
+     * une version ou un constructeur la renomme, on ne les trouve plus et le
+     * défilement pendant qu'on tire une poignée cesse sans bruit. Une seule
+     * ligne par lancement de l'application, et seulement si aucune poignée n'a
+     * été trouvée depuis : une sélection posée sans poignée (au clavier, par
+     * exemple) ne doit pas la déclencher quand le mécanisme fonctionne.
+     */
+    private object TracePoignees {
+        @Volatile var trouvees = false
+        @Volatile private var signalee = false
+
+        fun signalerSiJamaisTrouvees() {
+            if (trouvees || signalee) return
+            signalee = true
+            Log.w(
+                TAG_EDITEUR,
+                "poignées de sélection introuvables après $ESSAIS_RECHERCHE_POIGNEES essais " + // i18n-ok : trace de diagnostic
+                    "(Android ${Build.VERSION.RELEASE}, API ${Build.VERSION.SDK_INT}, ${Build.MANUFACTURER} ${Build.MODEL})", // i18n-ok : trace de diagnostic
+            )
+        }
     }
 
     private fun pourChaqueVue(vue: View, action: (View) -> Unit) {
