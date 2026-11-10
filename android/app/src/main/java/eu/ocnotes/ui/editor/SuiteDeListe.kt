@@ -64,8 +64,19 @@ internal data class PrefixeListe(
     val retrait: String = "",
 )
 
-/** Numéro d'un élément de liste ordonnée et son délimiteur, `.` ou `)`. */
-internal data class NumeroListe(val valeur: Long, val delimiteur: Char)
+/**
+ * Numéro d'un élément de liste ordonnée, son délimiteur, `.` ou `)`, et le
+ * nombre de chiffres écrits : `08.` en a deux, zéro de tête compris.
+ */
+internal data class NumeroListe(val valeur: Long, val delimiteur: Char, val largeur: Int = 1)
+
+/**
+ * Écrit [valeur] sur au moins [largeur] chiffres, complétés par des zéros à
+ * gauche : `8` sur deux chiffres donne `08`, pour qu'une liste `07.`, `08.`
+ * garde son alignement. Un numéro plus long que la largeur n'est pas coupé.
+ */
+internal fun formaterNumero(valeur: Long, largeur: Int): String =
+    valeur.toString().padStart(largeur, '0')
 
 /**
  * Décale d'un cran les éléments qui suivent [depuis] dans la même liste
@@ -105,10 +116,10 @@ internal fun renumeroterSuite(
         if (texte.subSequence(debut, i).toString() != retrait) break
         val element = prefixeDeListe(texte, debut, finLigne)?.numero ?: break
         if (element.valeur != attendu || element.delimiteur != numero.delimiteur) break
-        // Le numéro occupe `[i, i + chiffres)` : seul lui change.
-        val chiffres = element.valeur.toString().length
-        decale.append(texte, copie, i).append(attendu + 1)
-        copie = i + chiffres
+        // Le numéro occupe `[i, i + largeur)`, zéros de tête compris : seul
+        // lui change, et il garde sa largeur.
+        decale.append(texte, copie, i).append(formaterNumero(attendu + 1, element.largeur))
+        copie = i + element.largeur
         attendu++
         ligne = finLigne
     }
@@ -167,10 +178,11 @@ internal fun prefixeDeListe(texte: CharSequence, debut: Int, fin: Int): PrefixeL
             if (!espaceEn(texte, f + 1, fin)) return null
             // Neuf chiffres au plus, comme CommonMark : `N + 1` tient dans un Long.
             val valeur = texte.subSequence(i, f).toString().toLong()
+            val largeur = f - i
             PrefixeListe(
                 f + 2,
-                "$retrait${valeur + 1}${texte[f]} ", // i18n-ok : balisage Markdown.
-                NumeroListe(valeur, texte[f]),
+                "$retrait${formaterNumero(valeur + 1, largeur)}${texte[f]} ", // i18n-ok : balisage Markdown.
+                NumeroListe(valeur, texte[f], largeur),
                 retrait,
             )
         }

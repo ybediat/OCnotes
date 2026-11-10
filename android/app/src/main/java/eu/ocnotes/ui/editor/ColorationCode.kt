@@ -259,6 +259,39 @@ internal fun colorerCode(editable: Editable, debut: Int, fin: Int, couleur: Int)
 }
 
 /**
+ * Nouvelle fenêtre colorée `[debut, fin)` après une modification du texte
+ * (`avant` caractères remplacés par `apres` à partir de `depart`), ou `null`
+ * si la modification tombe après la fenêtre et n'a rien à colorer.
+ *
+ * Une frappe au bout d'une fenêtre qui touche la fin du texte l'agrandit :
+ * c'est le cas le plus courant — on écrit en fin de note — et, sans cela,
+ * rien de ce qu'on tape là n'était coloré avant le prochain défilement. Il
+ * couvre aussi la note vide, dont la fenêtre vaut `[0, 0)`.
+ *
+ * Fonction pure, pour être testée sans Android.
+ */
+internal fun decalerFenetre(
+    debut: Int,
+    fin: Int,
+    depart: Int,
+    avant: Int,
+    apres: Int,
+    longueurAvant: Int,
+): Pair<Int, Int>? {
+    val delta = apres - avant
+    return when {
+        // Au bout de la fenêtre, et la fenêtre va jusqu'à la fin du texte.
+        depart >= fin && fin >= longueurAvant -> debut to fin + delta
+        // Entièrement avant la fenêtre : elle glisse d'autant.
+        depart + avant <= debut -> debut + delta to fin + delta
+        // Après la fenêtre, hors de l'écran : rien à faire.
+        depart >= fin -> null
+        // Dans la fenêtre : elle grandit ou rétrécit d'autant.
+        else -> debut to fin + delta
+    }
+}
+
+/**
  * Au-delà de ce nombre de caractères insérés d'un coup, la zone insérée n'est
  * pas colorée telle quelle : la fenêtre visible est recalculée à la place.
  * Un écran de téléphone en montre environ deux mille.
@@ -283,9 +316,16 @@ internal class ColorationFenetre(
     private var couleur: Int,
     private val onColoration: (spans: Int, ms: Double) -> Unit = { _, _ -> },
 ) {
-    /** Fenêtre actuellement colorée, `[debut, fin)` ; vide tant que `fin <= debut`. */
+    /** Fenêtre actuellement colorée, `[debut, fin)` ; vide quand `fin <= debut`. */
     private var debut = 0
     private var fin = 0
+
+    /**
+     * Vrai une fois la fenêtre calculée sur l'écran. Une fenêtre vide n'est
+     * pas forcément « pas encore calculée » : celle d'une note vide vaut
+     * `[0, 0)`, et doit pourtant grandir dès la première frappe.
+     */
+    private var calculee = false
 
     /** Recale la fenêtre sur l'écran. [force] la recolore même si elle couvre déjà l'écran. */
     fun suivre(force: Boolean = false) {
@@ -318,7 +358,7 @@ internal class ColorationFenetre(
 
     /** À appeler pour chaque modification : décale la fenêtre et relit les lignes touchées. */
     fun apresModification(editable: Editable, depart: Int, avant: Int, apres: Int) {
-        if (fin <= debut) return
+        if (!calculee) return
         // Gros collage, annulation d'une grosse suppression, mise en forme de
         // tout le texte : colorer toute la zone insérée poserait des milliers
         // de spans (`setSpan` est quadratique, voir plus haut). On oublie la
@@ -327,21 +367,15 @@ internal class ColorationFenetre(
         if (apres > LIMITE_RECOLORATION_LOCALE) {
             debut = 0
             fin = 0
+            calculee = false
             vue.post { suivre(force = true) }
             return
         }
-        val delta = apres - avant
-        when {
-            depart + avant <= debut -> {
-                debut += delta
-                fin += delta
-            }
-
-            depart >= fin -> return
-            else -> fin += delta
-        }
-        debut = debut.coerceIn(0, editable.length)
-        fin = fin.coerceIn(debut, editable.length)
+        // `editable` est déjà modifié : on retrouve la longueur d'avant.
+        val longueurAvant = editable.length - apres + avant
+        val nouvelle = decalerFenetre(debut, fin, depart, avant, apres, longueurAvant) ?: return
+        debut = nouvelle.first.coerceIn(0, editable.length)
+        fin = nouvelle.second.coerceIn(debut, editable.length)
         mesurer { colorerCode(editable, depart, depart + apres, couleur) }
     }
 
@@ -354,6 +388,7 @@ internal class ColorationFenetre(
     private fun recolorer(editable: Editable, a: Int, b: Int) {
         debut = a
         fin = b
+        calculee = true
         mesurer {
             for (ancien in editable.getSpans(0, editable.length, SpanCode::class.java)) {
                 editable.removeSpan(ancien)

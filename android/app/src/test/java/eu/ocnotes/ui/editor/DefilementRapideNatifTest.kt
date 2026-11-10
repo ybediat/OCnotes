@@ -42,4 +42,17 @@ class DefilementRapideNatifTest {
         assertEquals(0.5f, progressionDepuisContact(500f, 1_000, 100f), 0.001f)
         assertEquals(1f, progressionDepuisContact(1_020f, 1_000, 100f), 0.001f)
     }
+
+    @Test
+    fun unSimpleToucherNeLancePasLeDefilement() {
+        assertEquals(false, glisserDemarreDefilement(deplacementY = 0f, seuil = 8f))
+        assertEquals(false, glisserDemarreDefilement(deplacementY = 8f, seuil = 8f))
+        assertEquals(false, glisserDemarreDefilement(deplacementY = -5f, seuil = 8f))
+    }
+
+    @Test
+    fun unGlisserVersLeHautOuLeBasLanceLeDefilement() {
+        assertEquals(true, glisserDemarreDefilement(deplacementY = 9f, seuil = 8f))
+        assertEquals(true, glisserDemarreDefilement(deplacementY = -40f, seuil = 8f))
+    }
 }
