@@ -62,4 +62,24 @@ class FenetreMiseEnFormeTest {
         val bornes = fenetreMiseEnForme(texte, 4, 4)
         assertEquals(BornesFenetre(0, texte.length), bornes)
     }
+
+    @Test
+    fun entreDeuxBlocsLaFenetreRemonteAuDebutDuBlocPrecedent() {
+        // Le délimiteur au-dessus de « b » ferme un bloc : la fenêtre remonte
+        // jusqu'à son ouverture pour que Go le sache.
+        val texte = "intro\n```\na\n```\nb\n```\nc\n```"
+        assertEquals("```\na\n```\nb\n```", fenetre(texte, texte.indexOf('b')))
+    }
+
+    @Test
+    fun sousUneOuvertureLaFenetreNeBougePas() {
+        val texte = "intro\n```\ncode\n```"
+        assertEquals("```\ncode\n```", fenetre(texte, texte.indexOf("code")))
+    }
+
+    @Test
+    fun selectionQuiCommenceSurUnDelimiteurFermant() {
+        val texte = "x\n```\na\n```\nb"
+        assertEquals("```\na\n```\nb", fenetre(texte, texte.lastIndexOf("```"), texte.length))
+    }
 }
