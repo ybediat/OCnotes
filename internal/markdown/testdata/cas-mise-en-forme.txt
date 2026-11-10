@@ -1,0 +1,43 @@
+# Cas de mise en forme partagés entre Go et Android.
+#
+# Lus par TestCasPartages (format_cas_test.go) et par CasPartagesTest côté
+# Android : Go vérifie le résultat de l'action, Android vérifie que les
+# boutons surlignés sur le texte de départ sont bien ceux qu'un appui retire.
+#
+# Une ligne par cas : action ¦ avant ¦ après ¦ boutons surlignés sur « avant »
+#   ‸ curseur, ‹…› sélection, \n saut de ligne
+#   boutons : identifiants séparés par des virgules, « - » pour aucun
+# Les lignes vides et celles qui commencent par # sont ignorées.
+
+# Gras, italique, barré : une paire par bloc
+bold ¦ - ‹a\n- b\n- c› ¦ - **‹a**\n- **b**\n- **c›** ¦ bullet
+bold ¦ - **‹a**\n- **b**\n- **c›** ¦ - ‹a\n- b\n- c› ¦ bold,bullet
+bold ¦ ‹para1\n\npara2› ¦ **‹para1**\n\n**para2›** ¦ -
+# Un bloc déjà en gras le reste, les autres le deviennent
+bold ¦ ‹**a**\n\nb› ¦ **‹a**\n\n**b›** ¦ -
+italic ¦ ‹# Titre\ntexte› ¦ # *‹Titre*\n*texte›* ¦ -
+strikethrough ¦ ‹> a\n> b› ¦ > ~~‹a~~\n> ~~b›~~ ¦ quote
+# Dans un seul paragraphe, une paire suffit : c'est du Markdown valide
+bold ¦ ‹a\nb› ¦ **‹a\nb›** ¦ -
+bold ¦ **‹a\nb›** ¦ ‹a\nb› ¦ bold
+
+# Italique sur un curseur dans un gras
+italic ¦ **gr‸as** ¦ **gr_‸_as** ¦ bold
+
+# Lien
+link ¦ voir ‹la doc› ¦ voir [la doc](‸) ¦ -
+link ¦ voir ‹https://exemple.fr› ¦ voir [‸](https://exemple.fr) ¦ -
+link ¦ lien ‹HTTPS://Exemple.fr › ici ¦ lien [‸](HTTPS://Exemple.fr)  ici ¦ -
+link ¦ ‹www.exemple.fr› ¦ [‸](https://www.exemple.fr) ¦ -
+link ¦ ‹a\n\nb› ¦ [a](‸)\n\nb ¦ -
+
+# Bloc de code
+codeblock ¦ ‹go build› ¦ ```\n‹go build›\n``` ¦ -
+codeblock ¦ ```\n‹go build›\n``` ¦ ‹go build› ¦ codeblock
+codeblock ¦ ‹```\nx\n```› ¦ ‹x› ¦ codeblock
+codeblock ¦ ```\na\n```\n‸b\n```\nc\n``` ¦ ```\na\n```\n```\n‸b\n```\n```\nc\n``` ¦ -
+
+# Tâche : une case cochée se retire comme une case vide
+task ¦ - [ ] ‸a ¦ ‸a ¦ task
+task ¦ - [x] ‸fait ¦ ‸fait ¦ task
+task ¦ ‸a ¦ - [ ] ‸a ¦ -

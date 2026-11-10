@@ -122,7 +122,10 @@ func TestMiseEnFormeEnLigne(t *testing.T) {
 		{"code retiré, curseur au milieu", ActionInlineCode, "a `x‸y` b", "a x‸y b"},
 		{"seconde paire de la ligne", ActionBold, "**a** et **b‸c**", "**a** et b‸c"},
 		{"curseur entre deux paires", ActionBold, "**a** et‸ **b**", "**a** et**‸** **b**"},
-		{"italique ignore le gras", ActionItalic, "**gr‸as**", "**gr*‸*as**"},
+		// Une paire « ** » insérée dans un gras le fermerait (« **gr**as** ») :
+		// l'italique s'écrit alors avec « _ ».
+		{"italique ignore le gras", ActionItalic, "**gr‸as**", "**gr_‸_as**"},
+		{"italique dans un gras se retire", ActionItalic, "**gr_‸_as**", "**gr‸as**"},
 		{"astérisques isolés", ActionItalic, "2 * 3‸ * 4", "2 * 3*‸* * 4"},
 		{"pas d'une ligne à l'autre", ActionBold, "**a\nb‸**", "**a\nb**‸****"},
 
@@ -434,4 +437,32 @@ func TestListeNumeroteeReprendLaPrecedente(t *testing.T) {
 			"‹1. 1234567890. a›",
 		},
 	})
+}
+
+// Une borne posée au milieu d'un emoji (deux unités UTF-16) en sort : sans
+// cela, le gras écrivait deux moitiés d'emoji, soit deux « � » dans la note.
+func TestEmojiJamaisCoupe(t *testing.T) {
+	cas := []struct {
+		start, end int
+		want       Doc
+	}{
+		// "a😀b" : a=0, 😀=[1,3), b=3. Sélection de 2 à 4 : l'emoji est inclus.
+		{2, 4, Doc{Text: "a**😀b**", Start: 3, End: 6}},
+		// Sélection de 0 à 2 : l'emoji est inclus.
+		{0, 2, Doc{Text: "**a😀**b", Start: 2, End: 5}},
+		// Curseur au milieu : il recule devant l'emoji.
+		{2, 2, Doc{Text: "a****😀b", Start: 3, End: 3}},
+	}
+	for _, c := range cas {
+		got, err := Apply(Doc{Text: "a😀b", Start: c.start, End: c.end}, ActionBold)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != c.want {
+			t.Errorf("[%d,%d] : obtenu %+v, attendu %+v", c.start, c.end, got, c.want)
+		}
+		if strings.ContainsRune(got.Text, '\uFFFD') {
+			t.Errorf("[%d,%d] : caractère abîmé dans %q", c.start, c.end, got.Text)
+		}
+	}
 }

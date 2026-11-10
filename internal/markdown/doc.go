@@ -54,7 +54,31 @@ func (d Doc) decode() (units []uint16, start, end int) {
 	}
 	start = clamp(start, 0, len(units))
 	end = clamp(end, 0, len(units))
+
+	// Une borne posée entre les deux moitiés d'une paire de substitution (un
+	// emoji) est sortie de la paire : sinon le découpage écrirait chaque
+	// moitié à part, soit deux « � » enregistrés dans la note. Un curseur
+	// recule devant l'emoji ; une sélection s'élargit pour le contenir.
+	if milieuDePaire(units, start) {
+		start--
+	}
+	if milieuDePaire(units, end) {
+		if end-1 == start {
+			// C'était un curseur, déjà reculé avec start.
+			end--
+		} else {
+			end++
+		}
+	}
 	return units, start, end
+}
+
+// milieuDePaire dit si pos tombe entre la moitié haute et la moitié basse
+// d'une paire de substitution UTF-16.
+func milieuDePaire(units []uint16, pos int) bool {
+	return pos > 0 && pos < len(units) &&
+		units[pos-1] >= 0xD800 && units[pos-1] <= 0xDBFF &&
+		units[pos] >= 0xDC00 && units[pos] <= 0xDFFF
 }
 
 func decodeUnits(units []uint16) string {
