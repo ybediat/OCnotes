@@ -595,6 +595,15 @@ class BrowserViewModel(
         executerLot(R.plurals.browser_lot_copies) { repository.copy(it, dossier) }
 
     /**
+     * Copie une seule note, depuis le menu « ⋮ » de sa ligne.
+     *
+     * Même chemin que la copie groupée, mais sur la note donnée : la sélection,
+     * vide hors du mode sélection, n'est ni lue ni touchée.
+     */
+    fun copier(entree: FolderEntryDto, dossier: String) =
+        executerLot(R.plurals.browser_lot_copies, listOf(entree.path)) { repository.copy(it, dossier) }
+
+    /**
      * Copie les notes sélectionnées vers un autre profil, sans rien supprimer.
      *
      * La sélection n'est vidée que si tout est passé : un échec reste coché
@@ -607,8 +616,29 @@ class BrowserViewModel(
      * sélection reste cochée tant que la copie attend une passe de synchro, et
      * la relancer créerait des doublons.
      */
-    fun copierVersCompte(destinationId: String, dossier: String, nomCompte: String) {
-        val cibles = _uiState.value.selection.toList()
+    fun copierVersCompte(destinationId: String, dossier: String, nomCompte: String) =
+        lancerCopieVersCompte(_uiState.value.selection.toList(), destinationId, dossier, nomCompte, viderApres = true)
+
+    /**
+     * Copie une seule note vers un autre profil, depuis le menu « ⋮ » de sa
+     * ligne. La sélection n'est pas concernée : elle n'est donc pas vidée.
+     */
+    fun copierVersCompte(entree: FolderEntryDto, destinationId: String, dossier: String, nomCompte: String) =
+        lancerCopieVersCompte(listOf(entree.path), destinationId, dossier, nomCompte, viderApres = false)
+
+    /**
+     * Tronc commun des deux copies vers un autre profil.
+     *
+     * [viderApres] : vider la sélection quand tout est passé — vrai seulement
+     * quand les [cibles] viennent de la sélection.
+     */
+    private fun lancerCopieVersCompte(
+        cibles: List<String>,
+        destinationId: String,
+        dossier: String,
+        nomCompte: String,
+        viderApres: Boolean,
+    ) {
         if (cibles.isEmpty() || copieVersCompteEnCours) return
         copieVersCompteEnCours = true
         viewModelScope.launch {
@@ -634,7 +664,7 @@ class BrowserViewModel(
                     )
                 },
             )
-            if (bilan.echecs == 0) viderSelection()
+            if (viderApres && bilan.echecs == 0) viderSelection()
         }
     }
 
@@ -698,9 +728,10 @@ class BrowserViewModel(
      */
     private fun executerLot(
         @PluralsRes succes: Int,
+        // Par défaut la sélection ; une action du menu « ⋮ » passe sa seule note.
+        cibles: List<String> = _uiState.value.selection.toList(),
         operation: suspend (chemin: String) -> Unit,
     ) {
-        val cibles = _uiState.value.selection.toList()
         if (cibles.isEmpty()) return
         viewModelScope.launch {
             var reussis = 0

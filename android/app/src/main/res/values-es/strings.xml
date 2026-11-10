@@ -220,6 +220,7 @@
     <string name="browser_supprime">Se ha eliminado «%1$s».</string>
     <string name="browser_deplace">Se ha movido «%1$s».</string>
     <string name="browser_deplacer_titre">Mover «%1$s»</string>
+    <string name="browser_copier_titre">Copiar «%1$s»</string>
     <string name="browser_dossier_parent">Carpeta superior</string>
     <string name="browser_rafraichir">Actualizar y sincronizar</string>
     <string name="browser_rafraichir_local">Actualizar</string>

@@ -114,6 +114,8 @@ private sealed interface Dialogue {
     data object NouveauDossier : Dialogue
     data class Renommer(val entree: FolderEntryDto) : Dialogue
     data class Deplacer(val entree: FolderEntryDto) : Dialogue
+    data class Copier(val entree: FolderEntryDto) : Dialogue
+    data class CopierUneVersCompte(val entree: FolderEntryDto) : Dialogue
     data class Supprimer(val entree: FolderEntryDto) : Dialogue
 
     /** Actions groupées : la cible est la sélection portée par l'état. */
@@ -391,10 +393,13 @@ fun BrowserScreen(
                     selection = etat.selection,
                     modeSelection = etat.modeSelection,
                     peutRecevoirNote = etat.peutRecevoirNote,
+                    plusieursComptes = plusieursComptes,
                     onOuvrir = viewModel::ouvrir,
                     onBasculer = viewModel::basculerSelection,
                     onRenommer = { dialogue = Dialogue.Renommer(it) },
                     onDeplacer = { dialogue = Dialogue.Deplacer(it) },
+                    onCopier = { dialogue = Dialogue.Copier(it) },
+                    onCopierCompte = { dialogue = Dialogue.CopierUneVersCompte(it) },
                     onPartager = { viewModel.partager(it) },
                     onSupprimer = { dialogue = Dialogue.Supprimer(it) },
                 )
@@ -448,6 +453,26 @@ fun BrowserScreen(
             dossiers = etat.dossiers,
             nomRacine = etat.nomRacine,
             onValider = { dossier -> viewModel.deplacer(d.entree, dossier) },
+            onFermer = { dialogue = null },
+        )
+
+        // Copie d'une seule note depuis son menu « ⋮ » : mêmes boîtes que la
+        // copie groupée, mais la note est portée par le dialogue, pas par la
+        // sélection.
+        is Dialogue.Copier -> DossierCibleLotDialog(
+            titre = stringResource(R.string.browser_copier_titre, d.entree.display),
+            libelleAction = stringResource(R.string.action_copier),
+            dossiers = etat.dossiers,
+            nomRacine = etat.nomRacine,
+            onValider = { dossier -> viewModel.copier(d.entree, dossier) },
+            onFermer = { dialogue = null },
+        )
+
+        is Dialogue.CopierUneVersCompte -> CopieVersCompteDialog(
+            nombre = 1,
+            onValider = { destination, dossier, nom ->
+                viewModel.copierVersCompte(d.entree, destination.profil.id, dossier, nom)
+            },
             onFermer = { dialogue = null },
         )
 
@@ -609,10 +634,13 @@ private fun ListeEntrees(
     selection: Set<String>,
     modeSelection: Boolean,
     peutRecevoirNote: Boolean,
+    plusieursComptes: Boolean,
     onOuvrir: (FolderEntryDto) -> Unit,
     onBasculer: (FolderEntryDto) -> Unit,
     onRenommer: (FolderEntryDto) -> Unit,
     onDeplacer: (FolderEntryDto) -> Unit,
+    onCopier: (FolderEntryDto) -> Unit,
+    onCopierCompte: (FolderEntryDto) -> Unit,
     onPartager: (FolderEntryDto) -> Unit,
     onSupprimer: (FolderEntryDto) -> Unit,
 ) {
@@ -648,6 +676,21 @@ private fun ListeEntrees(
                         null
                     } else {
                         ({ onDeplacer(entree) })
+                    },
+                    // Copie : une note modifiable seulement, comme en
+                    // sélection — un dossier n'est pas copiable, et la façade
+                    // refuse les octets d'un document en lecture seule.
+                    onCopier = if (entree.isDir || entree.readOnly || !peutRecevoirNote) {
+                        null
+                    } else {
+                        ({ onCopier(entree) })
+                    },
+                    // Vers un autre profil : c'est la cible qui reçoit, le
+                    // dossier courant n'a pas à accepter de note.
+                    onCopierCompte = if (entree.isDir || entree.readOnly || !plusieursComptes) {
+                        null
+                    } else {
+                        ({ onCopierCompte(entree) })
                     },
                     // Partage réservé aux fichiers : un dossier n'a pas de
                     // contenu à joindre. Un document `.docx`/`.odt` part tel
@@ -841,13 +884,17 @@ private fun LigneEntree(
     // `null` retire l'action du menu plutôt que de l'y laisser inerte —
     // c'est le cas d'un dossier, que DeplacerDialog ne couvre pas.
     onDeplacer: (() -> Unit)?,
+    // `null` pour un dossier ou un document en lecture seule.
+    onCopier: (() -> Unit)?,
+    // `null` aussi quand il n'existe pas d'autre profil.
+    onCopierCompte: (() -> Unit)?,
     // `null` pour un dossier : le partage ne joint que des fichiers.
     onPartager: (() -> Unit)?,
     onSupprimer: (() -> Unit)?,
 ) {
     var menuOuvert by remember { mutableStateOf(false) }
-    val aDesActions = onRenommer != null || onDeplacer != null ||
-        onPartager != null || onSupprimer != null
+    val aDesActions = onRenommer != null || onDeplacer != null || onCopier != null ||
+        onCopierCompte != null || onPartager != null || onSupprimer != null
 
     ListItem(
         headlineContent = {
@@ -949,6 +996,24 @@ private fun LigneEntree(
                                 onClick = {
                                     menuOuvert = false
                                     deplacer()
+                                },
+                            )
+                        }
+                        onCopier?.let { copier ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.action_copier)) },
+                                onClick = {
+                                    menuOuvert = false
+                                    copier()
+                                },
+                            )
+                        }
+                        onCopierCompte?.let { copierCompte ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.browser_copier_compte_titre)) },
+                                onClick = {
+                                    menuOuvert = false
+                                    copierCompte()
                                 },
                             )
                         }
