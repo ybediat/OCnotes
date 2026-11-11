@@ -12,7 +12,8 @@ import eu.ocnotes.data.AccountProfile
 import eu.ocnotes.data.AppMode
 import eu.ocnotes.data.DestinationCopie
 import eu.ocnotes.data.EnjeuSuppression
-import eu.ocnotes.data.NoteRefDto
+import eu.ocnotes.data.commeCibleCopie
+import eu.ocnotes.data.copierNotes
 import eu.ocnotes.data.OCnotesException
 import eu.ocnotes.data.RestoreOutcome
 import eu.ocnotes.data.ResultatCopie
@@ -258,62 +259,15 @@ class AppContainer(
         dossier: String,
         onAttente: () -> Unit = {},
     ): ResultatCopie = applicationScope.async {
-        var copiees = 0
-        var echecs = 0
-        var premiere: OCnotesException? = null
-        val fait = withAccountRepository(destinationId, onAttente) { cible ->
-            try {
-                for (chemin in chemins) {
-                    try {
-                        val texte = source.readNote(chemin)
-                        val nom = chemin.substringAfterLast('/')
-                        val copie = creerCopie(cible, dossier, nom, texte)
-                        if (cible.readNote(copie.path) == texte) {
-                            copiees++
-                        } else {
-                            echecs++
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: OCnotesException) {
-                        echecs++
-                        if (premiere == null) premiere = e
-                    }
-                }
-            } finally {
+        // La boucle elle-même est dans copierNotes (CopieEntreComptes.kt),
+        // testée sans cœur Go. null : le profil cible a disparu entre-temps.
+        withAccountRepository(destinationId, onAttente) { cible ->
+            copierNotes(chemins, dossier, source::readNote, cible.commeCibleCopie()) { copiees ->
                 // Même interrompue, une copie déjà écrite doit partir.
                 if (copiees > 0) runtimeFor(destinationId).syncScheduler.syncAfterLocalChange()
             }
-        }
-        if (fait == null) {
-            ResultatCopie(0, chemins.size, null, cibleDisparue = true)
-        } else {
-            ResultatCopie(copiees, echecs, premiere)
-        }
+        } ?: ResultatCopie(0, chemins.size, null, cibleDisparue = true)
     }.await()
-
-    /**
-     * Crée la copie d'une note dans [cible].
-     *
-     * Le serveur accepte des noms que la création refuse (`? * : < > |`, point
-     * initial…) : une note lisible ne doit pas devenir impossible à copier. Sur
-     * un refus de nom, le nom passe par `SuggestName` puis la création est
-     * retentée une fois. Jamais avant : `SanitizeName` n'est pas idempotente sur
-     * un nom valide (carnet : `EXPORT-ZIP`), elle changerait des noms sains.
-     */
-    private suspend fun creerCopie(
-        cible: OCnotesRepository,
-        dossier: String,
-        nom: String,
-        texte: String,
-    ): NoteRefDto = try {
-        cible.createNote(dossier, nom, texte)
-    } catch (e: OCnotesException) {
-        if (!e.code.startsWith("NAME_")) throw e
-        val assaini = cible.suggestName(nom)
-        if (assaini == nom) throw e
-        cible.createNote(dossier, assaini, texte)
-    }
 
     /** Installe le travail périodique de chaque compte serveur enregistré. */
     fun scheduleAllAccounts() {

@@ -286,10 +286,7 @@ class LoginViewModel(
 
         viewModelScope.launch {
             try {
-                repository.startLocal()
-                // Après startLocal : c'est lui qui fait passer le profil en
-                // « local », et renommerLocal ignore un profil serveur.
-                if (nom != null) repository.nommerLocal(nom)
+                demarrerProfilLocal(nom, repository::startLocal, repository::nommerLocal)
                 _uiState.update { it.copy(enCours = false, suite = SuiteConnexion.NAVIGATEUR) }
             } catch (e: OCnotesException) {
                 _uiState.update { it.copy(enCours = false, erreur = e.texte()) }
@@ -332,4 +329,22 @@ class LoginViewModel(
             }
         }
     }
+}
+
+/**
+ * Passe le profil en mode local puis lui donne [nom] (`null` : garder le nom
+ * actuel).
+ *
+ * L'ordre compte : c'est [demarrer] (`startLocal`) qui fait passer le profil
+ * en « local » dans le registre, et `renommerLocal` ignore un profil serveur.
+ * Nommer avant ferait perdre le nom sans erreur. Si [demarrer] échoue, le
+ * profil n'est pas nommé. Testé dans `NommageProfilLocalTest`.
+ */
+internal suspend fun demarrerProfilLocal(
+    nom: String?,
+    demarrer: suspend () -> Unit,
+    nommer: suspend (String) -> Unit,
+) {
+    demarrer()
+    if (nom != null) nommer(nom)
 }
