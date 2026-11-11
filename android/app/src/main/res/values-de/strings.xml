@@ -475,6 +475,9 @@
     <string name="reglages_sauvegarde_android">Android-Sicherung (Google-Konto oder Seedvault): %1$s von %2$s. Sie läuft von selbst, etwa einmal täglich, wenn die Sicherung in den Telefoneinstellungen aktiviert ist.</string>
     <string name="reglages_sauvegarde_proche_quota">Ihre Notizen nähern sich der Grenze der Android-Sicherung. Darüber hinaus stoppt sie: Exportieren Sie sie als ZIP-Archiv.</string>
     <string name="reglages_sauvegarde_quota_depasse">Die Android-Sicherung vom %1$s wurde abgelehnt: Ihre Notizen überschreiten die Grenze. Exportieren Sie sie als ZIP-Archiv.</string>
+    <string name="reglages_sauvegarde_dernier_envoi">Zuletzt gesendet: %1$s.</string>
+    <string name="reglages_sauvegarde_aucun_envoi">Bisher wurde nichts gesendet.</string>
+    <string name="reglages_sauvegarde_non_chiffree">Die Android-Sicherung vom %1$s wurde abgelehnt: Sie wäre nicht Ende-zu-Ende-verschlüsselt gewesen. Richten Sie eine Displaysperre auf dem Telefon ein oder exportieren Sie Ihre Notizen als ZIP-Archiv.</string>
     <plurals name="reglages_export_notes">
         <item quantity="one">%d Notiz exportiert</item>
         <item quantity="other">%d Notizen exportiert</item>

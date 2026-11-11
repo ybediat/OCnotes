@@ -3,6 +3,9 @@ package eu.ocnotes.data
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.Files
@@ -16,7 +19,8 @@ import java.util.UUID
  * # Ce qui part dans la sauvegarde
  *
  * - les dossiers des profils **locaux** : leurs notes n'existent nulle part
- *   ailleurs ;
+ *   ailleurs. Est local un profil que son cœur Go dit local (`config.json`),
+ *   pas seulement le registre — voir [profilsLocaux] ;
  * - un instantané du registre réduit à ces profils
  *   ([FICHIER_INSTANTANE]), jamais `accounts.json` lui-même.
  *
@@ -45,8 +49,26 @@ internal object SauvegardeProfils {
     /** Quota d'Auto Backup par application, fixé par Android : 25 Mo. */
     const val QUOTA_OCTETS = 25L * 1024 * 1024
 
-    /** Seuil d'avertissement dans les Réglages : 80 % du quota (20 Mo). */
-    const val SEUIL_AVERTISSEMENT_OCTETS = QUOTA_OCTETS * 4 / 5
+    /** Seuil d'avertissement dans les Réglages : 80 % du [quota] (20 Mo sur 25). */
+    fun seuilAvertissement(quota: Long): Long = quota / 5 * 4
+
+    // Drapeaux du transport, tels que `BackupAgent` les définit
+    // (`FLAG_CLIENT_SIDE_ENCRYPTION_ENABLED`, `FLAG_DEVICE_TO_DEVICE_TRANSFER`).
+    // Recopiés ici pour que la règle se teste sans Android.
+    const val DRAPEAU_CHIFFREMENT = 1
+    const val DRAPEAU_TRANSFERT_DIRECT = 2
+
+    /** Vrai pour un transfert direct d'un téléphone à l'autre : rien ne passe par un serveur. */
+    fun estTransfertDirect(drapeaux: Int): Boolean = drapeaux and DRAPEAU_TRANSFERT_DIRECT != 0
+
+    /**
+     * Vrai si les notes peuvent partir : vers un autre téléphone, ou vers une
+     * sauvegarde chiffrée de bout en bout — par le verrouillage d'écran, que
+     * l'hébergeur ne connaît pas. Toute autre sauvegarde est refusée : les
+     * notes d'un profil local n'ont pas à être lisibles ailleurs.
+     */
+    fun envoiAutorise(drapeaux: Int): Boolean =
+        estTransfertDirect(drapeaux) || drapeaux and DRAPEAU_CHIFFREMENT != 0
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -59,13 +81,42 @@ internal object SauvegardeProfils {
         File(File(filesDir, DOSSIER_SAUVEGARDE), FICHIER_INSTANTANE)
 
     /**
-     * Profils locaux du registre, ou liste vide si le registre manque ou est
+     * Profils locaux de l'appareil, ou liste vide si le registre manque ou est
      * illisible. Ne lève jamais : la sauvegarde ne doit pas planter
      * l'application.
+     *
+     * Le registre donne la liste des profils, mais c'est le `config.json` du
+     * cœur Go qui dit lesquels sont locaux. Le registre retarde parfois sur
+     * lui, dans les deux sens : un profil branché à un serveur peut y être
+     * encore dit local — son cache partirait alors dans la sauvegarde — et un
+     * registre reconstruit classe un profil local parmi les serveurs — il ne
+     * serait plus sauvegardé. La configuration est le point de commit de
+     * chaque bascule du cœur ; elle fait foi.
+     *
+     * Un profil sans configuration lisible n'est pas sauvegardé cette fois :
+     * le cœur la réécrit de lui-même au lancement suivant s'il est local.
      */
     fun profilsLocaux(filesDir: File): List<AccountProfile> {
         val registre = lireRegistre(File(filesDir, AccountRegistry.REGISTRY_FILE)) ?: return emptyList()
-        return registre.accounts.filter { it.kind == AccountRegistry.KIND_LOCAL && estIdProfil(it.id) }
+        val dossierComptes = File(filesDir, AccountRegistry.ACCOUNTS_DIR)
+        return registre.accounts
+            .filter { estIdProfil(it.id) && coeurLocal(File(dossierComptes, it.id)) }
+            .map { profil ->
+                if (profil.kind == AccountRegistry.KIND_LOCAL) profil
+                // Le registre retardait : l'instantané décrit le profil tel
+                // que le cœur le connaît, sans trace d'un serveur.
+                else AccountProfile(id = profil.id, kind = AccountRegistry.KIND_LOCAL)
+            }
+    }
+
+    /** Vrai si le `config.json` de ce dossier de profil déclare le mode local. */
+    private fun coeurLocal(dossierProfil: File): Boolean {
+        val config = File(dossierProfil, AccountRegistry.CONFIG_FILE)
+        if (!config.isFile) return false
+        return runCatching {
+            json.parseToJsonElement(config.readText(Charsets.UTF_8))
+                .jsonObject["mode"]?.jsonPrimitive?.contentOrNull == AccountRegistry.KIND_LOCAL
+        }.getOrDefault(false)
     }
 
     /**

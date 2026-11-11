@@ -39,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.pluralStringResource
@@ -60,6 +61,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 private object QuotaCache {
     const val MO_50 = 50L * 1024 * 1024
@@ -386,7 +388,8 @@ fun SettingsScreen(
                 }
                 etat.sauvegarde?.let { sauvegarde ->
                     // Sauvegarde Android des profils locaux : taille face au
-                    // quota de 25 Mo, et avertissement avant qu'il ne bloque.
+                    // quota du transport, date du dernier envoi, et
+                    // avertissement quand elle est refusée ou près de l'être.
                     Text(
                         text = stringResource(
                             R.string.reglages_sauvegarde_android,
@@ -396,13 +399,32 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    // Sans cette ligne, une sauvegarde coupée dans le téléphone
+                    // et une sauvegarde qui tourne ont le même aspect.
+                    val envoiLe = sauvegarde.dernierEnvoiLe
+                    Text(
+                        text = if (envoiLe != null) {
+                            stringResource(R.string.reglages_sauvegarde_dernier_envoi, dateCourte(envoiLe))
+                        } else {
+                            stringResource(R.string.reglages_sauvegarde_aucun_envoi)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     if (sauvegarde.avertir) {
+                        val nonChiffreeLe = sauvegarde.nonChiffreeLe
                         val depasseLe = sauvegarde.quotaDepasseLe
                         Text(
-                            text = if (depasseLe != null) {
-                                stringResource(R.string.reglages_sauvegarde_quota_depasse, dateCourte(depasseLe))
-                            } else {
-                                stringResource(R.string.reglages_sauvegarde_proche_quota)
+                            text = when {
+                                nonChiffreeLe != null -> stringResource(
+                                    R.string.reglages_sauvegarde_non_chiffree,
+                                    dateCourte(nonChiffreeLe),
+                                )
+                                depasseLe != null -> stringResource(
+                                    R.string.reglages_sauvegarde_quota_depasse,
+                                    dateCourte(depasseLe),
+                                )
+                                else -> stringResource(R.string.reglages_sauvegarde_proche_quota)
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
@@ -896,7 +918,14 @@ private fun OptionBascule(
     }
 }
 
-/** Date au format JJ/MM/AAAA, dans le fuseau du téléphone. */
-private fun dateCourte(millis: Long): String =
-    Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
-        .format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) // i18n-ok
+/**
+ * Date courte dans le format de la langue affichée. La locale vient de la
+ * composition et non de `Locale.getDefault()` : un changement de langue doit
+ * redessiner l'écran.
+ */
+@Composable
+private fun dateCourte(millis: Long): String {
+    val locale = LocalConfiguration.current.locales[0]
+    return Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+        .format(DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT).withLocale(locale))
+}

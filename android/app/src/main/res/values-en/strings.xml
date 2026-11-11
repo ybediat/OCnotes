@@ -495,6 +495,9 @@
     <string name="reglages_sauvegarde_android">Android backup (Google account or Seedvault): %1$s of %2$s. It runs on its own, about once a day, if backup is turned on in the phone settings.</string>
     <string name="reglages_sauvegarde_proche_quota">Your notes are nearing the Android backup limit. Beyond it, backup stops: consider exporting them as a zip archive.</string>
     <string name="reglages_sauvegarde_quota_depasse">The Android backup of %1$s was refused: your notes exceed its limit. Export them as a zip archive.</string>
+    <string name="reglages_sauvegarde_dernier_envoi">Last sent: %1$s.</string>
+    <string name="reglages_sauvegarde_aucun_envoi">Nothing sent yet.</string>
+    <string name="reglages_sauvegarde_non_chiffree">The Android backup of %1$s was refused: it would not have been end-to-end encrypted. Set a screen lock on the phone, or export your notes as a zip archive.</string>
     <plurals name="reglages_export_notes">
         <item quantity="one">%d note exported</item>
         <item quantity="other">%d notes exported</item>

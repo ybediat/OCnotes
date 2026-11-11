@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Sauvegarde Android à partir d'Android 12. Mêmes règles que
-     backup_rules.xml : voir l'explication là-bas. -->
+     backup_rules.xml : voir l'explication là-bas.
+
+     disableIfNoEncryptionCapabilities dit l'intention, mais n'est lu que par
+     l'agent par défaut d'Android : c'est SauvegardeAgent qui refuse réellement
+     une sauvegarde non chiffrée de bout en bout. -->
 <data-extraction-rules>
-    <cloud-backup>
+    <cloud-backup disableIfNoEncryptionCapabilities="true">
         <include domain="file" path="accounts/" />
         <include domain="file" path="sauvegarde/" />
         <include domain="sharedpref" path="ocnotes_affichage.xml" />
