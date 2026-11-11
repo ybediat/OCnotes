@@ -1,0 +1,7 @@
+Preview: a magnifier sets the text size (85 to 200%).
+
+Accounts: a local account is named when created. The note "⋮" menu offers Copy and Copy to another account.
+
+Formatting: bold, italic and code across several paragraphs, removing a code block, link on an address, emoji never split. Task removes a checked box.
+
+Editor: instant coloring at the end of a note, 07./08. lists keep their zeros, fast scroll only on drag.

@@ -1,0 +1,7 @@
+Aperçu : une loupe règle la taille du texte (85 à 200 %).
+
+Comptes : un compte local se nomme à sa création. Le menu « ⋮ » d'une note propose Copier et Copier vers un autre compte.
+
+Mise en forme : gras, italique et code sur plusieurs paragraphes, retrait d'un bloc de code, lien sur une adresse, emoji jamais coupé. Tâche retire une case cochée.
+
+Éditeur : coloration immédiate en fin de note, listes 07./08. gardent leurs zéros, défilement rapide seulement au glisser.
