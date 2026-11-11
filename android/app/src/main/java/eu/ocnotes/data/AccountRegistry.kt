@@ -462,8 +462,9 @@ class AccountRegistry(private val filesDir: File) {
         }
     }
 
+    /** Format de `accounts.json`, partagé avec la sauvegarde Android ([SauvegardeProfils]). */
     @Serializable
-    private data class RegistryDocument(
+    internal data class RegistryDocument(
         val version: Int,
         val activeAccountId: String,
         val accounts: List<AccountProfile>,
@@ -474,7 +475,7 @@ class AccountRegistry(private val filesDir: File) {
         val accounts: List<AccountProfile>,
     )
 
-    private companion object {
+    internal companion object {
         const val VERSION = 1
         const val REGISTRY_FILE = "accounts.json"
         const val UNREADABLE_SUFFIX = ".illisible"

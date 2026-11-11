@@ -56,7 +56,10 @@ import eu.ocnotes.ui.common.BoutonDangereux
 import eu.ocnotes.ui.common.resoudre
 import eu.ocnotes.ui.theme.familleDePolice
 import android.text.format.Formatter
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 private object QuotaCache {
     const val MO_50 = 50L * 1024 * 1024
@@ -380,6 +383,31 @@ fun SettingsScreen(
                         )
                     }
                     Text(stringResource(R.string.reglages_export_bouton))
+                }
+                etat.sauvegarde?.let { sauvegarde ->
+                    // Sauvegarde Android des profils locaux : taille face au
+                    // quota de 25 Mo, et avertissement avant qu'il ne bloque.
+                    Text(
+                        text = stringResource(
+                            R.string.reglages_sauvegarde_android,
+                            Formatter.formatShortFileSize(context, sauvegarde.octets),
+                            Formatter.formatShortFileSize(context, sauvegarde.quota),
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (sauvegarde.avertir) {
+                        val depasseLe = sauvegarde.quotaDepasseLe
+                        Text(
+                            text = if (depasseLe != null) {
+                                stringResource(R.string.reglages_sauvegarde_quota_depasse, dateCourte(depasseLe))
+                            } else {
+                                stringResource(R.string.reglages_sauvegarde_proche_quota)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             }
             if (!etat.modeLocal) {
@@ -867,3 +895,8 @@ private fun OptionBascule(
         }
     }
 }
+
+/** Date au format JJ/MM/AAAA, dans le fuseau du téléphone. */
+private fun dateCourte(millis: Long): String =
+    Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+        .format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) // i18n-ok

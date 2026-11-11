@@ -500,6 +500,9 @@
     <string name="reglages_export_explication">Crée une archive de toutes vos notes, avec leurs dossiers, que n\'importe quel ordinateur sait ouvrir. Les noms illégaux sous Windows sont corrigés et listés dans _renommages.txt.</string>
     <string name="reglages_export_espace">Espace insuffisant sur l\'appareil pour préparer l\'archive. Libérez de la place et réessayez.</string>
     <string name="reglages_export_copie">L\'archive n\'a pas pu être écrite à l\'emplacement choisi. Rien n\'a été conservé.</string>
+    <string name="reglages_sauvegarde_android">Sauvegarde Android (compte Google ou Seedvault) : %1$s sur %2$s. Elle se fait seule, environ une fois par jour, si la sauvegarde est activée dans les réglages du téléphone.</string>
+    <string name="reglages_sauvegarde_proche_quota">Vos notes approchent de la limite de la sauvegarde Android. Au-delà, elle s\'arrête : pensez à les exporter en archive zip.</string>
+    <string name="reglages_sauvegarde_quota_depasse">La sauvegarde Android du %1$s a été refusée : vos notes dépassent sa limite. Exportez-les en archive zip.</string>
     <plurals name="reglages_export_notes">
         <item quantity="one">%d note exportée</item>
         <item quantity="many">%d notes exportées</item>

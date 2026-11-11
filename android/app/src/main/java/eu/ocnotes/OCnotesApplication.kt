@@ -16,6 +16,7 @@ import eu.ocnotes.data.NoteRefDto
 import eu.ocnotes.data.OCnotesException
 import eu.ocnotes.data.RestoreOutcome
 import eu.ocnotes.data.ResultatCopie
+import eu.ocnotes.data.SuiviSauvegarde
 import eu.ocnotes.data.OCnotesRepository
 import eu.ocnotes.data.PreferencesAffichage
 import eu.ocnotes.data.TokenStore
@@ -60,6 +61,9 @@ class AppContainer(
     val preferencesAffichage = PreferencesAffichage(this.context)
 
     val syncNotifier = SyncNotifier(this.context)
+
+    /** Taille et dépassements de la sauvegarde Android des profils locaux. */
+    val suiviSauvegarde = SuiviSauvegarde(this.context)
 
     /**
      * Ce qu'un profil possède en propre. Il n'en existe **qu'un par profil**

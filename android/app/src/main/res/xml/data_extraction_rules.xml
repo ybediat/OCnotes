@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Sauvegarde Android à partir d'Android 12. Mêmes règles que
+     backup_rules.xml : voir l'explication là-bas. -->
 <data-extraction-rules>
     <cloud-backup>
-        <exclude domain="sharedpref" path="." />
-        <exclude domain="file" path="." />
+        <include domain="file" path="accounts/" />
+        <include domain="file" path="sauvegarde/" />
+        <include domain="sharedpref" path="ocnotes_affichage.xml" />
     </cloud-backup>
     <device-transfer>
-        <exclude domain="sharedpref" path="." />
-        <exclude domain="file" path="." />
+        <include domain="file" path="accounts/" />
+        <include domain="file" path="sauvegarde/" />
+        <include domain="sharedpref" path="ocnotes_affichage.xml" />
     </device-transfer>
 </data-extraction-rules>
