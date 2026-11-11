@@ -27,12 +27,7 @@ class EditeurE2ETest {
     @Before
     fun ouvrirLExplorateur() {
         parcours.lancer()
-        val local = By.text(parcours.libelle(R.string.login_continuer_local))
-        if (parcours.apparait(local, 5_000)) {
-            parcours.creerProfilLocal("Profil E2E")
-        } else {
-            parcours.revenirALExplorateur()
-        }
+        parcours.allerALExplorateur(nomSiPremierLancement = "Profil E2E")
     }
 
     @Test
@@ -78,7 +73,7 @@ class EditeurE2ETest {
         parcours.appareil.pressHome()
 
         parcours.lancer()
-        parcours.revenirALExplorateur()
+        parcours.allerALExplorateur(nomSiPremierLancement = "Profil E2E")
         val relu = parcours.rouvrir(titre)
 
         assertTrue("texte perdu : « $relu »", relu.contains("ecrit puis abandonne"))

@@ -28,6 +28,8 @@ die() {
 # Garde le logcat quoi qu'il arrive, pour lire un échec après coup.
 journal() {
     adb logcat -d >"$sortie/logcat.txt" 2>&1 || true
+    # Captures d'écran prises par les tests au moment d'un échec.
+    adb pull /sdcard/Download "$sortie/captures" >/dev/null 2>&1 || true
 }
 trap journal EXIT
 

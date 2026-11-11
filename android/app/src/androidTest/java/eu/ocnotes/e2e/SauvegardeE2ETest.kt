@@ -31,7 +31,7 @@ class SauvegardeE2ETest {
     fun preparer() {
         assumeTrue(etape == "preparer")
         parcours.lancer()
-        parcours.creerProfilLocal(PROFIL)
+        parcours.allerALExplorateur(nomSiPremierLancement = PROFIL)
         val champ = parcours.creerNote(TITRE)
         parcours.allerALaFin(champ)
         parcours.taper(CONTENU)

@@ -27,7 +27,7 @@ internal class Parcours {
 
     /** Contexte de l'application testée (eu.ocnotes.debug), pas du test. */
     private val contexte = instrumentation.targetContext
-    private val paquet: String = contexte.packageName
+    val paquet: String = contexte.packageName
 
     /** Libellé traduit de l'application. */
     fun libelle(id: Int): String = contexte.getString(id)
@@ -44,7 +44,26 @@ internal class Parcours {
     /** Attend un élément et le renvoie, ou échoue avec [quoi] dans le message. */
     fun attendre(selecteur: BySelector, quoi: String, delaiMs: Long = DELAI_MS): UiObject2 =
         appareil.wait(Until.findObject(selecteur), delaiMs)
-            ?: error("introuvable après ${delaiMs / 1000} s : $quoi")
+            ?: error("introuvable après ${delaiMs / 1000} s : $quoi\n" + ecranActuel())
+
+    /**
+     * Textes et descriptions visibles à l'écran, pour comprendre un échec
+     * depuis le seul journal de la CI. Une capture est aussi déposée dans
+     * /sdcard/Download, que le script récupère.
+     */
+    fun ecranActuel(): String {
+        runCatching {
+            appareil.takeScreenshot(java.io.File("/sdcard/Download/e2e-${System.currentTimeMillis()}.png"))
+        }
+        val elements = appareil.findObjects(By.pkg(java.util.regex.Pattern.compile(".*")))
+        val lignes = elements.mapNotNull { e ->
+            val texte = e.text?.takeIf { it.isNotBlank() }
+            val desc = e.contentDescription?.takeIf { it.isNotBlank() }
+            if (texte == null && desc == null) null
+            else "  [${e.className?.substringAfterLast('.')}] ${texte ?: ""}${if (desc != null) " (desc: $desc)" else ""}"
+        }.distinct()
+        return "Écran (${appareil.currentPackageName}) :\n" + lignes.joinToString("\n")
+    }
 
     /** Vrai si l'élément apparaît avant [delaiMs]. */
     fun apparait(selecteur: BySelector, delaiMs: Long): Boolean =
@@ -62,6 +81,26 @@ internal class Parcours {
         premierChampAutourDe(creer, "champ du nom du profil").text = nom
         creer.click()
         attendre(By.text(libelle(R.string.browser_nouvelle_note)), "explorateur de notes")
+    }
+
+    /**
+     * Attend l'écran de départ, qui est lent au premier démarrage à froid sur
+     * émulateur : écran de connexion (on crée alors le profil local
+     * [nomSiPremierLancement]) ou explorateur (profil déjà là).
+     */
+    fun allerALExplorateur(nomSiPremierLancement: String) {
+        val local = By.text(libelle(R.string.login_continuer_local))
+        val explorateur = By.text(libelle(R.string.browser_nouvelle_note))
+        val fin = System.currentTimeMillis() + DELAI_MS
+        while (System.currentTimeMillis() < fin) {
+            if (appareil.hasObject(explorateur)) return
+            if (appareil.hasObject(local)) {
+                creerProfilLocal(nomSiPremierLancement)
+                return
+            }
+            Thread.sleep(250)
+        }
+        error("ni écran de connexion ni explorateur\n" + ecranActuel())
     }
 
     /**
