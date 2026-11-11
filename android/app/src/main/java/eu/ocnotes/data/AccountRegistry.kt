@@ -51,8 +51,9 @@ fun nomLocalParDefaut(base: String, nomsPris: Collection<String>): String {
     val pris = nomsPris.map { normaliserNomCompte(it.ifBlank { base }) }.toSet()
     if (normaliserNomCompte(base) !in pris) return base
     var numero = 2
-    while (normaliserNomCompte("$base $numero") in pris) numero++
-    return "$base $numero"
+    // i18n-ok : le libellé traduit [base] suivi d'un numéro, pas une phrase.
+    while (normaliserNomCompte("$base $numero") in pris) numero++ // i18n-ok
+    return "$base $numero" // i18n-ok
 }
 
 /** Clé de comparaison d'un nom de compte : NFC, espaces unifiés, minuscules. */
