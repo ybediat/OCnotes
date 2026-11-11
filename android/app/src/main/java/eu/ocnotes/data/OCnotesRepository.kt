@@ -289,6 +289,14 @@ class OCnotesRepository(
         call { it.pruneCache() }
     }
 
+    /**
+     * Donne son nom au profil local qu'on vient de créer. Libellé Android
+     * seulement (voir `AccountRegistry.renommerLocal`).
+     */
+    suspend fun nommerLocal(nom: String) {
+        accountRegistry.renommerLocal(accountId, nom)
+    }
+
     /** Choisit le stockage exclusivement local au premier lancement. */
     suspend fun startLocal() {
         call { it.startLocal() }
