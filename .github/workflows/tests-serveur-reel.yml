@@ -10,28 +10,11 @@ name: Tests contre un vrai serveur OpenCloud
 # « ocnotes-… » à son nom et le supprime à la fin, mais un test interrompu peut
 # en laisser derrière lui.
 #
-# Quand ça tourne :
-# - à chaque fusion sur main ;
-# - à la demande (onglet Actions, « Run workflow ») ;
-# - sur une PR venant du dépôt lui-même et qui touche au code de synchro.
-#   Les PR venant d'un fork ne reçoivent pas les secrets : le job y est sauté.
+# Quand ça tourne : seulement à la demande (onglet Actions, « Run workflow »).
+# Choix de Yannis du 12/11/2026 : ces tests parlent à un serveur réel, on les
+# lance quand on touche à la synchro ou avant une release.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "internal/**"
-      - "mobile/**"
-      - "go.mod"
-      - "go.sum"
-      - ".github/workflows/tests-serveur-reel.yml"
-  pull_request:
-    paths:
-      - "internal/**"
-      - "mobile/**"
-      - "go.mod"
-      - "go.sum"
-      - ".github/workflows/tests-serveur-reel.yml"
   workflow_dispatch:
 
 permissions:
@@ -44,8 +27,6 @@ concurrency:
 
 jobs:
   serveur-reel:
-    # Pas de secrets sur une PR de fork : inutile de lancer le job.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
