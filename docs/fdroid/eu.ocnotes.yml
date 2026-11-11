@@ -19,9 +19,9 @@ Repo: https://github.com/ybediat/OCnotes.git
 Binaries: https://github.com/ybediat/OCnotes/releases/download/v%v/OCnotes-%v.apk
 
 Builds:
-  - versionName: 0.2.2
-    versionCode: 10
-    commit: HASH_COMPLET_DU_COMMIT_TAGUE_v0.2.2
+  - versionName: 0.2.3
+    versionCode: 11
+    commit: HASH_COMPLET_DU_COMMIT_TAGUE_v0.2.3
     subdir: android/app
     sudo:
       - apt-get update
@@ -55,5 +55,5 @@ AllowedAPKSigningKeys: b81ebfae3753d5b8fdb703cc0f5177d20bde66a57297f63759d40e771
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
-CurrentVersion: 0.2.2
-CurrentVersionCode: 10
+CurrentVersion: 0.2.3
+CurrentVersionCode: 11
