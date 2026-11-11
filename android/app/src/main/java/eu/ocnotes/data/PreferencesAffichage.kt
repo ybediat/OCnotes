@@ -199,7 +199,7 @@ class PreferencesAffichage internal constructor(
         stockage.ecrireChaine(cle, valeur)
     }
 
-    private companion object {
+    internal companion object {
         const val FICHIER = "ocnotes_affichage"
         const val CLE_TRI = "tri_notes"
         const val CLE_MODE = "mode_liste"

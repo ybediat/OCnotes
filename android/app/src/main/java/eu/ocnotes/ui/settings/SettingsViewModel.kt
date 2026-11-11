@@ -15,6 +15,8 @@ import eu.ocnotes.data.DetachPlanDto
 import eu.ocnotes.data.ExportLocal
 import eu.ocnotes.data.ExportResultatDto
 import eu.ocnotes.data.ResultatExport
+import eu.ocnotes.data.EtatSauvegarde
+import eu.ocnotes.data.SuiviSauvegarde
 import eu.ocnotes.data.OCnotesException
 import eu.ocnotes.data.OCnotesRepository
 import eu.ocnotes.data.PoliceInterface
@@ -24,11 +26,13 @@ import eu.ocnotes.ui.common.Texte
 import eu.ocnotes.ui.common.texte
 import eu.ocnotes.sync.SyncNotifier
 import eu.ocnotes.sync.SyncScheduler
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import android.net.Uri
 
 data class SettingsUiState(
@@ -70,6 +74,8 @@ data class SettingsUiState(
     val rapatriementRestant: Int = 0,
     /** Contenus impossibles à rapatrier ; une confirmation séparée est requise. */
     val confirmationAbandon: Int = 0,
+    /** Sauvegarde Android des profils locaux ; `null` tant qu'elle n'est pas lue. */
+    val sauvegarde: EtatSauvegarde? = null,
 ) {
     val modeLocal: Boolean get() = etat.mode == AppMode.LOCAL
 }
@@ -80,6 +86,7 @@ class SettingsViewModel(
     private val syncScheduler: SyncScheduler,
     private val syncNotifier: SyncNotifier,
     private val exportLocal: ExportLocal,
+    private val suiviSauvegarde: SuiviSauvegarde,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -123,6 +130,11 @@ class SettingsViewModel(
     }
 
     fun rafraichir() {
+        // Taille de la sauvegarde Android : parcours de dossiers, hors du fil principal.
+        viewModelScope.launch {
+            val sauvegarde = withContext(Dispatchers.IO) { runCatching { suiviSauvegarde.etat() }.getOrNull() }
+            _uiState.update { it.copy(sauvegarde = sauvegarde) }
+        }
         viewModelScope.launch {
             try {
                 val etat = repository.state()
@@ -527,6 +539,7 @@ class SettingsViewModel(
                     container.syncScheduler,
                     container.syncNotifier,
                     ExportLocal(container.repository, container.dossierExport, container.contentResolver),
+                    container.suiviSauvegarde,
                 )
             }
         }

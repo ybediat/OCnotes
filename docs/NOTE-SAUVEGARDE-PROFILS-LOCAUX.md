@@ -3,6 +3,25 @@
 Rédigée le 10/11/2026, à la suite du contrôle de la conservation des données.
 Rien n'est décidé ni codé : c'est un état des possibilités, à relire à froid.
 
+> **Mise à jour du 11/11/2026.** Les options B et C sont codées
+> (`SauvegardeAgent`, `SauvegardeProfils`). Le reste de la note décrit l'état
+> d'avant et garde sa valeur d'explication. Ce qui a été tranché :
+>
+> - **une sauvegarde non chiffrée de bout en bout est refusée.** Le contrôle
+>   est fait dans l'agent : `disableIfNoEncryptionCapabilities` n'est lu que
+>   par l'agent par défaut d'Android, que le nôtre remplace. Sans verrouillage
+>   d'écran, ou avant Android 9, rien ne part ; le transfert direct d'un
+>   téléphone à l'autre reste permis ;
+> - **est local un profil que son `config.json` dit local.** Le registre
+>   Android retarde parfois sur le cœur Go, dans les deux sens ;
+> - le registre ne part pas : un instantané réduit aux profils locaux le
+>   remplace, fusionné à la restauration (obstacles 2 et 3) ;
+> - les Réglages montrent la taille, le quota annoncé par le transport, la
+>   date du dernier envoi et le dernier refus.
+>
+> Reste non prouvé : l'aller-retour réel sur un téléphone (section « Comment
+> l'essayer »). L'agent ne se teste pas sur la JVM.
+
 ## Le constat
 
 Un profil local n'existe que dans `files/accounts/<uuid>/cache/` sur le

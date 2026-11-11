@@ -477,6 +477,12 @@
     <string name="reglages_export_explication">Crea un archivo con todas sus notas y sus carpetas, que cualquier ordenador puede abrir. Los nombres que Windows no admite se corrigen y se enumeran en _renommages.txt.</string>
     <string name="reglages_export_espace">No hay espacio suficiente en el dispositivo para preparar el archivo. Libere espacio e inténtelo de nuevo.</string>
     <string name="reglages_export_copie">No se pudo escribir el archivo en la ubicación elegida. No se conservó nada.</string>
+    <string name="reglages_sauvegarde_android">Copia de seguridad de Android (cuenta de Google o Seedvault): %1$s de %2$s. Se hace sola, una vez al día aproximadamente, si la copia está activada en los ajustes del teléfono.</string>
+    <string name="reglages_sauvegarde_proche_quota">Sus notas se acercan al límite de la copia de seguridad de Android. Por encima, se detiene: expórtelas como archivo zip.</string>
+    <string name="reglages_sauvegarde_quota_depasse">La copia de seguridad de Android del %1$s fue rechazada: sus notas superan su límite. Expórtelas como archivo zip.</string>
+    <string name="reglages_sauvegarde_dernier_envoi">Último envío: %1$s.</string>
+    <string name="reglages_sauvegarde_aucun_envoi">Todavía no se ha enviado nada.</string>
+    <string name="reglages_sauvegarde_non_chiffree">La copia de seguridad de Android del %1$s fue rechazada: no habría estado cifrada de extremo a extremo. Configure un bloqueo de pantalla en el teléfono o exporte sus notas como archivo zip.</string>
     <plurals name="reglages_export_notes">
         <item quantity="one">%d nota exportada</item>
         <item quantity="other">%d notas exportadas</item>

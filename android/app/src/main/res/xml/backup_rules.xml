@@ -1,8 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Aucune sauvegarde : le token est chiffré par une clé Android Keystore qui
-     ne quitte pas l'appareil. Restaurer le texte chiffré ailleurs ne le rendrait
-     pas lisible. Le cache, lui, se reconstruit depuis le serveur. -->
+<!-- Sauvegarde Android jusqu'à Android 11 (au-delà : data_extraction_rules.xml).
+
+     SauvegardeAgent choisit lui-même les fichiers envoyés : profils locaux
+     seulement. Ces règles servent à la restauration, où Android refuse tout
+     fichier non inclus ici :
+     - accounts/ : dossiers des profils (l'agent n'y prend que les locaux) ;
+     - sauvegarde/ : instantané du registre réduit aux profils locaux ;
+     - préférences d'affichage.
+     Jamais inclus : accounts.json (remplacé par l'instantané), les jetons
+     (clé Keystore propre à l'appareil, illisibles ailleurs), le reste. -->
 <full-backup-content>
-    <exclude domain="sharedpref" path="." />
-    <exclude domain="file" path="." />
+    <include domain="file" path="accounts/" />
+    <include domain="file" path="sauvegarde/" />
+    <include domain="sharedpref" path="ocnotes_affichage.xml" />
 </full-backup-content>
