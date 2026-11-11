@@ -69,6 +69,8 @@ jobs:
           api-level: 30
           arch: x86_64
           target: default
+          # Écran de téléphone courant (le profil par défaut fait 320×640).
+          profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: bash scripts/e2e-emulateur.sh

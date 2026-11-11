@@ -98,6 +98,9 @@ internal class Parcours {
                 creerProfilLocal(nomSiPremierLancement)
                 return
             }
+            // Sur un petit écran, « Continuer en local » est sous le
+            // formulaire de connexion : on fait défiler la page.
+            appareil.findObject(By.scrollable(true))?.scroll(androidx.test.uiautomator.Direction.DOWN, 1f)
             Thread.sleep(250)
         }
         error("ni écran de connexion ni explorateur\n" + ecranActuel())
