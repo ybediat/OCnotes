@@ -38,6 +38,33 @@ data class AccountProfile(
 /** Longueur maximale du nom d'un profil local. */
 const val MAX_NOM_LOCAL = 40
 
+/**
+ * Nom donné à un profil local créé sans nom : [base] (« Notes locales ») s'il
+ * est libre, sinon « base 2 », « base 3 »… le plus petit numéro libre.
+ *
+ * [nomsPris] : les noms affichés des autres profils locaux (un nom vide compte
+ * comme [base], c'est ce que le tiroir affiche). La comparaison est
+ * normalisée — casse, espaces en trop, espace insécable, forme Unicode —
+ * pour que « notes  locales » saisi à la main occupe bien « Notes locales ».
+ */
+fun nomLocalParDefaut(base: String, nomsPris: Collection<String>): String {
+    val pris = nomsPris.map { normaliserNomCompte(it.ifBlank { base }) }.toSet()
+    if (normaliserNomCompte(base) !in pris) return base
+    var numero = 2
+    // i18n-ok : le libellé traduit [base] suivi d'un numéro, pas une phrase.
+    while (normaliserNomCompte("$base $numero") in pris) numero++ // i18n-ok
+    return "$base $numero" // i18n-ok
+}
+
+/** Clé de comparaison d'un nom de compte : NFC, espaces unifiés, minuscules. */
+internal fun normaliserNomCompte(nom: String): String =
+    java.text.Normalizer.normalize(nom, java.text.Normalizer.Form.NFC)
+        .replace('\u00A0', ' ')
+        .replace('\u202F', ' ')
+        .trim()
+        .replace(Regex("\\s+"), " ")
+        .lowercase()
+
 /** Un profil ne doit réveiller WorkManager que s'il désigne un serveur utilisable. */
 internal val AccountProfile.syncEnabled: Boolean
     get() = kind == "server" && serverUrl.isNotBlank()

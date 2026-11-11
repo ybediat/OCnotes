@@ -113,6 +113,8 @@
     <string name="login_reessayer">Volver a intentarlo</string>
     <string name="login_continuer_local">Continuar sin servidor</string>
     <string name="login_continuer_local_aide">Sus notas permanecerán únicamente en este dispositivo. Podrá conectar un servidor más adelante.</string>
+    <string name="login_local_nom_titre">Nombrar esta cuenta local</string>
+    <string name="login_local_nom_aide">Este nombre distingue esta cuenta de las demás en el menú de cuentas. Si se deja vacío, la cuenta recibe el nombre propuesto.</string>
     <string name="login_oidc_connecter">Iniciar sesión con el navegador</string>
     <string name="login_oidc_aide">Experimental: requiere un servidor configurado para OCnotes.</string>
     <string name="login_oidc_annulee">Se canceló el inicio de sesión en el navegador.</string>

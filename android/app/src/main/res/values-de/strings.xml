@@ -113,6 +113,8 @@
     <string name="login_reessayer">Erneut versuchen</string>
     <string name="login_continuer_local">Ohne Server fortfahren</string>
     <string name="login_continuer_local_aide">Ihre Notizen bleiben nur auf diesem Gerät. Sie können später einen Server verbinden.</string>
+    <string name="login_local_nom_titre">Dieses lokale Konto benennen</string>
+    <string name="login_local_nom_aide">Dieser Name unterscheidet das Konto von den anderen im Kontenmenü. Bleibt das Feld leer, erhält das Konto den vorgeschlagenen Namen.</string>
     <string name="login_oidc_connecter">Mit dem Browser anmelden</string>
     <string name="login_oidc_aide">Experimentell — erfordert einen für OCnotes konfigurierten Server.</string>
     <string name="login_oidc_annulee">Browser-Anmeldung wurde abgebrochen.</string>

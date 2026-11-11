@@ -132,6 +132,8 @@
     <string name="login_reessayer">Try again</string>
     <string name="login_continuer_local">Continue without a server</string>
     <string name="login_continuer_local_aide">Your notes will remain on this device only. You can connect a server later.</string>
+    <string name="login_local_nom_titre">Name this local account</string>
+    <string name="login_local_nom_aide">This name tells this account apart from the others in the accounts menu. Left empty, the account gets the suggested name.</string>
     <string name="login_oidc_connecter">Sign in with the browser</string>
     <string name="login_oidc_aide">Experimental — requires a server configured for OCnotes.</string>
     <string name="login_oidc_annulee">Browser sign-in was cancelled.</string>
