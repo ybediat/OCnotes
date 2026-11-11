@@ -273,14 +273,23 @@ class LoginViewModel(
         }
     }
 
-    /** Démarre sans serveur, ou abandonne un branchement sans toucher aux notes. */
-    fun continuerEnLocal() {
+    /**
+     * Démarre sans serveur, ou abandonne un branchement sans toucher aux notes.
+     *
+     * [nom] : nom du nouveau profil local, déjà complété par l'écran (saisi,
+     * ou numéroté si le champ est resté vide). `null` quand on reste en mode
+     * local : le profil garde le nom qu'il a déjà.
+     */
+    fun continuerEnLocal(nom: String? = null) {
         if (_uiState.value.enCours) return
         _uiState.update { it.copy(enCours = true, erreur = null, erreurEstAuth = false) }
 
         viewModelScope.launch {
             try {
                 repository.startLocal()
+                // Après startLocal : c'est lui qui fait passer le profil en
+                // « local », et renommerLocal ignore un profil serveur.
+                if (nom != null) repository.nommerLocal(nom)
                 _uiState.update { it.copy(enCours = false, suite = SuiteConnexion.NAVIGATEUR) }
             } catch (e: OCnotesException) {
                 _uiState.update { it.copy(enCours = false, erreur = e.texte()) }

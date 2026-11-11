@@ -126,6 +126,8 @@
     <string name="login_reessayer">Réessayer</string>
     <string name="login_continuer_local">Continuer sans serveur</string>
     <string name="login_continuer_local_aide">Vos notes resteront uniquement sur cet appareil. Vous pourrez connecter un serveur plus tard.</string>
+    <string name="login_local_nom_titre">Nommer ce compte local</string>
+    <string name="login_local_nom_aide">Ce nom distingue ce compte des autres dans le menu des comptes. Laissé vide, le compte reçoit le nom proposé.</string>
     <string name="login_oidc_connecter">Se connecter avec le navigateur</string>
     <string name="login_oidc_aide">Expérimental — nécessite un serveur configuré pour OCnotes.</string>
     <string name="login_oidc_annulee">Connexion par navigateur annulée.</string>

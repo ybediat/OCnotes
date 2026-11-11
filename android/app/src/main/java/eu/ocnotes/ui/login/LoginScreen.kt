@@ -49,6 +49,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
 import eu.ocnotes.R
 import eu.ocnotes.appContainer
+import eu.ocnotes.data.MAX_NOM_LOCAL
+import eu.ocnotes.data.nomLocalParDefaut
 import eu.ocnotes.ui.common.Texte
 import eu.ocnotes.ui.common.resoudre
 import androidx.compose.ui.platform.LocalContext
@@ -75,6 +77,17 @@ fun LoginScreen(
     ),
 ) {
     val etat by viewModel.uiState.collectAsStateWithLifecycle()
+    var nommageLocalOuvert by remember { mutableStateOf(false) }
+
+    if (nommageLocalOuvert) {
+        NommageLocalDialog(
+            onValider = { nom ->
+                nommageLocalOuvert = false
+                viewModel.continuerEnLocal(nom)
+            },
+            onAnnuler = { nommageLocalOuvert = false },
+        )
+    }
     val oidcLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
     ) { result -> viewModel.terminerConnexionOidc(result.data) }
@@ -258,7 +271,11 @@ fun LoginScreen(
 
         if (etat.configurationChargee && !etat.serveurEnregistre) {
             OutlinedButton(
-                onClick = viewModel::continuerEnLocal,
+                // Création d'un profil local : on demande d'abord son nom.
+                // « Rester en mode local » ne crée rien, il repart tout de suite.
+                onClick = {
+                    if (etat.depuisModeLocal) viewModel.continuerEnLocal() else nommageLocalOuvert = true
+                },
                 enabled = !etat.enCours,
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -313,6 +330,61 @@ fun LoginScreen(
  * IdP de l'organisation reçoit ensuite l'access token. Les hôtes sont affichés
  * tels quels, un par ligne, pour qu'on puisse les reconnaître.
  */
+/**
+ * Nom du profil local qu'on s'apprête à créer.
+ *
+ * Le champ est facultatif : vide, le profil reçoit le nom proposé en
+ * indication, « Notes locales » ou le premier « Notes locales N » libre. Sans
+ * cela, tous les profils locaux s'appelaient pareil dans le tiroir et dans
+ * « Copier vers un autre compte ».
+ */
+@Composable
+private fun NommageLocalDialog(
+    onValider: (String) -> Unit,
+    onAnnuler: () -> Unit,
+) {
+    val container = LocalContext.current.appContainer
+    val comptes by container.accountRegistry.state.collectAsStateWithLifecycle()
+    val base = stringResource(R.string.compte_local)
+    // Les autres profils locaux uniquement : le profil actif est encore vierge.
+    val propose = nomLocalParDefaut(
+        base,
+        comptes.accounts
+            .filter { it.kind == "local" && it.id != comptes.active.id }
+            .map { it.displayName },
+    )
+    var nom by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onAnnuler,
+        title = { Text(stringResource(R.string.login_local_nom_titre)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(R.string.login_local_nom_aide),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedTextField(
+                    value = nom,
+                    onValueChange = { nom = it.take(MAX_NOM_LOCAL) },
+                    label = { Text(stringResource(R.string.compte_nom_label)) },
+                    placeholder = { Text(propose) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onValider(nom.trim().ifEmpty { propose }) }) {
+                Text(stringResource(R.string.action_creer))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onAnnuler) { Text(stringResource(R.string.action_annuler)) }
+        },
+    )
+}
+
 @Composable
 private fun ConfirmationIdpDialog(
     confirmation: ConfirmationIdp,
