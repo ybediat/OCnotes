@@ -176,8 +176,14 @@ fi
         "${gradle_tasks[@]}"
 )
 
-readonly apk="$repo_dir/android/app/build/outputs/apk/release/app-release-unsigned.apk"
-[[ -s "$apk" ]] || die "APK release introuvable : $apk"
+# Contrôle de l'APK release seulement s'il a été demandé : les tests sur
+# émulateur (scripts/e2e-emulateur.sh) ne construisent que la variante debug.
+if [[ " ${gradle_tasks[*]} " == *" assembleRelease "* ]]; then
+    readonly apk="$repo_dir/android/app/build/outputs/apk/release/app-release-unsigned.apk"
+    [[ -s "$apk" ]] || die "APK release introuvable : $apk"
 
-sha256sum android/app/libs/ocnotes.aar "$apk"
-printf 'Build Linux terminé : %s\n' "$apk"
+    sha256sum android/app/libs/ocnotes.aar "$apk"
+    printf 'Build Linux terminé : %s\n' "$apk"
+else
+    printf 'Build Linux terminé : %s\n' "${gradle_tasks[*]}"
+fi
