@@ -1,0 +1,98 @@
+name: Tests contre un vrai serveur OpenCloud
+
+# Lance les tests Go « TestIntegration* » (internal/opencloud et la façade
+# mobile) contre le serveur décrit par les secrets du dépôt :
+#   OCNOTES_IT_SERVER  adresse du serveur, avec https://
+#   OCNOTES_IT_USER    identifiant du compte de test
+#   OCNOTES_IT_TOKEN   App Token de ce compte
+#
+# Le compte doit être dédié aux tests : chaque test crée un dossier
+# « ocnotes-… » à son nom et le supprime à la fin, mais un test interrompu peut
+# en laisser derrière lui.
+#
+# Quand ça tourne :
+# - à chaque fusion sur main ;
+# - à la demande (onglet Actions, « Run workflow ») ;
+# - sur une PR venant du dépôt lui-même et qui touche au code de synchro.
+#   Les PR venant d'un fork ne reçoivent pas les secrets : le job y est sauté.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "internal/**"
+      - "mobile/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/tests-serveur-reel.yml"
+  pull_request:
+    paths:
+      - "internal/**"
+      - "mobile/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/tests-serveur-reel.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un seul passage à la fois : tous utilisent le même compte de test.
+concurrency:
+  group: tests-serveur-reel
+  cancel-in-progress: false
+
+jobs:
+  serveur-reel:
+    # Pas de secrets sur une PR de fork : inutile de lancer le job.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      OCNOTES_IT_SERVER: ${{ secrets.OCNOTES_IT_SERVER }}
+      OCNOTES_IT_USER: ${{ secrets.OCNOTES_IT_USER }}
+      OCNOTES_IT_TOKEN: ${{ secrets.OCNOTES_IT_TOKEN }}
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      # Sans les trois secrets, les tests se sautent eux-mêmes et le job
+      # serait vert sans rien avoir vérifié : on échoue plutôt.
+      - name: Vérifier les secrets
+        run: |
+          manquants=""
+          [ -n "$OCNOTES_IT_SERVER" ] || manquants="$manquants OCNOTES_IT_SERVER"
+          [ -n "$OCNOTES_IT_USER" ] || manquants="$manquants OCNOTES_IT_USER"
+          [ -n "$OCNOTES_IT_TOKEN" ] || manquants="$manquants OCNOTES_IT_TOKEN"
+          if [ -n "$manquants" ]; then
+            echo "Secrets manquants :$manquants"
+            exit 1
+          fi
+          case "$OCNOTES_IT_SERVER" in
+            https://*) ;;
+            *) echo "OCNOTES_IT_SERVER doit commencer par https://"; exit 1 ;;
+          esac
+
+      # Sans -short, et -count=1 pour ne jamais reprendre un résultat en cache.
+      - name: Tests d'intégration
+        run: |
+          set -o pipefail
+          go test -count=1 -v -run '^TestIntegration' ./internal/opencloud/ ./mobile/ 2>&1 | tee resultats.txt
+
+      # Un test sauté ici veut dire qu'il n'a pas parlé au serveur.
+      - name: Aucun test sauté
+        run: |
+          if grep -q -- '--- SKIP' resultats.txt; then
+            grep -- '--- SKIP' -A2 resultats.txt
+            echo "Des tests d'intégration ont été sautés."
+            exit 1
+          fi
+          echo "Tests passés : $(grep -c -- '--- PASS: TestIntegration' resultats.txt)"
