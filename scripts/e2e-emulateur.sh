@@ -55,7 +55,7 @@ instrumenter() {
 # autorisations : on rend celle des notifications (Android 13+), sans quoi sa
 # demande s'affiche par-dessus l'application.
 effacer() {
-    effacer
+    adb shell pm clear "$paquet"
     adb shell pm grant "$paquet" android.permission.POST_NOTIFICATIONS || true
 }
 
