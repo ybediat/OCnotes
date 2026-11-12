@@ -111,6 +111,12 @@ restauration="$(adb shell bmgr restore "$jeton" "$paquet" | tr -d '\r')"
 printf '%s\n' "$restauration"
 grep -qi "done" <<<"$restauration" || die "restauration en échec"
 
+# Ce que la restauration a remis en place (profil local : aucun secret).
+printf '\n--- Fichiers restaurés ---\n'
+adb shell run-as "$paquet" find files shared_prefs -type f 2>/dev/null | tr -d '\r' || true
+adb shell run-as "$paquet" cat files/accounts.json 2>/dev/null || true
+printf '\n'
+
 instrumenter "Sauvegarde : vérification" \
     -e class eu.ocnotes.e2e.SauvegardeE2ETest#verifier -e etape verifier
 

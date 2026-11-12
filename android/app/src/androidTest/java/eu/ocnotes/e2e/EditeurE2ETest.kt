@@ -39,7 +39,12 @@ class EditeurE2ETest {
         parcours.taper("Bonjour ")
 
         // Gras sur un simple curseur : « **‸** », puis la frappe va dedans.
+        // La barre lit la sélection après la frappe : on la laisse se mettre
+        // à jour avant d'appuyer, puis le champ reprend la main.
+        Thread.sleep(500)
         parcours.attendre(By.desc(parcours.libelle(R.string.format_gras)), "bouton Gras").click()
+        parcours.appareil.waitForIdle()
+        Thread.sleep(500)
         parcours.taper("monde")
 
         val attendu = "# $titre\n\nBonjour **monde**"
