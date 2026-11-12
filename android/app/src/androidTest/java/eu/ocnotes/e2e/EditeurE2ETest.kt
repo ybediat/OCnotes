@@ -61,9 +61,11 @@ class EditeurE2ETest {
         val champ = parcours.creerNote(titre)
 
         parcours.allerALaFin(champ)
-        parcours.taper("- un")
-        parcours.appareil.pressEnter()
-        parcours.taper("deux")
+        // Par le chemin du clavier de l'écran, celui d'un téléphone : vérifié
+        // le 12/11/2026, la puce y apparaît. Avec des touches de clavier
+        // physique (sendStringSync / pressEnter), elle n'apparaît pas sur
+        // l'émulateur : cas à part, non couvert ici.
+        parcours.ecrireCommeClavierVirtuel("- un\ndeux")
 
         val attendu = "# $titre\n\n- un\n- deux"
         assertEquals(attendu, Parcours.normaliser(parcours.champEditeur(titre).text ?: "").trimEnd())

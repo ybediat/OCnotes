@@ -185,6 +185,32 @@ internal class Parcours {
     }
 
     /**
+     * Écrit [texte] comme le clavier de l'écran (Gboard…) : par
+     * `InputConnection.commitText`, sur le champ qui a le focus. C'est le
+     * chemin d'un vrai téléphone ; [taper] passe, lui, par des touches de
+     * clavier physique, que l'éditeur ne traite pas tout à fait pareil (la
+     * suite de liste, en particulier).
+     */
+    fun ecrireCommeClavierVirtuel(texte: String) {
+        instrumentation.runOnMainSync {
+            val activite = androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED)
+                .firstOrNull() ?: error("aucune activité au premier plan")
+            val champ = activite.currentFocus as? android.widget.EditText
+                ?: error("aucun champ de saisie n'a le focus")
+            val connexion = champ.onCreateInputConnection(android.view.inputmethod.EditorInfo())
+                ?: error("le champ n'accepte pas de connexion de saisie")
+            // Un caractère à la fois, comme une frappe, dans un lot chacun.
+            texte.forEach { c ->
+                connexion.beginBatchEdit()
+                connexion.commitText(c.toString(), 1)
+                connexion.endBatchEdit()
+            }
+        }
+        appareil.waitForIdle()
+    }
+
+    /**
      * Tape [texte] touche par touche, comme un clavier physique. ASCII
      * seulement : la table de touches virtuelle n'a pas les accents.
      */
