@@ -57,6 +57,14 @@ for reglage in window_animation_scale transition_animation_scale animator_durati
     adb shell settings put global "$reglage" 0
 done
 
+# Clavier virtuel désactivé : les tests tapent comme un clavier physique.
+# Le clavier AOSP de l'émulateur intercepte sinon ces touches et en fait une
+# composition de mot, ce qu'aucun clavier réel ne fait avec une frappe de
+# touche. Le chemin du clavier virtuel (Gboard…) reste à vérifier à la main.
+adb shell ime list -s | tr -d '\r' | while read -r ime; do
+    [[ -n "$ime" ]] && adb shell ime disable "$ime" || true
+done
+
 # --- 1. Éditeur --------------------------------------------------------------
 adb shell pm clear "$paquet"
 adb logcat -c
