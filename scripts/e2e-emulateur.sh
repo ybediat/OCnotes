@@ -107,6 +107,7 @@ jeton="$(adb shell bmgr list sets | tr -d '\r' | awk -F' : ' 'NF == 2 { gsub(/ /
 [[ -n "$jeton" ]] || die "aucun jeu de sauvegarde listé par bmgr"
 
 effacer
+adb logcat -c
 restauration="$(adb shell bmgr restore "$jeton" "$paquet" | tr -d '\r')"
 printf '%s\n' "$restauration"
 grep -qi "done" <<<"$restauration" || die "restauration en échec"
@@ -115,6 +116,8 @@ grep -qi "done" <<<"$restauration" || die "restauration en échec"
 printf '\n--- Fichiers restaurés ---\n'
 adb shell run-as "$paquet" find files shared_prefs -type f 2>/dev/null | tr -d '\r' || true
 adb shell run-as "$paquet" cat files/accounts.json 2>/dev/null || true
+printf '\n--- Journal de la restauration ---\n'
+adb logcat -d | grep -iE "restore|BackupAgent|eligib|SauvegardeAgent|tar|FullBackup" | grep -v "dex2oat" | tail -n 60 || true
 printf '\n'
 
 instrumenter "Sauvegarde : vérification" \
