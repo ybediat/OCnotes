@@ -31,7 +31,7 @@ class EditeurE2ETest {
     }
 
     @Test
-    fun saisieMiseEnFormeEtListeSurviventALaReouverture() {
+    fun saisieEtMiseEnFormeSurviventALaReouverture() {
         val titre = "Note E2E"
         val champ = parcours.creerNote(titre)
 
@@ -41,23 +41,30 @@ class EditeurE2ETest {
         // Gras sur un simple curseur : « **‸** », puis la frappe va dedans.
         parcours.attendre(By.desc(parcours.libelle(R.string.format_gras)), "bouton Gras").click()
         parcours.taper("monde")
-        parcours.appareil.pressKeyCode(android.view.KeyEvent.KEYCODE_MOVE_END)
 
-        // Suite de liste : Entrée après « - un » doit ouvrir « - ».
-        parcours.appareil.pressEnter()
-        parcours.appareil.pressEnter()
-        parcours.taper("- un")
-        parcours.appareil.pressEnter()
-        parcours.taper("deux")
-
-        val attendu = "# $titre\n\nBonjour **monde**\n\n- un\n- deux"
+        val attendu = "# $titre\n\nBonjour **monde**"
         // Avant de quitter : l'écran montre bien ce qu'on a tapé.
         assertEquals(attendu, Parcours.normaliser(parcours.champEditeur(titre).text ?: "").trimEnd())
 
         parcours.revenirALExplorateur()
-        val relu = parcours.rouvrir(titre)
+        assertEquals(attendu, parcours.rouvrir(titre).trimEnd())
+    }
 
-        assertEquals(attendu, relu.trimEnd())
+    @Test
+    fun entreePoursuitUneListe() {
+        val titre = "Liste E2E"
+        val champ = parcours.creerNote(titre)
+
+        parcours.allerALaFin(champ)
+        parcours.taper("- un")
+        parcours.appareil.pressEnter()
+        parcours.taper("deux")
+
+        val attendu = "# $titre\n\n- un\n- deux"
+        assertEquals(attendu, Parcours.normaliser(parcours.champEditeur(titre).text ?: "").trimEnd())
+
+        parcours.revenirALExplorateur()
+        assertEquals(attendu, parcours.rouvrir(titre).trimEnd())
     }
 
     @Test

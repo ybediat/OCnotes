@@ -20,6 +20,9 @@ readonly sortie="build-e2e"
 
 mkdir -p "$sortie"
 
+# Étapes en échec : on va au bout du scénario, puis on échoue à la fin.
+echecs=()
+
 die() {
     printf 'Erreur : %s\n' "$*" >&2
     exit 1
@@ -42,7 +45,10 @@ instrumenter() {
     local resultat
     resultat="$(adb shell am instrument -w "$@" "$runner" | tr -d '\r')"
     printf '%s\n' "$resultat"
-    grep -Eq '^OK \([1-9][0-9]* tests?\)' <<<"$resultat" || die "$nom : échec"
+    if ! grep -Eq '^OK \([1-9][0-9]* tests?\)' <<<"$resultat"; then
+        printf 'ÉCHEC : %s\n' "$nom" >&2
+        echecs+=("$nom")
+    fi
 }
 
 [[ -s "$apk" ]] || die "APK debug introuvable : $apk"
@@ -55,14 +61,6 @@ adb install -r "$apk_test"
 # Pas d'animations : UI Automator n'attend pas leur fin.
 for reglage in window_animation_scale transition_animation_scale animator_duration_scale; do
     adb shell settings put global "$reglage" 0
-done
-
-# Clavier virtuel désactivé : les tests tapent comme un clavier physique.
-# Le clavier AOSP de l'émulateur intercepte sinon ces touches et en fait une
-# composition de mot, ce qu'aucun clavier réel ne fait avec une frappe de
-# touche. Le chemin du clavier virtuel (Gboard…) reste à vérifier à la main.
-adb shell ime list -s | tr -d '\r' | while read -r ime; do
-    [[ -n "$ime" ]] && adb shell ime disable "$ime" || true
 done
 
 # --- 1. Éditeur --------------------------------------------------------------
@@ -98,4 +96,7 @@ grep -qi "done" <<<"$restauration" || die "restauration en échec"
 instrumenter "Sauvegarde : vérification" \
     -e class eu.ocnotes.e2e.SauvegardeE2ETest#verifier -e etape verifier
 
+if ((${#echecs[@]} > 0)); then
+    die "étapes en échec : ${echecs[*]}"
+fi
 printf '\nTests sur émulateur : tout est passé.\n'
