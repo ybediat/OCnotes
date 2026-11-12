@@ -90,7 +90,34 @@ internal class Parcours {
         val creer = attendre(By.text(libelle(R.string.action_creer)), "dialogue de nom du profil")
         premierChampAutourDe(creer, "champ du nom du profil").text = nom
         creer.click()
-        attendre(By.text(libelle(R.string.browser_nouvelle_note)), "explorateur de notes")
+        attendre(explorateur(), "explorateur de notes")
+    }
+
+    /**
+     * Repère de l'explorateur : le bouton « Nouveau dossier », qui porte sa
+     * description. Le bouton « Nouvelle note », lui, n'expose aucun texte à
+     * l'accessibilité sur l'émulateur (voir [boutonNouvelleNote]).
+     */
+    private fun explorateur(): BySelector = By.desc(libelle(R.string.browser_nouveau_dossier))
+
+    /**
+     * Le bouton « Nouvelle note » de l'explorateur.
+     *
+     * Constaté le 12/11/2026 sur l'émulateur API 30 : l'ExtendedFloatingActionButton
+     * apparaît dans l'arbre d'accessibilité comme une vue cliquable sans texte
+     * ni description. On le cherche d'abord par son texte, au cas où, puis
+     * comme le plus large des boutons cliquables sans libellé du bas de
+     * l'écran (il est à côté de « Nouveau dossier », plus étroit).
+     */
+    private fun boutonNouvelleNote(): UiObject2 {
+        appareil.findObject(By.text(libelle(R.string.browser_nouvelle_note)))?.let { return it }
+        attendre(explorateur(), "explorateur de notes")
+        val hauteur = appareil.displayHeight
+        return appareil.findObjects(By.pkg(paquet).clickable(true))
+            .filter { it.text.isNullOrBlank() && it.contentDescription.isNullOrBlank() }
+            .filter { it.visibleBounds.top > hauteur * 0.7 }
+            .maxByOrNull { it.visibleBounds.width() }
+            ?: error("bouton « Nouvelle note » introuvable\n" + ecranActuel())
     }
 
     /**
@@ -100,7 +127,7 @@ internal class Parcours {
      */
     fun allerALExplorateur(nomSiPremierLancement: String) {
         val local = By.text(libelle(R.string.login_continuer_local))
-        val explorateur = By.text(libelle(R.string.browser_nouvelle_note))
+        val explorateur = explorateur()
         val fin = System.currentTimeMillis() + DELAI_MS
         while (System.currentTimeMillis() < fin) {
             if (appareil.hasObject(explorateur)) return
@@ -121,7 +148,7 @@ internal class Parcours {
      * qui s'ouvre sur « # titre ».
      */
     fun creerNote(titre: String): UiObject2 {
-        cliquerTexte(libelle(R.string.browser_nouvelle_note))
+        boutonNouvelleNote().click()
         val creer = attendre(By.text(libelle(R.string.action_creer)), "dialogue de nouvelle note")
         // Le premier champ de la boîte est le titre.
         premierChampAutourDe(creer, "champ du titre").text = titre
@@ -171,7 +198,7 @@ internal class Parcours {
      * peut seulement fermer le clavier ; le retour enregistre la note.
      */
     fun revenirALExplorateur() {
-        val explorateur = By.text(libelle(R.string.browser_nouvelle_note))
+        val explorateur = explorateur()
         repeat(3) {
             if (apparait(explorateur, 1_000)) return
             appareil.pressBack()
