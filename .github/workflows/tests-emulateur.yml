@@ -9,9 +9,6 @@ name: Tests sur émulateur
 
 on:
   workflow_dispatch:
-  # TEMPORAIRE : mise au point sur la branche, à retirer avant fusion.
-  push:
-    branches: [claude/tests-emulateur]
 
 permissions:
   contents: read
