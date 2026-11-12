@@ -51,6 +51,14 @@ instrumenter() {
     fi
 }
 
+# Données effacées, comme une installation neuve. `pm clear` retire aussi les
+# autorisations : on rend celle des notifications (Android 13+), sans quoi sa
+# demande s'affiche par-dessus l'application.
+effacer() {
+    effacer
+    adb shell pm grant "$paquet" android.permission.POST_NOTIFICATIONS || true
+}
+
 [[ -s "$apk" ]] || die "APK debug introuvable : $apk"
 [[ -s "$apk_test" ]] || die "APK de test introuvable : $apk_test"
 
@@ -64,12 +72,12 @@ for reglage in window_animation_scale transition_animation_scale animator_durati
 done
 
 # --- 1. Éditeur --------------------------------------------------------------
-adb shell pm clear "$paquet"
+effacer
 adb logcat -c
 instrumenter "Éditeur" -e class eu.ocnotes.e2e.EditeurE2ETest
 
 # --- 2. Sauvegarde puis restauration -------------------------------------------
-adb shell pm clear "$paquet"
+effacer
 instrumenter "Sauvegarde : préparation" \
     -e class eu.ocnotes.e2e.SauvegardeE2ETest#preparer -e etape preparer
 
@@ -97,7 +105,7 @@ fi
 jeton="$(adb shell bmgr list sets | tr -d '\r' | awk -F' : ' 'NF == 2 { gsub(/ /, "", $1); print $1; exit }')"
 [[ -n "$jeton" ]] || die "aucun jeu de sauvegarde listé par bmgr"
 
-adb shell pm clear "$paquet"
+effacer
 restauration="$(adb shell bmgr restore "$jeton" "$paquet" | tr -d '\r')"
 printf '%s\n' "$restauration"
 grep -qi "done" <<<"$restauration" || die "restauration en échec"
