@@ -62,7 +62,17 @@ internal class Parcours {
             if (texte == null && desc == null) null
             else "  [${e.className?.substringAfterLast('.')}] ${texte ?: ""}${if (desc != null) " (desc: $desc)" else ""}"
         }.distinct()
-        return "Écran (${appareil.currentPackageName}) :\n" + lignes.joinToString("\n")
+        // Arbre complet, toutes fenêtres : ce que voit vraiment UI Automator.
+        val arbre = runCatching {
+            java.io.ByteArrayOutputStream().also { appareil.dumpWindowHierarchy(it) }.toString("UTF-8")
+        }.getOrDefault("")
+        val noeuds = Regex("""<node [^>]*>""").findAll(arbre).map { n ->
+            fun attr(nom: String) = Regex("""$nom="([^"]*)"""").find(n.value)?.groupValues?.get(1) ?: ""
+            "  ${attr("class").substringAfterLast('.')} text=${attr("text")} desc=${attr("content-desc")} " +
+                "clic=${attr("clickable")} ${attr("bounds")}"
+        }.filter { !it.contains("text= desc= clic=false") }.joinToString("\n")
+        return "Écran (${appareil.currentPackageName}) :\n" + lignes.joinToString("\n") +
+            "\nArbre :\n" + noeuds
     }
 
     /** Vrai si l'élément apparaît avant [delaiMs]. */
