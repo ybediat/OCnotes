@@ -82,7 +82,12 @@ adb shell settings put secure backup_local_transport_parameters "fake_encryption
 
 envoi="$(adb shell bmgr backupnow "$paquet" | tr -d '\r')"
 printf '%s\n' "$envoi"
-grep -q "Package $paquet with result: Success" <<<"$envoi" || die "sauvegarde refusée ou en échec"
+if ! grep -q "Package $paquet with result: Success" <<<"$envoi"; then
+    # Ce que le système et l'agent ont dit de cette sauvegarde.
+    adb logcat -d | grep -iE "backup|transport|SauvegardeAgent|ocnotes" | tail -n 80 || true
+    adb shell settings get secure backup_local_transport_parameters || true
+    die "sauvegarde refusée ou en échec"
+fi
 
 # Jeton du jeu de sauvegarde à restaurer : première ligne « jeton : nom ».
 jeton="$(adb shell bmgr list sets | tr -d '\r' | awk -F' : ' 'NF == 2 { gsub(/ /, "", $1); print $1; exit }')"
