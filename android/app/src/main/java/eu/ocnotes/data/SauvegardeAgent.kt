@@ -6,6 +6,7 @@ import android.app.backup.BackupDataInput
 import android.app.backup.BackupDataOutput
 import android.app.backup.FullBackupDataOutput
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import java.io.File
@@ -36,7 +37,10 @@ class SauvegardeAgent : BackupAgent() {
         // Avant Android 9 le transport ne dit rien de lui : ni chiffrement de
         // bout en bout, ni transfert direct. Sans preuve, on refuse.
         val drapeaux = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) data.transportFlags else 0
-        if (!SauvegardeProfils.envoiAutorise(drapeaux)) {
+        // Version de développement seulement : accepte aussi le faux drapeau
+        // du transport de test (voir DRAPEAU_FAUX_CHIFFREMENT).
+        val deboguable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        if (!SauvegardeProfils.envoiAutorise(drapeaux, deboguable)) {
             SuiviSauvegarde.noterNonChiffree(this)
             // Échouer plutôt que rendre la main : une sauvegarde vide
             // remplacerait la précédente, qui, elle, était chiffrée.

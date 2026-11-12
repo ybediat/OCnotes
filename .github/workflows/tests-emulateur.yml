@@ -61,14 +61,12 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # API 34 : le transport local de sauvegarde y sait simuler le chiffrement
-      # de bout en bout (« fake_encryption_flag »), ce qu'il ne fait pas en
-      # API 30. L'autorisation de notifications est accordée à l'installation
-      # (adb install -g).
+      # API 30 : la frappe et la barre de mise en forme s'y comportent comme
+      # sur un téléphone (en API 34, le clavier de l'émulateur s'interpose).
       - name: Tests sur émulateur
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: 30
           arch: x86_64
           target: default
           # Écran de téléphone courant (le profil par défaut fait 320×640).

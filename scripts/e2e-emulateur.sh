@@ -83,7 +83,8 @@ instrumenter "Sauvegarde : préparation" \
 
 # Transport local de l'émulateur. Sans « fake_encryption_flag », il se
 # déclare non chiffré et SauvegardeAgent refuse, à raison, d'envoyer quoi que
-# ce soit : le drapeau simule une sauvegarde chiffrée de bout en bout.
+# ce soit. Le faux drapeau qu'il pose alors n'est accepté que par une version
+# de développement (SauvegardeProfils.DRAPEAU_FAUX_CHIFFREMENT).
 # Le réglage est lu au démarrage du transport : on le pose d'abord, puis on
 # relance le processus du transport pour qu'il le prenne à coup sûr.
 adb shell settings put secure backup_local_transport_parameters "fake_encryption_flag=true"

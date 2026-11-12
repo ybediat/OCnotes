@@ -67,8 +67,20 @@ internal object SauvegardeProfils {
      * l'hébergeur ne connaît pas. Toute autre sauvegarde est refusée : les
      * notes d'un profil local n'ont pas à être lisibles ailleurs.
      */
-    fun envoiAutorise(drapeaux: Int): Boolean =
-        estTransfertDirect(drapeaux) || drapeaux and DRAPEAU_CHIFFREMENT != 0
+    fun envoiAutorise(drapeaux: Int, appliDeboguable: Boolean = false): Boolean =
+        estTransfertDirect(drapeaux) || drapeaux and DRAPEAU_CHIFFREMENT != 0 ||
+            (appliDeboguable && drapeaux and DRAPEAU_FAUX_CHIFFREMENT != 0)
+
+    /**
+     * Drapeau de test du transport local d'Android
+     * (`BackupAgent.FLAG_FAKE_CLIENT_SIDE_ENCRYPTION_ENABLED`, caché, 1 << 31),
+     * posé par le réglage `backup_local_transport_parameters` avec
+     * `fake_encryption_flag=true`. Il ne vaut que pour une application
+     * déboguable : c'est ce qui permet aux tests sur émulateur
+     * (scripts/e2e-emulateur.sh) d'aller au bout d'une sauvegarde. Une version
+     * publiée n'est jamais déboguable et continue de le refuser.
+     */
+    const val DRAPEAU_FAUX_CHIFFREMENT = 1 shl 31
 
     private val json = Json {
         ignoreUnknownKeys = true
