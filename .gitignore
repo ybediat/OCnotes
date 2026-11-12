@@ -64,3 +64,4 @@ Thumbs.db
 # Claude Code (parametres locaux a la machine)
 /.claude/
 /CLAUDE.md
+build-e2e/

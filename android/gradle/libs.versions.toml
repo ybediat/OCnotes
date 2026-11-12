@@ -17,6 +17,12 @@ work = "2.10.0"
 appauth = "0.11.1"
 junit = "4.13.2"
 
+# Tests sur émulateur (src/androidTest, scripts/e2e-emulateur.sh) : jamais
+# embarqués dans l'APK, ni lus par le build F-Droid (assembleRelease).
+androidxTestRunner = "1.6.2"
+androidxTestJunit = "1.2.1"
+uiautomator = "2.3.0"
+
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 
@@ -44,6 +50,10 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 appauth = { group = "net.openid", name = "appauth", version.ref = "appauth" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
+androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestJunit" }
+androidx-test-uiautomator = { group = "androidx.test.uiautomator", name = "uiautomator", version.ref = "uiautomator" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

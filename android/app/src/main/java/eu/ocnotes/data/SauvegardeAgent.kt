@@ -6,6 +6,7 @@ import android.app.backup.BackupDataInput
 import android.app.backup.BackupDataOutput
 import android.app.backup.FullBackupDataOutput
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import java.io.File
@@ -32,11 +33,33 @@ import java.io.IOException
  */
 class SauvegardeAgent : BackupAgent() {
 
+    /**
+     * Crée les dossiers inclus par les règles de restauration avant qu'elle
+     * ne commence.
+     *
+     * Android ne reconnaît une règle `<include path="accounts/">` comme un
+     * dossier que si ce dossier existe déjà sur le disque : sinon il la
+     * prend pour un fichier, et refuse en silence tout ce qui est dedans.
+     * Sur un téléphone neuf, ou après un effacement des données, ni
+     * `accounts/` ni `sauvegarde/` n'existent : sans ceci, seules les
+     * préférences d'affichage revenaient (constaté le 12/11/2026 par
+     * scripts/e2e-emulateur.sh). L'agent est créé avant la restauration :
+     * c'est le bon moment.
+     */
+    override fun onCreate() {
+        super.onCreate()
+        File(filesDir, AccountRegistry.ACCOUNTS_DIR).mkdirs()
+        File(filesDir, SauvegardeProfils.DOSSIER_SAUVEGARDE).mkdirs()
+    }
+
     override fun onFullBackup(data: FullBackupDataOutput) {
         // Avant Android 9 le transport ne dit rien de lui : ni chiffrement de
         // bout en bout, ni transfert direct. Sans preuve, on refuse.
         val drapeaux = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) data.transportFlags else 0
-        if (!SauvegardeProfils.envoiAutorise(drapeaux)) {
+        // Version de développement seulement : accepte aussi le faux drapeau
+        // du transport de test (voir DRAPEAU_FAUX_CHIFFREMENT).
+        val deboguable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        if (!SauvegardeProfils.envoiAutorise(drapeaux, deboguable)) {
             SuiviSauvegarde.noterNonChiffree(this)
             // Échouer plutôt que rendre la main : une sauvegarde vide
             // remplacerait la précédente, qui, elle, était chiffrée.

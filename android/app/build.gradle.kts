@@ -32,6 +32,10 @@ android {
         versionName = "0.2.3"
         manifestPlaceholders["appAuthRedirectScheme"] = "eu.ocnotes"
 
+        // Tests de bout en bout sur émulateur (src/androidTest), lancés par
+        // scripts/e2e-emulateur.sh et le workflow « Tests sur émulateur ».
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
         // Le .aar de gomobile n'embarque que les ABI passées au bind : cette
         // liste et la commande `gomobile bind` bougent ensemble. Une ABI
         // ajoutée ici seule donne un APK qui plante au premier appel JNI ;
@@ -159,4 +163,8 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.appauth)
     testImplementation(libs.junit)
+
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.uiautomator)
 }

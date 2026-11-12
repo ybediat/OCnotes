@@ -225,6 +225,19 @@ class SauvegardeProfilsTest {
         assertFalse(SauvegardeProfils.estTransfertDirect(chiffre))
     }
 
+    // Le faux drapeau du transport de test n'ouvre la sauvegarde qu'à une
+    // version de développement : jamais à une version publiée.
+    @Test
+    fun `le faux chiffrement du transport de test ne vaut qu en debug`() {
+        val faux = SauvegardeProfils.DRAPEAU_FAUX_CHIFFREMENT
+        assertEquals(Int.MIN_VALUE, faux)
+        assertFalse(SauvegardeProfils.envoiAutorise(faux))
+        assertFalse(SauvegardeProfils.envoiAutorise(faux, appliDeboguable = false))
+        assertTrue(SauvegardeProfils.envoiAutorise(faux, appliDeboguable = true))
+        // En debug, l'absence de tout drapeau reste un refus.
+        assertFalse(SauvegardeProfils.envoiAutorise(0, appliDeboguable = true))
+    }
+
     // Les drapeaux sont recopiés pour tester sans Android : ils doivent rester
     // ceux de la plateforme.
     @Test
