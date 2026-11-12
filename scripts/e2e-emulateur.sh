@@ -76,9 +76,13 @@ instrumenter "Sauvegarde : préparation" \
 # Transport local de l'émulateur. Sans « fake_encryption_flag », il se
 # déclare non chiffré et SauvegardeAgent refuse, à raison, d'envoyer quoi que
 # ce soit : le drapeau simule une sauvegarde chiffrée de bout en bout.
+# Le réglage est lu au démarrage du transport : on le pose d'abord, puis on
+# relance le processus du transport pour qu'il le prenne à coup sûr.
+adb shell settings put secure backup_local_transport_parameters "fake_encryption_flag=true"
+adb shell am force-stop com.android.localtransport
 adb shell bmgr enable true
 adb shell bmgr transport com.android.localtransport/.LocalTransport
-adb shell settings put secure backup_local_transport_parameters "fake_encryption_flag=true"
+sleep 3
 
 envoi="$(adb shell bmgr backupnow "$paquet" | tr -d '\r')"
 printf '%s\n' "$envoi"
