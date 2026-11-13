@@ -67,6 +67,12 @@ class SauvegardeAgent : BackupAgent() {
         }
         val transfertDirect = SauvegardeProfils.estTransfertDirect(drapeaux)
 
+        // Profils impossibles à classer : échouer plutôt que les retirer de
+        // la sauvegarde précédente (voir profilsIndetermines).
+        if (SauvegardeProfils.profilsIndetermines(filesDir)) {
+            throw IOException("profil indetermine") // i18n-ok : jamais affiché
+        }
+
         val locaux = SauvegardeProfils.ecrireInstantane(filesDir)
         val fichiers = SauvegardeProfils.fichiersASauvegarder(filesDir, locaux) +
             listOfNotNull(preferencesAffichage().takeIf { it.isFile })
@@ -118,6 +124,8 @@ class SauvegardeAgent : BackupAgent() {
 data class EtatSauvegarde(
     /** Taille de ce que la sauvegarde emporte, en octets. */
     val octets: Long,
+    /** Nombre de profils locaux, donc concernés par la sauvegarde. */
+    val profilsLocaux: Int = 0,
     /** Date (ms depuis l'époque) du dernier dépassement de quota, ou `null`. */
     val quotaDepasseLe: Long?,
     /**
@@ -150,8 +158,10 @@ class SuiviSauvegarde(context: Context) {
         val prefs = prefs(context)
         fun positif(cle: String): Long? = prefs.getLong(cle, 0L).takeIf { it > 0L }
         val depasse = positif(CLE_QUOTA_DEPASSE)
+        val locaux = SauvegardeProfils.profilsLocaux(context.filesDir)
         return EtatSauvegarde(
-            octets = SauvegardeProfils.tailleASauvegarder(context.filesDir),
+            octets = SauvegardeProfils.tailleASauvegarder(context.filesDir, locaux),
+            profilsLocaux = locaux.size,
             quotaDepasseLe = depasse,
             // Un dépassement constaté par le système arrive après l'envoi que
             // l'agent vient de noter : cet envoi n'a alors pas eu lieu.

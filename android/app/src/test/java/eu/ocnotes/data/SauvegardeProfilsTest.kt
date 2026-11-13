@@ -225,6 +225,58 @@ class SauvegardeProfilsTest {
         assertFalse(SauvegardeProfils.estTransfertDirect(chiffre))
     }
 
+    // Seedvault pose le drapeau de transfert direct sur toutes ses
+    // sauvegardes, avec celui du chiffrement : c'est une sauvegarde, à suivre
+    // dans les Réglages comme celle du compte Google.
+    @Test
+    fun `une sauvegarde Seedvault n est pas un transfert direct`() {
+        val seedvault = SauvegardeProfils.DRAPEAU_CHIFFREMENT or SauvegardeProfils.DRAPEAU_TRANSFERT_DIRECT
+        assertTrue(SauvegardeProfils.envoiAutorise(seedvault))
+        assertFalse(SauvegardeProfils.estTransfertDirect(seedvault))
+        assertTrue(SauvegardeProfils.estTransfertDirect(SauvegardeProfils.DRAPEAU_TRANSFERT_DIRECT))
+    }
+
+    // Un config.json illisible ne doit ni retirer le profil de la sauvegarde
+    // précédente, ni l'y faire partir sans preuve qu'il est local.
+    @Test
+    fun `un profil local sans configuration lisible bloque l envoi`() = avecDossier { racine ->
+        ecrireRegistre(racine, idLocal, profilJson(idLocal, "local"))
+        ecrireNote(racine, idLocal, "a.blob", "seule copie")
+        assertTrue(SauvegardeProfils.profilsIndetermines(racine))
+
+        racine.resolve("accounts/$idLocal/config.json").writeText("{ pas du json")
+        assertTrue(SauvegardeProfils.profilsIndetermines(racine))
+
+        ecrireConfig(racine, idLocal, "local")
+        assertFalse(SauvegardeProfils.profilsIndetermines(racine))
+    }
+
+    @Test
+    fun `un profil serveur sans configuration ne bloque pas l envoi`() = avecDossier { racine ->
+        ecrireRegistre(racine, idServeur, profilJson(idServeur, "server"))
+        ecrireNote(racine, idServeur, "b.blob", "copie du serveur")
+        assertFalse(SauvegardeProfils.profilsIndetermines(racine))
+    }
+
+    @Test
+    fun `registre illisible bloque l envoi mais pas registre absent`() = avecDossier { racine ->
+        assertFalse(SauvegardeProfils.profilsIndetermines(racine))
+        racine.resolve("accounts.json").writeText("{ tronque")
+        assertTrue(SauvegardeProfils.profilsIndetermines(racine))
+    }
+
+    // Le registre en retard ne doit pas faire perdre le nom donné au profil.
+    @Test
+    fun `le nom du profil survit a un registre en retard`() = avecDossier { racine ->
+        ecrireRegistre(racine, idLocal, profilJson(idLocal, "server", "Carnet"))
+        ecrireConfig(racine, idLocal, "local")
+
+        val locaux = SauvegardeProfils.ecrireInstantane(racine)
+
+        assertEquals("Carnet", locaux.single().displayName)
+        assertEquals("", locaux.single().serverUrl)
+    }
+
     // Le faux drapeau du transport de test n'ouvre la sauvegarde qu'à une
     // version de développement : jamais à une version publiée.
     @Test
