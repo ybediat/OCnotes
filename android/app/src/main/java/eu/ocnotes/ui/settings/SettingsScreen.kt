@@ -386,50 +386,53 @@ fun SettingsScreen(
                     }
                     Text(stringResource(R.string.reglages_export_bouton))
                 }
-                etat.sauvegarde?.let { sauvegarde ->
-                    // Sauvegarde Android des profils locaux : taille face au
-                    // quota du transport, date du dernier envoi, et
-                    // avertissement quand elle est refusée ou près de l'être.
+            }
+            // Visible aussi depuis un profil serveur dès qu'un profil local existe :
+            // un refus ou un dépassement de quota les concerne tous.
+            etat.sauvegarde?.takeIf { etat.modeLocal || it.profilsLocaux > 0 }?.let { sauvegarde ->
+                if (!etat.modeLocal) HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                // Sauvegarde Android des profils locaux : taille face au
+                // quota du transport, date du dernier envoi, et
+                // avertissement quand elle est refusée ou près de l'être.
+                Text(
+                    text = stringResource(
+                        R.string.reglages_sauvegarde_android,
+                        Formatter.formatShortFileSize(context, sauvegarde.octets),
+                        Formatter.formatShortFileSize(context, sauvegarde.quota),
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                // Sans cette ligne, une sauvegarde coupée dans le téléphone
+                // et une sauvegarde qui tourne ont le même aspect.
+                val envoiLe = sauvegarde.dernierEnvoiLe
+                Text(
+                    text = if (envoiLe != null) {
+                        stringResource(R.string.reglages_sauvegarde_dernier_envoi, dateCourte(envoiLe))
+                    } else {
+                        stringResource(R.string.reglages_sauvegarde_aucun_envoi)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (sauvegarde.avertir) {
+                    val nonChiffreeLe = sauvegarde.nonChiffreeLe
+                    val depasseLe = sauvegarde.quotaDepasseLe
                     Text(
-                        text = stringResource(
-                            R.string.reglages_sauvegarde_android,
-                            Formatter.formatShortFileSize(context, sauvegarde.octets),
-                            Formatter.formatShortFileSize(context, sauvegarde.quota),
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    // Sans cette ligne, une sauvegarde coupée dans le téléphone
-                    // et une sauvegarde qui tourne ont le même aspect.
-                    val envoiLe = sauvegarde.dernierEnvoiLe
-                    Text(
-                        text = if (envoiLe != null) {
-                            stringResource(R.string.reglages_sauvegarde_dernier_envoi, dateCourte(envoiLe))
-                        } else {
-                            stringResource(R.string.reglages_sauvegarde_aucun_envoi)
+                        text = when {
+                            nonChiffreeLe != null -> stringResource(
+                                R.string.reglages_sauvegarde_non_chiffree,
+                                dateCourte(nonChiffreeLe),
+                            )
+                            depasseLe != null -> stringResource(
+                                R.string.reglages_sauvegarde_quota_depasse,
+                                dateCourte(depasseLe),
+                            )
+                            else -> stringResource(R.string.reglages_sauvegarde_proche_quota)
                         },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.error,
                     )
-                    if (sauvegarde.avertir) {
-                        val nonChiffreeLe = sauvegarde.nonChiffreeLe
-                        val depasseLe = sauvegarde.quotaDepasseLe
-                        Text(
-                            text = when {
-                                nonChiffreeLe != null -> stringResource(
-                                    R.string.reglages_sauvegarde_non_chiffree,
-                                    dateCourte(nonChiffreeLe),
-                                )
-                                depasseLe != null -> stringResource(
-                                    R.string.reglages_sauvegarde_quota_depasse,
-                                    dateCourte(depasseLe),
-                                )
-                                else -> stringResource(R.string.reglages_sauvegarde_proche_quota)
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
                 }
             }
             if (!etat.modeLocal) {

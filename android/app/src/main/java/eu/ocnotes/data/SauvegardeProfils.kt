@@ -58,8 +58,19 @@ internal object SauvegardeProfils {
     const val DRAPEAU_CHIFFREMENT = 1
     const val DRAPEAU_TRANSFERT_DIRECT = 2
 
-    /** Vrai pour un transfert direct d'un téléphone à l'autre : rien ne passe par un serveur. */
-    fun estTransfertDirect(drapeaux: Int): Boolean = drapeaux and DRAPEAU_TRANSFERT_DIRECT != 0
+    /**
+     * Vrai pour un transfert direct d'un téléphone à l'autre : rien ne passe
+     * par un serveur, et ce n'est pas une sauvegarde.
+     *
+     * Le drapeau de transfert direct seul ne suffit pas : Seedvault le pose
+     * sur **toutes** ses sauvegardes (avec le drapeau de chiffrement), pour
+     * passer outre `allowBackup="false"` des autres applications. Une
+     * sauvegarde Seedvault doit pourtant être suivie comme une sauvegarde :
+     * date d'envoi et quota dans les Réglages. Un vrai transfert entre
+     * téléphones n'annonce pas de chiffrement de bout en bout.
+     */
+    fun estTransfertDirect(drapeaux: Int): Boolean =
+        drapeaux and DRAPEAU_TRANSFERT_DIRECT != 0 && drapeaux and DRAPEAU_CHIFFREMENT == 0
 
     /**
      * Vrai si les notes peuvent partir : vers un autre téléphone, ou vers une
@@ -68,7 +79,7 @@ internal object SauvegardeProfils {
      * notes d'un profil local n'ont pas à être lisibles ailleurs.
      */
     fun envoiAutorise(drapeaux: Int, appliDeboguable: Boolean = false): Boolean =
-        estTransfertDirect(drapeaux) || drapeaux and DRAPEAU_CHIFFREMENT != 0 ||
+        drapeaux and DRAPEAU_TRANSFERT_DIRECT != 0 || drapeaux and DRAPEAU_CHIFFREMENT != 0 ||
             (appliDeboguable && drapeaux and DRAPEAU_FAUX_CHIFFREMENT != 0)
 
     /**
@@ -116,19 +127,56 @@ internal object SauvegardeProfils {
             .map { profil ->
                 if (profil.kind == AccountRegistry.KIND_LOCAL) profil
                 // Le registre retardait : l'instantané décrit le profil tel
-                // que le cœur le connaît, sans trace d'un serveur.
-                else AccountProfile(id = profil.id, kind = AccountRegistry.KIND_LOCAL)
+                // que le cœur le connaît, sans trace d'un serveur. Seul le nom
+                // choisi pour le profil est gardé, pour le retrouver à la
+                // restauration.
+                else AccountProfile(
+                    id = profil.id,
+                    kind = AccountRegistry.KIND_LOCAL,
+                    displayName = profil.displayName,
+                )
             }
     }
 
+    /**
+     * Vrai si l'on ne sait pas, cette fois, quels profils sont locaux : registre
+     * présent mais illisible, ou profil dit local au registre dont le
+     * `config.json` manque ou est illisible.
+     *
+     * Envoyer quand même retirerait ces profils de la sauvegarde, et la
+     * nouvelle remplacerait la précédente, qui les contenait. Les envoyer
+     * sans preuve qu'ils sont locaux pourrait faire partir le cache d'un
+     * serveur. L'agent échoue donc : la sauvegarde précédente reste en place,
+     * et la suivante passera une fois la configuration réécrite par le cœur
+     * (il le fait de lui-même au lancement).
+     */
+    fun profilsIndetermines(filesDir: File): Boolean {
+        val fichierRegistre = File(filesDir, AccountRegistry.REGISTRY_FILE)
+        if (!fichierRegistre.exists()) return false
+        val registre = lireRegistre(fichierRegistre) ?: return true
+        val dossierComptes = File(filesDir, AccountRegistry.ACCOUNTS_DIR)
+        return registre.accounts.any { profil ->
+            val dossier = File(dossierComptes, profil.id)
+            profil.kind == AccountRegistry.KIND_LOCAL && estIdProfil(profil.id) &&
+                dossier.isDirectory && modeCoeur(dossier) == null
+        }
+    }
+
     /** Vrai si le `config.json` de ce dossier de profil déclare le mode local. */
-    private fun coeurLocal(dossierProfil: File): Boolean {
+    private fun coeurLocal(dossierProfil: File): Boolean =
+        modeCoeur(dossierProfil) == AccountRegistry.KIND_LOCAL
+
+    /**
+     * Mode déclaré par le `config.json` de ce dossier de profil (chaîne vide
+     * s'il n'en déclare aucun), ou `null` si le fichier manque ou est illisible.
+     */
+    private fun modeCoeur(dossierProfil: File): String? {
         val config = File(dossierProfil, AccountRegistry.CONFIG_FILE)
-        if (!config.isFile) return false
+        if (!config.isFile) return null
         return runCatching {
             json.parseToJsonElement(config.readText(Charsets.UTF_8))
-                .jsonObject["mode"]?.jsonPrimitive?.contentOrNull == AccountRegistry.KIND_LOCAL
-        }.getOrDefault(false)
+                .jsonObject["mode"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        }.getOrNull()
     }
 
     /**
@@ -173,8 +221,8 @@ internal object SauvegardeProfils {
     }
 
     /** Taille totale, en octets, de ce que la sauvegarde emporterait. */
-    fun tailleASauvegarder(filesDir: File): Long =
-        fichiersASauvegarder(filesDir, profilsLocaux(filesDir)).sumOf { it.length() }
+    fun tailleASauvegarder(filesDir: File, locaux: List<AccountProfile> = profilsLocaux(filesDir)): Long =
+        fichiersASauvegarder(filesDir, locaux).sumOf { it.length() }
 
     /**
      * Intègre l'instantané restauré au registre de l'appareil, puis le
