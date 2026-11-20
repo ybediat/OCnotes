@@ -84,9 +84,11 @@
 
       var date = fmtDate(rel.date);
       var meta = document.getElementById("dl-meta");
+      /* date et taille peuvent manquer (source de secours de release.php) : on les omet alors */
+      var taille = rel.size > 0 ? ", " + size(rel.size) : "";
       meta.textContent = en
-        ? "Version " + v + (date ? ", released " + date : "") + ", " + size(rel.size) + ". Android 8.0 or newer."
-        : "Version " + v + (date ? " du " + date : "") + ", " + size(rel.size) + ". Android 8.0 ou plus récent.";
+        ? "Version " + v + (date ? ", released " + date : "") + taille + ". Android 8.0 or newer."
+        : "Version " + v + (date ? " du " + date : "") + taille + ". Android 8.0 ou plus récent.";
 
       var sha = String(rel.sha256 || "").trim().replace(/^sha256:/i, "");
       if (/^[0-9a-f]{64}$/i.test(sha)) {
