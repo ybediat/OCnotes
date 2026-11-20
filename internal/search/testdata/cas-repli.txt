@@ -1,0 +1,50 @@
+# Cas communs du repli de recherche : « entrée ¦ repli attendu ».
+#
+# Rejoué par TestCasRepliPartages (Go, internal/search) et par RepliTest
+# (Kotlin, ui/browser) : c'est le seul lien entre les deux implémentations.
+# Un nom de note est comparé par Kotlin, le texte d'une note par Go ; une
+# requête doit trouver les deux de la même façon.
+#
+# \uXXXX désigne un caractère par son code : c'est ainsi qu'on écrit ici les
+# accents décomposés et les espaces insécables, invisibles autrement. Les
+# espaces en début et en fin de champ sont retirés.
+
+# Casse
+ÉCOLE ¦ ecole
+Facture EDF ¦ facture edf
+
+# Accents précomposés
+Résumé de réunion ¦ resume de reunion
+Ça déçoit ¦ ca decoit
+Ñandú ¦ nandu
+Größe ¦ grosse
+Ångström ¦ angstrom
+naïve à l'hôtel ¦ naive a l'hotel
+Šťastný ¦ stastny
+Ștefan Țara ¦ stefan tara
+
+# Accents décomposés (lettre suivie d'une marque combinante)
+Résumé ¦ resume
+è lâ ¦ e la
+
+# Ligatures et lettres sans décomposition
+Œuvre ¦ oeuvre
+cœur ¦ coeur
+Æther ¦ aether
+Straße ¦ strasse
+Øresund ¦ oresund
+Łódź ¦ lodz
+Đorđe ¦ dorde
+
+# I turc : le point suscrit disparaît, le i sans point reste
+İstanbul ¦ istanbul
+ıslak ¦ ıslak
+
+# Espaces : insécable, fine insécable, tabulation
+facture EDF ¦ facture edf
+10 € ¦ 10 €
+a\tb ¦ a b
+
+# Rien à replier
+lorem ipsum ¦ lorem ipsum
+😀 emoji ¦ 😀 emoji

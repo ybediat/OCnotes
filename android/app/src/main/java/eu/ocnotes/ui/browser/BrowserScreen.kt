@@ -10,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -44,6 +45,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -81,6 +83,9 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -90,6 +95,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.ocnotes.R
 import eu.ocnotes.appContainer
 import eu.ocnotes.data.FolderEntryDto
+import eu.ocnotes.data.RechercheTexteDto
+import eu.ocnotes.data.ResultatTexteDto
 import eu.ocnotes.ui.common.Bandeau
 import eu.ocnotes.ui.common.BandeauCache
 import eu.ocnotes.ui.common.ChargementPleinEcran
@@ -383,11 +390,27 @@ fun BrowserScreen(
                 // champ, le second en créant une note.
                 etat.rechercheSansResultat -> EtatVide(
                     titre = stringResource(R.string.browser_recherche_vide_titre),
-                    detail = stringResource(R.string.browser_recherche_vide_detail),
+                    // Une requête trop courte n'a fouillé que les noms : le
+                    // message ne doit pas prétendre davantage.
+                    detail = stringResource(
+                        if (etat.rechercheTexte != null) {
+                            R.string.browser_recherche_vide_detail_texte
+                        } else {
+                            R.string.browser_recherche_vide_detail
+                        },
+                    ),
                 )
 
                 else -> ListeEntrees(
                     entrees = etat.entreesAffichees,
+                    extraits = etat.repartition.extraits,
+                    dansLeTexte = etat.repartition.dansLeTexte,
+                    rechercheTexte = etat.rechercheTexte,
+                    rechercheTexteEnCours = etat.rechercheTexteEnCours,
+                    // En arborescence, le chemin d'un résultat se lit depuis
+                    // le dossier affiché ; en liste plate, depuis la racine.
+                    dossierAffiche = etat.porteeRecherche,
+                    onOuvrirResultat = viewModel::ouvrirResultat,
                     grouperParMois = etat.enListePlate && etat.tri == Tri.DATE,
                     afficherDossier = etat.enListePlate,
                     selection = etat.selection,
@@ -629,6 +652,12 @@ private fun BarreSelection(
 @Composable
 private fun ListeEntrees(
     entrees: List<FolderEntryDto>,
+    extraits: Map<String, ResultatTexteDto>,
+    dansLeTexte: List<ResultatTexteDto>,
+    rechercheTexte: RechercheTexteDto?,
+    rechercheTexteEnCours: Boolean,
+    dossierAffiche: String,
+    onOuvrirResultat: (ResultatTexteDto) -> Unit,
     grouperParMois: Boolean,
     afficherDossier: Boolean,
     selection: Set<String>,
@@ -666,6 +695,7 @@ private fun ListeEntrees(
             item(key = entree.path) {
                 LigneEntree(
                     entree = entree,
+                    extrait = extraits[entree.path],
                     afficherDossier = afficherDossier,
                     selectionnee = entree.path in selection,
                     modeSelection = modeSelection,
@@ -703,6 +733,167 @@ private fun ListeEntrees(
                     onSupprimer = if (entree.canDelete) ({ onSupprimer(entree) }) else null,
                 )
             }
+        }
+
+        // Section « Dans le texte » : sous les noms, qui restent instantanés.
+        // Son titre paraît dès que Go fouille, pour que l'attente se voie.
+        if (rechercheTexteEnCours || dansLeTexte.isNotEmpty()) {
+            item(key = "recherche-texte-titre") {
+                TitreSectionTexte(enCours = rechercheTexteEnCours)
+            }
+        }
+        dansLeTexte.forEach { resultat ->
+            // Préfixe dans la clé : la même note peut figurer plus haut par
+            // son nom dans un autre état, et deux clés égales planteraient.
+            item(key = "texte:${resultat.path}") {
+                LigneResultatTexte(
+                    resultat = resultat,
+                    dossierAffiche = dossierAffiche,
+                    onClick = { onOuvrirResultat(resultat) },
+                )
+            }
+        }
+        rechercheTexte?.takeIf { it.truncated }?.let { reponse ->
+            item(key = "recherche-texte-tronquee") {
+                NoteRecherche(
+                    pluralStringResource(
+                        R.plurals.browser_recherche_tronquee,
+                        reponse.results.size,
+                        reponse.results.size,
+                    ),
+                )
+            }
+        }
+        rechercheTexte?.takeIf { it.skipped > 0 }?.let { reponse ->
+            item(key = "recherche-texte-non-fouillees") {
+                NoteRecherche(
+                    pluralStringResource(
+                        R.plurals.browser_recherche_non_fouillees,
+                        reponse.skipped,
+                        reponse.skipped,
+                    ),
+                )
+            }
+        }
+    }
+}
+
+/** Titre de la section « Dans le texte », avec un indicateur pendant la fouille. */
+@Composable
+private fun TitreSectionTexte(enCours: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.browser_recherche_dans_le_texte),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        if (enCours) {
+            CircularProgressIndicator(
+                strokeWidth = 2.dp,
+                modifier = Modifier.size(14.dp),
+            )
+        }
+    }
+}
+
+/** Ligne discrète sous les résultats : liste tronquée, notes non fouillées. */
+@Composable
+private fun NoteRecherche(texte: String) {
+    Text(
+        text = texte,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+}
+
+/**
+ * Une note trouvée par son texte, hors de la liste des noms.
+ *
+ * Elle s'ouvre d'un appui et ne se coche pas : la sélection multiple ne porte
+ * que sur les entrées du dossier affiché (v1). Un résultat d'un sous-dossier
+ * montre son chemin depuis le dossier affiché.
+ */
+@Composable
+private fun LigneResultatTexte(
+    resultat: ResultatTexteDto,
+    dossierAffiche: String,
+    onClick: () -> Unit,
+) {
+    val dossier = resultat.path.substringBeforeLast('/', "")
+    val chemin = when {
+        dossier == dossierAffiche -> null
+        dossierAffiche.isEmpty() -> dossier
+        else -> dossier.removePrefix("$dossierAffiche/")
+    }
+    ListItem(
+        overlineContent = chemin?.let { { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
+        headlineContent = {
+            Text(resultat.display, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        },
+        supportingContent = { ExtraitTexte(resultat) },
+        leadingContent = {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(40.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.EditNote,
+                        contentDescription = stringResource(R.string.browser_type_note),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+            }
+        },
+        modifier = Modifier.clickable(onClick = onClick),
+    )
+}
+
+/**
+ * L'extrait d'une note trouvée, le terme en gras, et le nombre d'occurrences
+ * quand il y en a plusieurs.
+ *
+ * Les bornes viennent de Go en unités UTF-16, celles de `AnnotatedString` :
+ * aucune conversion. Elles sont tout de même vérifiées — un gras hors du texte
+ * ferait planter le dessin, l'extrait seul vaut mieux.
+ */
+@Composable
+private fun ExtraitTexte(resultat: ResultatTexteDto) {
+    val extrait = remember(resultat) {
+        buildAnnotatedString {
+            append(resultat.excerpt)
+            if (resultat.start in 0 until resultat.end && resultat.end <= resultat.excerpt.length) {
+                addStyle(SpanStyle(fontWeight = FontWeight.Bold), resultat.start, resultat.end)
+            }
+        }
+    }
+    Column {
+        Text(
+            text = extrait,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (resultat.count > 1) {
+            Text(
+                text = pluralStringResource(
+                    R.plurals.browser_recherche_occurrences,
+                    resultat.count,
+                    resultat.count,
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -875,6 +1066,8 @@ private fun IndicateurSynchronisation(
 @Composable
 private fun LigneEntree(
     entree: FolderEntryDto,
+    // Extrait trouvé dans le texte de cette note, si la recherche en a un.
+    extrait: ResultatTexteDto?,
     afficherDossier: Boolean,
     selectionnee: Boolean,
     modeSelection: Boolean,
@@ -901,12 +1094,17 @@ private fun LigneEntree(
             Text(entree.display, maxLines = 1, overflow = TextOverflow.Ellipsis)
         },
         supportingContent = {
-            sousTitre(entree, afficherDossier)?.let { texte ->
-                Text(
-                    text = texte,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Column {
+                sousTitre(entree, afficherDossier)?.let { texte ->
+                    Text(
+                        text = texte,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                // Une note déjà listée par son nom n'est pas répétée dans la
+                // section « Dans le texte » : elle y gagne son extrait.
+                extrait?.let { ExtraitTexte(it) }
             }
         },
         leadingContent = {

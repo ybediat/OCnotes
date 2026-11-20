@@ -1,6 +1,7 @@
 package eu.ocnotes.ui.browser
 
 import eu.ocnotes.data.FolderEntryDto
+import eu.ocnotes.data.ResultatTexteDto
 import java.text.Normalizer
 
 /**
@@ -99,6 +100,38 @@ fun classer(
 }
 
 /**
+ * Résultats de la recherche dans le texte, rangés pour l'affichage.
+ *
+ * [extraits] : par chemin, l'extrait d'une note déjà listée par son nom, qui
+ * le montre sous sa ligne. [dansLeTexte] : les autres, pour la section
+ * « Dans le texte », dans l'ordre où Go les a rendus.
+ */
+data class RepartitionRecherche(
+    val extraits: Map<String, ResultatTexteDto> = emptyMap(),
+    val dansLeTexte: List<ResultatTexteDto> = emptyList(),
+)
+
+/**
+ * Répartit les résultats de contenu entre les lignes déjà affichées et la
+ * section « Dans le texte » : une note déjà listée par son nom n'est pas
+ * répétée, elle gagne son extrait.
+ *
+ * Fonction pure, à côté de [classer], pour se vérifier sur la JVM.
+ */
+fun repartirRecherche(
+    affichees: List<FolderEntryDto>,
+    resultats: List<ResultatTexteDto>,
+): RepartitionRecherche {
+    if (resultats.isEmpty()) return RepartitionRecherche()
+    val listees = affichees.filterNot { it.isDir }.mapTo(HashSet()) { it.path }
+    val (extraits, reste) = resultats.partition { it.path in listees }
+    return RepartitionRecherche(
+        extraits = extraits.associateBy { it.path },
+        dansLeTexte = reste,
+    )
+}
+
+/**
  * Classement par nom, insensible à la casse.
  *
  * Même règle que `lessName` côté Go, y compris sa limite : les accents ne
@@ -130,11 +163,39 @@ private val PAR_DATE = compareByDescending<FolderEntryDto> { it.modTime }
  * lettre de son accent, qui devient un caractère de catégorie « marque sans
  * chasse » — il suffit alors de les retirer.
  *
- * `lowercase()` sans argument travaille en `Locale.ROOT`, donc à l'abri du
- * « i » turc : la langue de l'appareil ne doit pas changer ce qu'une
- * recherche trouve.
+ * La même règle vit côté Go (`search.Fold`), qui cherche dans le texte des
+ * notes : `internal/search/testdata/cas-repli.txt` tient les deux ensemble, et
+ * toute modification ici doit y passer. D'où une minuscule caractère par
+ * caractère, comme `unicode.ToLower` : `lowercase()` sur la chaîne entière
+ * applique des règles de contexte (le sigma final grec) que Go n'a pas.
+ * `Character.toLowerCase` ne dépend pas de la langue de l'appareil, donc pas
+ * du « i » turc.
+ *
+ * S'y ajoutent les lettres que NFD ne décompose pas (`œ æ ß ø ł đ`), écrites
+ * comme on les tape à défaut, et les espaces insécables ramenées à une espace.
  */
-private fun replie(texte: String): String =
-    Normalizer.normalize(texte, Normalizer.Form.NFD)
-        .filter { Character.getType(it) != Character.NON_SPACING_MARK.toInt() }
-        .lowercase()
+internal fun replie(texte: String): String {
+    val nfd = Normalizer.normalize(texte, Normalizer.Form.NFD)
+    val sortie = StringBuilder(nfd.length)
+    var i = 0
+    while (i < nfd.length) {
+        val code = nfd.codePointAt(i)
+        i += Character.charCount(code)
+        if (Character.getType(code) == Character.NON_SPACING_MARK.toInt()) continue
+        when (val bas = Character.toLowerCase(code)) {
+            'œ'.code -> sortie.append("oe")
+            'æ'.code -> sortie.append("ae")
+            'ß'.code -> sortie.append("ss")
+            'ø'.code -> sortie.append('o')
+            'ł'.code -> sortie.append('l')
+            'đ'.code -> sortie.append('d')
+            '\t'.code -> sortie.append(' ')
+            else -> if (Character.getType(bas) == Character.SPACE_SEPARATOR.toInt()) {
+                sortie.append(' ')
+            } else {
+                sortie.appendCodePoint(bas)
+            }
+        }
+    }
+    return sortie.toString()
+}

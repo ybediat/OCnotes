@@ -298,6 +298,24 @@
     <string name="browser_recherche_effacer">Borrar búsqueda</string>
     <string name="browser_recherche_vide_titre">Ningún resultado</string>
     <string name="browser_recherche_vide_detail">Ningún nombre coincide con su búsqueda.</string>
+    <!-- Chantier : recherche dans le contenu des notes. -->
+    <string name="browser_recherche_dans_le_texte">En el texto</string>
+    <string name="browser_recherche_vide_detail_texte">Ninguna nota contiene este texto, ni en su nombre ni en su contenido.</string>
+    <plurals name="browser_recherche_occurrences">
+        <item quantity="one">%1$d coincidencia</item>
+        <item quantity="many">%1$d coincidencias</item>
+        <item quantity="other">%1$d coincidencias</item>
+    </plurals>
+    <plurals name="browser_recherche_non_fouillees">
+        <item quantity="one">%1$d nota no descargada no se ha buscado</item>
+        <item quantity="many">%1$d notas no descargadas no se han buscado</item>
+        <item quantity="other">%1$d notas no descargadas no se han buscado</item>
+    </plurals>
+    <plurals name="browser_recherche_tronquee">
+        <item quantity="one">Lista limitada a %1$d nota: precise la búsqueda.</item>
+        <item quantity="many">Lista limitada a %1$d notas: precise la búsqueda.</item>
+        <item quantity="other">Lista limitada a %1$d notas: precise la búsqueda.</item>
+    </plurals>
 
     <!-- Créer une note demande désormais où la ranger. L\'application le
          choisissait déjà, mais sans le dire. -->
