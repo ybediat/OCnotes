@@ -278,6 +278,21 @@
     <string name="browser_recherche_effacer">Suche löschen</string>
     <string name="browser_recherche_vide_titre">Keine Ergebnisse</string>
     <string name="browser_recherche_vide_detail">Kein Name entspricht Ihrer Suche.</string>
+    <!-- Chantier : recherche dans le contenu des notes. -->
+    <string name="browser_recherche_dans_le_texte">Im Text</string>
+    <string name="browser_recherche_vide_detail_texte">Keine Notiz enthält diesen Text, weder im Namen noch im Inhalt.</string>
+    <plurals name="browser_recherche_occurrences">
+        <item quantity="one">%1$d Treffer</item>
+        <item quantity="other">%1$d Treffer</item>
+    </plurals>
+    <plurals name="browser_recherche_non_fouillees">
+        <item quantity="one">%1$d nicht heruntergeladene Notiz wurde nicht durchsucht</item>
+        <item quantity="other">%1$d nicht heruntergeladene Notizen wurden nicht durchsucht</item>
+    </plurals>
+    <plurals name="browser_recherche_tronquee">
+        <item quantity="one">Liste auf %1$d Notiz begrenzt: Suche verfeinern.</item>
+        <item quantity="other">Liste auf %1$d Notizen begrenzt: Suche verfeinern.</item>
+    </plurals>
 
     <!-- Beim Erstellen einer Notiz muss nun der Speicherort ausgewählt werden.
          Die Anwendung hat dies bereits gewählt, aber ohne es mitzuteilen. -->
@@ -601,20 +616,4 @@
     <string name="diagnostic_partage_sujet">OCnotes-Diagnosebericht</string>
     <string name="diagnostic_partage_via">Diagnosebericht teilen</string>
     <string name="diagnostic_github_copie">Bericht kopiert. Fügen Sie ihn vor der Veröffentlichung in das GitHub-Issue ein.</string>
-
-    <!-- Chantier : recherche dans le contenu des notes. -->
-    <string name="browser_recherche_dans_le_texte">Im Text</string>
-    <string name="browser_recherche_vide_detail_texte">Keine Notiz enthält diesen Text, weder im Namen noch im Inhalt.</string>
-    <plurals name="browser_recherche_occurrences">
-        <item quantity="one">%1$d Treffer</item>
-        <item quantity="other">%1$d Treffer</item>
-    </plurals>
-    <plurals name="browser_recherche_non_fouillees">
-        <item quantity="one">%1$d nicht heruntergeladene Notiz wurde nicht durchsucht</item>
-        <item quantity="other">%1$d nicht heruntergeladene Notizen wurden nicht durchsucht</item>
-    </plurals>
-    <plurals name="browser_recherche_tronquee">
-        <item quantity="one">Liste auf %1$d Notiz begrenzt: Suche verfeinern.</item>
-        <item quantity="other">Liste auf %1$d Notizen begrenzt: Suche verfeinern.</item>
-    </plurals>
 </resources>

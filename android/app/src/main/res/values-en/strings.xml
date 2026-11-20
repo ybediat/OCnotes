@@ -317,6 +317,21 @@
     <string name="browser_recherche_effacer">Clear search</string>
     <string name="browser_recherche_vide_titre">No results</string>
     <string name="browser_recherche_vide_detail">No names match your search.</string>
+    <!-- Chantier : recherche dans le contenu des notes. -->
+    <string name="browser_recherche_dans_le_texte">In the text</string>
+    <string name="browser_recherche_vide_detail_texte">No note contains this text, in its name or its content.</string>
+    <plurals name="browser_recherche_occurrences">
+        <item quantity="one">%1$d occurrence</item>
+        <item quantity="other">%1$d occurrences</item>
+    </plurals>
+    <plurals name="browser_recherche_non_fouillees">
+        <item quantity="one">%1$d note not downloaded was not searched</item>
+        <item quantity="other">%1$d notes not downloaded were not searched</item>
+    </plurals>
+    <plurals name="browser_recherche_tronquee">
+        <item quantity="one">List limited to %1$d note: refine your search.</item>
+        <item quantity="other">List limited to %1$d notes: refine your search.</item>
+    </plurals>
 
     <!-- Créer une note demande désormais où la ranger. L\'application le
          choisissait déjà, mais sans le dire. -->
@@ -620,20 +635,4 @@
     <string name="diagnostic_partage_sujet">OCnotes diagnostic report</string>
     <string name="diagnostic_partage_via">Share the diagnostic report</string>
     <string name="diagnostic_github_copie">Report copied. Paste it into the GitHub issue before publishing it.</string>
-
-    <!-- Chantier : recherche dans le contenu des notes. -->
-    <string name="browser_recherche_dans_le_texte">In the text</string>
-    <string name="browser_recherche_vide_detail_texte">No note contains this text, in its name or its content.</string>
-    <plurals name="browser_recherche_occurrences">
-        <item quantity="one">%1$d occurrence</item>
-        <item quantity="other">%1$d occurrences</item>
-    </plurals>
-    <plurals name="browser_recherche_non_fouillees">
-        <item quantity="one">%1$d note not downloaded was not searched</item>
-        <item quantity="other">%1$d notes not downloaded were not searched</item>
-    </plurals>
-    <plurals name="browser_recherche_tronquee">
-        <item quantity="one">List limited to %1$d note: refine your search.</item>
-        <item quantity="other">List limited to %1$d notes: refine your search.</item>
-    </plurals>
 </resources>
