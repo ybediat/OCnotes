@@ -1,69 +1,102 @@
-/* Script commun aux versions fr et en. La langue vient de <html lang>. */
+/* Script commun aux versions fr et en. La langue vient de <html lang>.
+   Le site reste complet sans JavaScript : ce script ne fait qu'ajouter
+   le bandeau de langue, fermer le menu mobile et préciser le lien de téléchargement. */
 (function () {
   var en = document.documentElement.lang === "en";
+  /* Adresse de release.json, à côté de ce script (fonctionne depuis / comme depuis /en/) */
+  var script = document.currentScript;
+  var releaseUrl = new URL("release.json", script ? script.src : location.href);
 
-  /* ---------- Choix de langue : mémorisé, pour que la détection ne le contredise pas ---------- */
+  /* Normalisation des textes lus : sans accents, espaces insécables remplacées, minuscules */
+  var norm = function (s) {
+    return String(s || "")
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[  ]/g, " ")
+      .toLowerCase()
+      .trim();
+  };
+
+  /* Lecture et écriture du choix de langue, protégées : le stockage peut être refusé */
+  var lireChoix = function () {
+    try { return localStorage.getItem("ocnotes-lang"); } catch (err) { return null; }
+  };
+  var ecrireChoix = function (v) {
+    try { localStorage.setItem("ocnotes-lang", v); } catch (err) { /* stockage refusé */ }
+  };
+
+  /* ---------- Choix de langue : mémorisé dès qu'on clique un lien FR/EN ou le bouton « fermer » du bandeau ---------- */
   document.addEventListener("click", function (e) {
-    var a = e.target.closest && e.target.closest("a[data-lang]");
-    if (!a) return;
-    try { localStorage.setItem("ocnotes-lang", a.getAttribute("data-lang")); } catch (err) { /* stockage refusé */ }
+    var el = e.target.closest && e.target.closest("[data-lang]");
+    if (!el) return;
+    ecrireChoix(el.getAttribute("data-lang"));
+    /* Le bouton de fermeture du bandeau ne fait que le masquer */
+    if (el.tagName === "BUTTON") {
+      var hint = document.getElementById("lang-hint");
+      if (hint) hint.hidden = true;
+    }
   });
 
-  /* ---------- Bouton de téléchargement : pointe toujours vers la dernière release ----------
-     Sans JavaScript (ou si l'API GitHub répond mal), le lien reste /releases/latest,
-     qui fonctionne aussi. Avec JavaScript, on le remplace par l'APK direct. */
-  var norm = function (s) {
-    return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[  ]/g, " ").toLowerCase().trim();
+  /* ---------- Bandeau de langue : on propose l'autre version, on ne redirige jamais ----------
+     (une redirection automatique empêcherait les robots d'indexer la page française) */
+  (function () {
+    var hint = document.getElementById("lang-hint");
+    if (!hint || lireChoix()) return;
+    var langues = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ""];
+    var francophone = Array.prototype.some.call(langues, function (l) { return norm(l).indexOf("fr") === 0; });
+    /* Page française vue par un non-francophone, ou page anglaise vue par un francophone */
+    if (langues[0] && (en ? francophone : !francophone)) hint.hidden = false;
+  })();
+
+  /* ---------- Menu mobile : se referme après un clic sur un lien interne ---------- */
+  var menu = document.getElementById("menu");
+  if (menu) {
+    menu.addEventListener("click", function (e) {
+      if (!e.target.closest("a")) return;
+      try { if (menu.matches(":popover-open")) menu.hidePopover(); } catch (err) { /* popover non géré */ }
+    });
+  }
+
+  /* ---------- Bouton de téléchargement ----------
+     Sans JavaScript, ou si release.json est absent, le lien reste /releases/latest,
+     qui fonctionne aussi. Les infos viennent d'un fichier du site lui-même :
+     aucun appel à un service tiers, donc l'adresse IP du visiteur ne sort pas. */
+  var size = function (octets) {
+    var mo = (octets / 1048576).toFixed(1);
+    return en ? mo + " MB" : mo.replace(".", ",") + " Mo";
   };
+  /* Date ISO (AAAA-MM-JJ) affichée en JJ/MM/AAAA, sans passer par Date pour éviter tout décalage de fuseau */
   var fmtDate = function (iso) {
-    var d = new Date(iso);
-    if (isNaN(d)) return "";
-    var p = function (n) { return String(n).padStart(2, "0"); };
-    return en
-      ? d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate())
-      : p(d.getDate()) + "/" + p(d.getMonth() + 1) + "/" + d.getFullYear();
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || "").trim());
+    return m ? m[3] + "/" + m[2] + "/" + m[1] : "";
   };
 
-  fetch("https://api.github.com/repos/ybediat/OCnotes/releases/latest", { headers: { Accept: "application/vnd.github+json" } })
+  fetch(releaseUrl, { cache: "no-cache" })
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function (rel) {
-      /* La release porte deux APK : celui signé (OCnotes-x.y.z.apk) et
-         l'artefact non signé de la CI (app-release-unsigned.apk), publié pour
-         la vérification de reproductibilité de F-Droid. Seul le premier
-         s'installe : on écarte tout APK « unsigned ». */
-      var apk = (rel.assets || []).filter(function (a) {
-        var n = norm(a.name);
-        return n.slice(-4) === ".apk" && n.indexOf("unsigned") === -1;
-      })[0];
-      if (!apk) return;
-      var v = String(rel.tag_name).replace(/^v/i, "");
+      /* On n'accepte qu'un APK signé : jamais l'artefact « unsigned » de la CI */
+      var nom = norm(rel.apk);
+      if (!rel.url || nom.slice(-4) !== ".apk" || nom.indexOf("unsigned") !== -1) return;
+      var v = String(rel.version || "").trim().replace(/^v/i, "");
 
-      document.getElementById("dl-btn").href = apk.browser_download_url;
+      document.getElementById("dl-btn").href = rel.url;
       document.getElementById("dl-label").textContent = (en ? "Download APK " : "Télécharger l'APK ") + v;
 
-      var size = (apk.size / 1048576).toFixed(1);
+      var date = fmtDate(rel.date);
       var meta = document.getElementById("dl-meta");
       meta.textContent = en
-        ? "Version " + v + ", released " + fmtDate(rel.published_at) + ", " + size + " MB. Android 8.0 or newer."
-        : "Version " + v + " du " + fmtDate(rel.published_at) + ", " + size.replace(".", ",") + " Mo. Android 8.0 ou plus récent.";
+        ? "Version " + v + (date ? ", released " + date : "") + ", " + size(rel.size) + ". Android 8.0 or newer."
+        : "Version " + v + (date ? " du " + date : "") + ", " + size(rel.size) + ". Android 8.0 ou plus récent.";
 
-      var sha = String(apk.digest || "").replace(/^sha256:/i, "");
-      if (sha) {
+      var sha = String(rel.sha256 || "").trim().replace(/^sha256:/i, "");
+      if (/^[0-9a-f]{64}$/i.test(sha)) {
         var p = document.createElement("p");
+        var code = document.createElement("code");
         p.className = "dl-meta";
-        p.innerHTML = "SHA-256 : <code></code>";
-        if (en) p.firstChild.nodeValue = "SHA-256: ";
-        p.querySelector("code").textContent = sha;
-        meta.insertAdjacentElement("afterend", p);
+        p.append(en ? "SHA-256: " : "SHA-256 : ", code);
+        code.textContent = sha.toLowerCase();
+        meta.after(p);
       }
     })
     .catch(function () { /* on garde le lien de repli */ });
-
-  /* ---------- Apparition au défilement (IntersectionObserver, pas d'écouteur scroll) ---------- */
-  var els = document.querySelectorAll(".reveal");
-  if (!("IntersectionObserver" in window)) { els.forEach(function (e) { e.classList.add("in"); }); return; }
-  var io = new IntersectionObserver(function (entries) {
-    entries.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); } });
-  }, { threshold: 0.15 });
-  els.forEach(function (e) { io.observe(e); });
 })();

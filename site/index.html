@@ -9,38 +9,48 @@
 <meta property="og:title" content="OCnotes, notes Markdown pour Android">
 <meta property="og:description" content="Des notes Markdown sur Android, en local ou synchronisées avec OpenCloud ou ownCloud Infinite Scale.">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://ocnotes.fr/">
+<meta property="og:locale" content="fr_FR">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:image" content="https://ocnotes.fr/assets/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Trois écrans d'OCnotes : la liste des notes, l'éditeur Markdown et l'aperçu d'un document">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="canonical" href="https://ocnotes.fr/">
 <link rel="icon" type="image/png" href="assets/favicon.png">
 <link rel="preload" href="assets/lexend-Regular.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="assets/faune-display-black.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/lexend-SemiBold.woff2" as="font" type="font/woff2" crossorigin>
 
 <link rel="stylesheet" href="assets/site.css">
 <link rel="alternate" hreflang="fr" href="https://ocnotes.fr/">
 <link rel="alternate" hreflang="en" href="https://ocnotes.fr/en/">
 <link rel="alternate" hreflang="x-default" href="https://ocnotes.fr/en/">
-<script>
-/* Visiteur non francophone : on l'envoie sur la version anglaise, sauf s'il a déjà choisi une langue. */
-(function () {
-  try {
-    var choix = localStorage.getItem("ocnotes-lang");
-    if (choix) { if (choix === "en") location.replace("en/" + location.hash); return; }
-    var langues = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ""];
-    var francophone = Array.prototype.some.call(langues, function (l) { return /^fr/i.test(l); });
-    if (langues[0] && !francophone) location.replace("en/" + location.hash);
-  } catch (e) { /* on reste en français */ }
-})();
-</script>
 </head>
 
 <body>
+
+<a class="skip-link" href="#contenu">Aller au contenu</a>
+
+<div class="lang-hint" id="lang-hint" lang="en" hidden>
+  <div class="wrap">
+    <p>This page is also available in English.</p>
+    <a href="en/" hreflang="en" data-lang="en">English version</a>
+    <button type="button" data-lang="fr">Stay in French</button>
+  </div>
+</div>
 
 <header class="nav">
   <div class="wrap">
     <a class="brand" href="#top"><img src="assets/icon.webp" alt="" width="32" height="32"><span class="wordmark">OCnotes</span></a>
     <nav class="nav-links" aria-label="Navigation principale">
-      <a href="#usages">Usages</a>
-      <a href="#fonctions">Fonctionnalités</a>
-      <a href="https://github.com/ybediat/OCnotes">GitHub</a>
+      <button class="menu-btn" type="button" popovertarget="menu" aria-controls="menu">Menu</button>
+      <ul class="menu" id="menu" popover>
+        <li><a href="#usages">Usages</a></li>
+        <li><a href="#fonctions">Fonctionnalités</a></li>
+        <li><a href="https://github.com/ybediat/OCnotes">GitHub</a></li>
+        <li class="menu-dl"><a href="#telecharger">Télécharger</a></li>
+      </ul>
       <span class="lang" role="group" aria-label="Langue">
         <a href="./" hreflang="fr" lang="fr" data-lang="fr" aria-current="true">FR</a>
         <a href="en/" hreflang="en" lang="en" data-lang="en">EN</a>
@@ -56,7 +66,7 @@
   <section class="hero">
     <div class="wrap">
       <div>
-        <h1>Vos notes Markdown, sur Android.</h1>
+        <h1 id="contenu" tabindex="-1">Vos notes Markdown, sur Android.</h1>
         <p class="lead">Un carnet léger et open source. Gardez tout sur le téléphone, ou synchronisez avec votre serveur OpenCloud ou ownCloud Infinite Scale.</p>
         <div class="cta">
           <a class="btn btn-primary" href="#telecharger">
@@ -69,7 +79,7 @@
 
       <div class="phones">
         <img class="phone p1" src="assets/liste-notes.webp" width="560" height="1234" alt="OCnotes : la liste des dossiers et des notes, avec recherche et bouton Nouvelle note">
-        <img class="phone p2" src="assets/editeur.webp" width="560" height="1234" alt="OCnotes : l'éditeur Markdown, avec sa barre de mise en forme au-dessus du clavier">
+        <img class="phone p2" src="assets/editeur.webp" fetchpriority="high" width="560" height="1234" alt="OCnotes : l'éditeur Markdown, avec sa barre de mise en forme au-dessus du clavier">
         <img class="phone p3" src="assets/apercu.webp" width="560" height="1234" alt="OCnotes : un document .odt ouvert en lecture seule">
       </div>
     </div>
@@ -94,7 +104,7 @@
   </section>
 
   <!-- ===== Fonctionnalités ===== -->
-  <section id="fonctions" style="padding-top: 1rem;">
+  <section id="fonctions" class="features">
     <div class="wrap">
       <h2 class="reveal">Fait pour écrire, pas pour s'occuper de l'outil.</h2>
       <div class="features-grid">
