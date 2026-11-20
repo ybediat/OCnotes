@@ -332,6 +332,12 @@ data class NoteBlockDto(
     val cells: List<String> = emptyList(),
     /** Ligne de tableau : c'est l'en-tête. */
     val header: Boolean = false,
+    /**
+     * Position UTF-16, dans le texte rendu, où commence le contenu du bloc :
+     * le « [ » d'une tâche. `null` quand elle est inconnue (document, texte
+     * brut, ligne de tableau) — zéro est une position valide.
+     */
+    val source: Int? = null,
 )
 
 /** Valeurs du champ `kind` d'un [NoteBlockDto]. */

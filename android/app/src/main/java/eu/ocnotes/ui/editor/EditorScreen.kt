@@ -152,8 +152,12 @@ fun EditorScreen(
     // seulement alors, l'Editable devient une String immuable à enregistrer.
     // La révision est suivie dans la coroutine, jamais lue par la composition :
     // une frappe ne recompose rien, `collectLatest` relance seulement le délai.
-    LaunchedEffect(viewModel, sessionNative, etat.apercu) {
-        if (etat.apercu) return@LaunchedEffect
+    //
+    // Le délai court aussi en aperçu : le champ y survit, masqué, et une case
+    // cochée l'y modifie. Plusieurs cases cochées d'affilée partent dans une
+    // seule écriture ; sans lui, une liste cochée puis l'application tuée
+    // serait une liste perdue.
+    LaunchedEffect(viewModel, sessionNative) {
         viewModel.revisionNative.collectLatest {
             if (!viewModel.uiState.value.modifie) return@collectLatest
             delay(DELAI_ENREGISTREMENT_MS)
@@ -338,6 +342,25 @@ fun EditorScreen(
                         blocs = etat.blocs,
                         modifier = Modifier.weight(1f),
                         echelle = tailleLecture / 100f,
+                        // Pas de case cliquable sans champ où écrire : une note
+                        // en lecture seule garde des cases décoratives.
+                        onBasculerTache = if (etat.modifiable) {
+                            { bloc ->
+                                val position = bloc.source
+                                val revision = position?.let {
+                                    sessionNative.cocherCase(viewModel.uiState.value.revisionApercu, it)
+                                }
+                                if (position != null && revision != null) {
+                                    viewModel.caseBasculee(position, revision)
+                                } else {
+                                    // Le rendu ne correspond plus au champ :
+                                    // rien n'est écrit, on le refait.
+                                    viewModel.rafraichirApercu(sessionNative.instantane())
+                                }
+                            }
+                        } else {
+                            null
+                        },
                     )
                 }
             }

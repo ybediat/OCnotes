@@ -469,7 +469,17 @@ func Render(name string, content []byte) ([]markdown.Block, error) {
 	if IsPlainText(name) {
 		return markdown.RenderPlain(text), nil
 	}
-	return markdown.Render(text), nil
+	blocks := markdown.Render(text)
+	// Les positions valent pour le texte rendu. Si le décodage l'a changé
+	// (BOM retiré, « \r\n » ramené à « \n »), elles ne désignent plus rien
+	// dans le contenu reçu, celui que le champ de saisie a sous les yeux :
+	// mieux vaut les taire que faire écrire une case à côté de son crochet.
+	if text != string(content) {
+		for i := range blocks {
+			blocks[i].Source = nil
+		}
+	}
+	return blocks, nil
 }
 
 func renderDocument(name string, content []byte) ([]markdown.Block, error) {

@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import eu.ocnotes.AppContainer
 import eu.ocnotes.R
 import eu.ocnotes.data.AppMode
+import eu.ocnotes.data.BlockKind
 import eu.ocnotes.data.FormatAction
 import eu.ocnotes.data.NoteBlockDto
 import eu.ocnotes.data.OCnotesException
@@ -78,6 +79,13 @@ data class EditorUiState(
 
     /** Blocs de l'aperçu, recalculés à chaque bascule. */
     val blocs: List<NoteBlockDto> = emptyList(),
+
+    /**
+     * Révision du champ dont [blocs] est le rendu. Une case touchée n'écrit
+     * que si le champ est encore à cette révision : sinon les positions des
+     * blocs ne désignent plus rien de sûr.
+     */
+    val revisionApercu: Long = -1,
 
     /**
      * Fichier affiché tel quel — un .txt.
@@ -195,6 +203,17 @@ internal fun brouillonApres(etat: EditorUiState, enAttente: Int): Boolean =
     etat.brouillon && (etat.modifie || enAttente > 0)
 
 /** Garde pure du chemin natif : aucune ouverture ou révision périmée n'écrit. */
+/**
+ * Les blocs après la bascule de la tâche dont la case est à [source].
+ *
+ * Seul `checked` change, sans nouveau rendu : la bascule remplace un caractère
+ * par un caractère, donc les positions de tous les blocs restent justes.
+ */
+internal fun basculerTacheDansBlocs(blocs: List<NoteBlockDto>, source: Int): List<NoteBlockDto> =
+    blocs.map { bloc ->
+        if (bloc.kind == BlockKind.TACHE && bloc.source == source) bloc.copy(checked = !bloc.checked) else bloc
+    }
+
 internal fun doitEnregistrerInstantaneNatif(
     etat: EditorUiState,
     revisionCourante: Long,
@@ -638,11 +657,42 @@ class EditorViewModel(
         }
         if (instantane == null || instantane.revision != _revisionNative.value) return
         // Le champ survit à l'aperçu, masqué : aucun détachement n'enregistre
-        // plus au passage, et l'enregistrement différé est suspendu pendant la
-        // lecture. Sans cet appel, la frappe des 700 dernières millisecondes
-        // attendrait le retour en saisie ou la sortie de l'écran.
+        // plus au passage. Sans cet appel, la frappe des 700 dernières
+        // millisecondes attendrait le délai de l'enregistrement différé alors
+        // qu'on vient de quitter la saisie.
         enregistrerInstantaneNatif(instantane, survivreEcran = false)
+        rendreApercu(instantane)
+    }
 
+    /**
+     * Une case de l'aperçu vient d'être basculée dans le champ, qui est passé à
+     * [revision]. L'aperçu suit sans nouveau rendu ; l'enregistrement, lui,
+     * part du signal de mutation du champ, comme pour une frappe.
+     */
+    fun caseBasculee(source: Int, revision: Long) {
+        _uiState.update { courant ->
+            if (!courant.apercu || !revisionNativeToujoursCourante(revision, _revisionNative.value)) {
+                courant
+            } else {
+                courant.copy(
+                    blocs = basculerTacheDansBlocs(courant.blocs, source),
+                    revisionApercu = revision,
+                )
+            }
+        }
+    }
+
+    /**
+     * Refait le rendu de l'aperçu depuis le champ, quand une case touchée n'a
+     * pas pu être écrite : le rendu affiché ne correspondait plus au texte.
+     */
+    fun rafraichirApercu(instantane: InstantaneEditeurNatif?) {
+        if (!_uiState.value.apercu || !_uiState.value.modifiable) return
+        if (instantane == null || instantane.revision != _revisionNative.value) return
+        rendreApercu(instantane)
+    }
+
+    private fun rendreApercu(instantane: InstantaneEditeurNatif) {
         viewModelScope.launch {
             try {
                 val blocs = repository.renderNote(nom, instantane.texte)
@@ -654,6 +704,7 @@ class EditorViewModel(
                             document = instantane.texte,
                             apercu = true,
                             blocs = blocs,
+                            revisionApercu = instantane.revision,
                         )
                     }
                 }
