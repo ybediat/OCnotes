@@ -608,4 +608,7 @@
     <string name="diagnostic_partage_sujet">Informe de diagnóstico de OCnotes</string>
     <string name="diagnostic_partage_via">Compartir el informe de diagnóstico</string>
     <string name="diagnostic_github_copie">Informe copiado. Péguelo en la incidencia de GitHub antes de publicarla.</string>
+
+    <!-- Chantier 6 : cases à cocher cliquables dans l’aperçu. Lu par le lecteur d’écran, qui annonce lui-même « case à cocher » et son état. -->
+    <string name="apercu_case_tache">Tarea «%1$s»</string>
 </resources>

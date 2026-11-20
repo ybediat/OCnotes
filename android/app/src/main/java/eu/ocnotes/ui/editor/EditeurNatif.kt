@@ -158,6 +158,38 @@ class SessionEditeurNatif {
         return true
     }
 
+    /**
+     * Coche ou décoche la case dont le « [ » est à [position], depuis l'aperçu.
+     *
+     * Rien n'est écrit si le champ a changé depuis le rendu affiché
+     * ([revisionAttendue]) ou s'il ne porte pas une case à cet endroit
+     * ([basculerCase]) : l'appelant refait alors le rendu. Renvoie la nouvelle
+     * révision, ou `null`.
+     *
+     * Un seul `Editable.replace`, comme une mise en forme : la pile
+     * d'annulation garde la bascule, et le `TextWatcher` signale la mutation
+     * qui programme l'enregistrement. Contrairement à [appliquerRemplacement],
+     * ni focus ni curseur : le champ est masqué sous l'aperçu, et il doit s'y
+     * retrouver tel qu'on l'a laissé — sélection, défilement compris.
+     */
+    @MainThread
+    fun cocherCase(revisionAttendue: Long, position: Int): Long? {
+        val vue = champ ?: return null
+        if (!revisionNativeToujoursCourante(revisionAttendue, revision)) return null
+        val editable = vue.text
+        val remplacement = basculerCase(editable, position) ?: return null
+        val debut = vue.selectionStart
+        val fin = vue.selectionEnd
+        editable.replace(remplacement.debut, remplacement.fin, remplacement.texte)
+        // Longueur inchangée : la sélection d'avant reste valide telle quelle.
+        if (debut >= 0 && fin >= 0) vue.setSelection(debut, fin)
+        // Le changement de texte rouvre le suivi du curseur, qui ramènerait le
+        // champ sur le curseur au prochain dessin : un retour en saisie ne
+        // retrouverait plus l'endroit où l'on lisait.
+        (vue as? ChampEditeur)?.refuserSuiviCurseur()
+        return revision
+    }
+
     @MainThread
     fun demanderFocusEtClavier(): Boolean {
         val vue = champ ?: return false
@@ -583,6 +615,11 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
      */
     private fun autoriserSuiviCurseur() {
         suiviCurseurAutorise = true
+    }
+
+    /** Retire le droit de suivi accordé par un changement fait hors de la saisie. */
+    internal fun refuserSuiviCurseur() {
+        suiviCurseurAutorise = false
     }
 
     override fun onSelectionChanged(selStart: Int, selEnd: Int) {

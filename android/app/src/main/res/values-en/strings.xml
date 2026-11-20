@@ -620,4 +620,7 @@
     <string name="diagnostic_partage_sujet">OCnotes diagnostic report</string>
     <string name="diagnostic_partage_via">Share the diagnostic report</string>
     <string name="diagnostic_github_copie">Report copied. Paste it into the GitHub issue before publishing it.</string>
+
+    <!-- Chantier 6 : cases à cocher cliquables dans l’aperçu. Lu par le lecteur d’écran, qui annonce lui-même « case à cocher » et son état. -->
+    <string name="apercu_case_tache">Task “%1$s”</string>
 </resources>

@@ -601,4 +601,7 @@
     <string name="diagnostic_partage_sujet">OCnotes-Diagnosebericht</string>
     <string name="diagnostic_partage_via">Diagnosebericht teilen</string>
     <string name="diagnostic_github_copie">Bericht kopiert. Fügen Sie ihn vor der Veröffentlichung in das GitHub-Issue ein.</string>
+
+    <!-- Chantier 6 : cases à cocher cliquables dans l’aperçu. Lu par le lecteur d’écran, qui annonce lui-même « case à cocher » et son état. -->
+    <string name="apercu_case_tache">Aufgabe „%1$s“</string>
 </resources>

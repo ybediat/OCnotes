@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
@@ -75,6 +76,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -94,7 +98,8 @@ import eu.ocnotes.ui.theme.StyleEditeur
 import kotlinx.coroutines.flow.collectLatest
 
 /**
- * Aperçu d'une note, en lecture seule.
+ * Aperçu d'une note, en lecture — à une exception près : la case d'une tâche
+ * se coche d'un toucher quand [onBasculerTache] n'est pas nul (voir [Tache]).
  *
  * # Pourquoi du Compose natif, et pas un WebView
  *
@@ -112,6 +117,8 @@ fun VueMarkdown(
     blocs: List<NoteBlockDto>,
     modifier: Modifier = Modifier,
     echelle: Float = 1f,
+    /** Reçoit la tâche dont la case est touchée ; nul sur une note non modifiable. */
+    onBasculerTache: ((NoteBlockDto) -> Unit)? = null,
 ) {
     // La loupe agit en multipliant l'échelle de police : tout le texte de
     // l'aperçu est en `sp`, donc titres, listes, code et tableaux grossissent
@@ -121,7 +128,7 @@ fun VueMarkdown(
     CompositionLocalProvider(
         LocalDensity provides Density(densite.density, densite.fontScale * echelle),
     ) {
-        ContenuMarkdown(blocs, modifier)
+        ContenuMarkdown(blocs, modifier, onBasculerTache)
     }
 }
 
@@ -129,6 +136,7 @@ fun VueMarkdown(
 private fun ContenuMarkdown(
     blocs: List<NoteBlockDto>,
     modifier: Modifier,
+    onBasculerTache: ((NoteBlockDto) -> Unit)?,
 ) {
     if (blocs.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -212,7 +220,7 @@ private fun ContenuMarkdown(
                     DisposableEffect(index) { onDispose { reperes.elements.remove(index) } }
                     Box(Modifier.onPlaced { reperes.elements[index] = it }) {
                         when (element) {
-                            is ElementApercu.Bloc -> Bloc(element.bloc)
+                            is ElementApercu.Bloc -> Bloc(element.bloc, onBasculerTache)
                             is ElementApercu.Tableau -> Tableau(element.lignes)
                         }
                     }
@@ -316,7 +324,16 @@ private suspend fun PointerInputScope.suivreSelection(
             debutGeste(appui, viewConfiguration.touchSlop)
         }
         when (debut) {
-            DebutGeste.TOUCHER -> possible(false)
+            // Un toucher pris par un enfant — la case d'une tâche — n'efface
+            // pas la sélection de Compose, qui ignore un lever consommé. Il ne
+            // doit donc pas relâcher l'épinglage non plus : la sélection
+            // survivrait sans lui, et le plantage qu'il évite reviendrait. Le
+            // même lever repasse ici à la passe finale, après les enfants.
+            DebutGeste.TOUCHER -> {
+                val consomme = awaitPointerEvent(PointerEventPass.Final).changes
+                    .any { it.id == appui.id && it.isConsumed }
+                if (!consomme) possible(false)
+            }
             DebutGeste.DEFILEMENT -> Unit
             null -> {
                 possible(true)
@@ -636,7 +653,7 @@ private fun grouperPourApercu(blocs: List<NoteBlockDto>): List<ElementApercu> {
  * le contenu selon le `kind`.
  */
 @Composable
-private fun Bloc(bloc: NoteBlockDto) {
+private fun Bloc(bloc: NoteBlockDto, onBasculerTache: ((NoteBlockDto) -> Unit)?) {
     val couleurBarre = MaterialTheme.colorScheme.outlineVariant
     Row(
         modifier = Modifier
@@ -663,7 +680,7 @@ private fun Bloc(bloc: NoteBlockDto) {
                 BlockKind.TITRE -> Titre(bloc)
                 BlockKind.PUCE -> Puce(bloc, marqueur = "•") // i18n-ok
                 BlockKind.NUMEROTE -> Puce(bloc, marqueur = "${bloc.number}.") // i18n-ok
-                BlockKind.TACHE -> Tache(bloc)
+                BlockKind.TACHE -> Tache(bloc, onBasculerTache)
                 BlockKind.CODE -> BlocDeCode(bloc)
                 BlockKind.TRAIT -> HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 BlockKind.IMAGE -> Image(bloc)
@@ -710,21 +727,50 @@ private fun Puce(bloc: NoteBlockDto, marqueur: String) {
 /**
  * Une tâche, cochée ou non.
  *
- * La case est décorative : l'aperçu est en lecture seule, et une case
- * cliquable qui modifierait la note ferait mentir le mode. `contentDescription`
- * reste nul pour la même raison — l'état est déjà porté par le texte barré.
+ * La case est le **seul** geste d'écriture de l'aperçu (décision du
+ * 15/11/2026, qui renverse la case décorative d'avant). L'exception est
+ * tenable parce que la bascule remplace un caractère par un caractère dans le
+ * champ masqué sous l'aperçu : les positions des autres blocs restent justes,
+ * l'annulation et l'enregistrement suivent le chemin d'une frappe (carnet :
+ * `ANDROID-APERCU-CASES`).
+ *
+ * Elle reste décorative sans [onBasculerTache] (note non modifiable) ou sans
+ * position source (bloc dont Go n'a pas pu garantir la case). Seule la case
+ * réagit : le libellé garde l'appui long qui ouvre la sélection. La case garde
+ * sa largeur, et c'est Compose qui étend la zone de toucher à 48 dp autour
+ * d'elle, sans déplacer le texte.
  */
 @Composable
-private fun Tache(bloc: NoteBlockDto) {
+private fun Tache(bloc: NoteBlockDto, onBasculerTache: ((NoteBlockDto) -> Unit)?) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        Icon(
-            imageVector = if (bloc.checked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-                .width(LARGEUR_MARQUEUR_DP.dp)
-                .padding(end = 6.dp, top = 2.dp),
-        )
+        val forme = Modifier
+            .width(LARGEUR_MARQUEUR_DP.dp)
+            .padding(end = 6.dp, top = 2.dp)
+        val icone = if (bloc.checked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank
+        if (onBasculerTache != null && bloc.source != null) {
+            val libelle = stringResource(R.string.apercu_case_tache, bloc.text)
+            Icon(
+                imageVector = icone,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .toggleable(
+                        value = bloc.checked,
+                        role = Role.Checkbox,
+                        onValueChange = { onBasculerTache(bloc) },
+                    )
+                    .semantics { contentDescription = libelle }
+                    .then(forme),
+            )
+        } else {
+            // `contentDescription` nul : l'état est déjà porté par le texte barré.
+            Icon(
+                imageVector = icone,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = forme,
+            )
+        }
         Text(
             text = enrichi(bloc),
             style = MaterialTheme.typography.bodyLarge,
