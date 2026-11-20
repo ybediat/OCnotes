@@ -2533,6 +2533,40 @@ func (a *App) RenderNoteJSON(name, content string) (string, error) {
 	return toJSON(versNoteBlocks(blocks))
 }
 
+// OutlineNoteJSON renvoie les seuls titres d'une note, pour son plan : même
+// analyse que RenderNoteJSON, mêmes blocs, mais rien d'autre que kind, text,
+// level et source.
+//
+// Le plan ouvert depuis la saisie rendait toute la note pour n'en garder que
+// les titres. Sur 296 ko, décoder les 1 100 blocs côté Kotlin coûtait 526 à
+// 555 ms à la première ouverture, mesuré sur le téléphone le 20/11/2026 — le
+// seuil était de 300 ms. Ici, le JSON ne porte que quelques centaines de
+// lignes courtes.
+func (a *App) OutlineNoteJSON(name, content string) (string, error) {
+	if notes.IsDocument(name) {
+		return "", fmt.Errorf("mobile: [%s] un fichier %s ne traverse pas la frontière en chaîne", CodeUnsupported, path.Ext(name))
+	}
+
+	blocks, err := notes.Render(name, []byte(content))
+	if err != nil {
+		return "", err
+	}
+
+	titres := make([]noteBlock, 0)
+	for _, b := range blocks {
+		if b.Kind != markdown.KindHeading {
+			continue
+		}
+		titres = append(titres, noteBlock{
+			Kind:   string(b.Kind),
+			Text:   b.Text,
+			Level:  b.Level,
+			Source: b.Source,
+		})
+	}
+	return toJSON(titres)
+}
+
 // RenderFileJSON prépare l'affichage d'un fichier que l'application ne sait
 // que lire.
 //

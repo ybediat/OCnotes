@@ -638,4 +638,9 @@
 
     <!-- Chantier 6 : cases à cocher cliquables dans l’aperçu. Lu par le lecteur d’écran, qui annonce lui-même « case à cocher » et son état. -->
     <string name="apercu_case_tache">Task “%1$s”</string>
+
+    <!-- Chantier 9 : plan de la note. L’entrée du menu ⋮ de l’éditeur, le titre de sa feuille, et ce qu’elle dit d’une note sans titre. -->
+    <string name="editeur_plan">Outline</string>
+    <string name="editeur_plan_titre">Note outline</string>
+    <string name="editeur_plan_vide">This note has no headings</string>
 </resources>
