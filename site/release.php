@@ -7,7 +7,8 @@
  * - Source 1 : l'API GitHub (version, date, taille, SHA-256).
  *   Source 2, si l'API refuse (fréquent sur un hébergement mutualisé, dont l'adresse IP
  *   est partagée et dépasse vite la limite de 60 appels par heure) : la page web
- *   /releases/latest et l'en-tête du fichier APK (version, taille ; pas de date ni de SHA-256).
+ *   /releases/latest (version, date, SHA-256 lu sur la ligne « SHA-256 APK : » du texte
+ *   de la release) et l'en-tête du fichier APK (taille).
  * - Si tout échoue, on renvoie la dernière réponse connue ; à défaut, une erreur 503
  *   et le site garde son lien /releases/latest.
  * - release.php?diag=1 affiche ce qui s'est passé lors de l'appel, pour le dépannage.
@@ -118,10 +119,14 @@ function depuis_api() {
     return null;
 }
 
-/* Source 2 : la page /releases/latest redirige vers /releases/tag/vX.Y.Z ; l'APK suit le nommage OCnotes-X.Y.Z.apk */
+/* Source 2 : la page /releases/latest redirige vers /releases/tag/vX.Y.Z, dont on lit :
+   - la version, dans l'adresse finale ;
+   - la date de publication, dans la première balise <relative-time datetime="…"> ;
+   - le SHA-256, sur la ligne « SHA-256 APK : … » écrite dans le texte de chaque release.
+   L'APK suit le nommage OCnotes-X.Y.Z.apk. */
 function depuis_page() {
     global $trace;
-    list($code, , $finale) = requete('https://github.com/' . DEPOT . '/releases/latest', true);
+    list($code, $html, $finale) = requete('https://github.com/' . DEPOT . '/releases/latest');
     if (!preg_match('#/releases/tag/v?([0-9][0-9A-Za-z.\-]*)$#', $finale, $m)) {
         $trace[] = "page web : pas de version trouvée dans $finale";
         return null;
@@ -129,10 +134,17 @@ function depuis_page() {
     $v   = $m[1];
     $nom = 'OCnotes-' . $v . '.apk';
     $url = PREFIXE . 'v' . $v . '/' . $nom;
+
+    $date = preg_match('#<relative-time[^>]*\bdatetime="(\d{4}-\d{2}-\d{2})#', $html, $d) ? $d[1] : '';
+    /* texte brut de la page, normalisé (accents, espaces insécables, majuscules) avant la recherche */
+    $texte = normaliser(html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    $sha   = preg_match('#sha-?256\s*apk\s*:\s*([0-9a-f]{64})\b#', $texte, $h) ? $h[1] : '';
+    $trace[] = 'page web : date ' . ($date ?: 'absente') . ', SHA-256 ' . ($sha ? 'trouvé' : 'absent');
+
     /* On vérifie que l'APK existe vraiment (premier octet seulement) et on récupère sa taille */
     list($code, , , $taille) = requete($url, false, true);
     if ($code !== 200 && $code !== 206) return null;
-    return ['version' => $v, 'date' => '', 'apk' => $nom, 'url' => $url, 'size' => max(0, $taille), 'sha256' => ''];
+    return ['version' => $v, 'date' => $date, 'apk' => $nom, 'url' => $url, 'size' => max(0, $taille), 'sha256' => $sha];
 }
 
 /* Cache encore frais : on le renvoie tel quel (sauf en mode dépannage, qui force un appel) */
