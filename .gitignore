@@ -65,3 +65,6 @@ Thumbs.db
 /.claude/
 /CLAUDE.md
 build-e2e/
+
+# Cache du relais de release du site (créé par site/release.php sur le serveur)
+/site/.release-cache.json*
