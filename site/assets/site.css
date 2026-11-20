@@ -58,9 +58,12 @@ a { color: inherit; }
 /* la cible du lien d'évitement reçoit le focus sans anneau inutile */
 h1:focus { outline: none; }
 
-/* ---------- Bandeau « autre langue » (affiché par site.js) ---------- */
-.lang-hint { background: var(--surface); border-bottom: 1px solid var(--line); font-size: .95rem; }
-.lang-hint .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.2rem; padding-block: .6rem; }
+/* ---------- Bandeau « autre langue » (affiché par site.js) ----------
+   Il flotte en bas de l'écran : comme il apparaît après le chargement,
+   le placer en haut de page décalerait tout le contenu. */
+.lang-hint { position: fixed; z-index: 30; left: 1rem; right: 1rem; bottom: 1rem; max-width: 40rem; margin-inline: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); font-size: .95rem; }
+.lang-hint .wrap { width: auto; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.2rem; padding: .7rem 1rem; }
 .lang-hint p { margin: 0; }
 .lang-hint a { font-weight: 500; }
 .lang-hint button { margin-left: auto; font: inherit; color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 8px; padding: .3rem .8rem; cursor: pointer; }
@@ -196,21 +199,32 @@ footer .wrap > span a { text-decoration: underline; }
   .modes-grid > div, .modes-grid > div + div { padding: 1.6rem 0; border-left: 0; }
   .modes-grid > div + div { border-top: 1px solid var(--line); }
   .tile-big { grid-row: auto; grid-template-columns: 1fr 140px; }
-  .nav-links { gap: .6rem; }
-  .menu-btn { display: inline-flex; }
-  .menu { margin: 0; padding: .5rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); color: var(--ink); box-shadow: var(--shadow);
-    /* sous l'en-tête par défaut, sous le bouton si le navigateur gère le positionnement par ancre */
-    position: fixed; inset: auto; right: 1rem; top: 4.5rem; top: anchor(--menu-btn bottom); margin-top: .5rem; min-width: 12rem; }
-  .menu a:not(.btn) { display: block; padding: .6rem .8rem; border-radius: 8px; color: var(--ink); font-size: 1rem; }
-  .menu a:not(.btn):hover { background: var(--surface); }
   section { padding-block: 3.5rem; }
   .download .wrap { gap: 2.5rem; }
 }
-/* très petit écran : le bouton Télécharger de l'en-tête passe dans le menu (celui du hero reste juste dessous) */
+/* ---------- Menu mobile ----------
+   Il repose sur l'attribut popover. Les navigateurs qui ne le gèrent pas (iOS < 17, Chrome < 114)
+   afficheraient la liste en permanence par-dessus la page : chez eux, on masque menu et bouton,
+   comme avant l'ajout du menu (les sections restent accessibles en faisant défiler). */
 .menu .menu-dl { display: none; }
-@media (max-width: 520px) {
-  .nav .btn-primary { display: none; }
-  .menu .menu-dl { display: list-item; }
+@supports selector(:popover-open) {
+  @media (max-width: 860px) {
+    .nav-links { gap: .6rem; }
+    .menu-btn { display: inline-flex; }
+    .menu { margin: 0; padding: .5rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); color: var(--ink); box-shadow: var(--shadow);
+      /* sous l'en-tête par défaut, sous le bouton si le navigateur gère le positionnement par ancre */
+      position: fixed; inset: auto; right: 1rem; top: 4.5rem; top: anchor(--menu-btn bottom); margin-top: .5rem; min-width: 12rem; }
+    .menu a:not(.btn) { display: block; padding: .6rem .8rem; border-radius: 8px; color: var(--ink); font-size: 1rem; }
+    .menu a:not(.btn):hover { background: var(--surface); }
+  }
+  /* très petit écran : le bouton Télécharger de l'en-tête passe dans le menu (celui du hero reste juste dessous) */
+  @media (max-width: 520px) {
+    .nav .btn-primary { display: none; }
+    .menu .menu-dl { display: list-item; }
+  }
+}
+@supports not selector(:popover-open) {
+  @media (max-width: 860px) { .menu { display: none; } }
 }
 @media (max-width: 460px) {
   .tile-big { grid-template-columns: 1fr; }

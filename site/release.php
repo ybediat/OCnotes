@@ -10,14 +10,20 @@
  *   /releases/latest (version, date, SHA-256 lu sur la ligne « SHA-256 APK : » du texte
  *   de la release) et l'en-tête du fichier APK (taille).
  * - Si tout échoue, on renvoie la dernière réponse connue ; à défaut, une erreur 503
- *   et le site garde son lien /releases/latest.
+ *   et le site garde son lien /releases/latest. Dans les deux cas, GitHub n'est plus
+ *   sollicité pendant 10 minutes (même sans cache : premier dépôt, dossier en lecture seule…).
  * - release.php?diag=1 affiche ce qui s'est passé lors de l'appel, pour le dépannage.
+ *   L'adresse est publique : elle force un nouvel appel à GitHub au plus une fois par minute,
+ *   pour que personne ne puisse épuiser le quota de l'adresse IP partagée en la rappelant en boucle.
  */
 
 const DEPOT   = 'ybediat/OCnotes';
 const DUREE   = 3600;                        // durée de vie du cache, en secondes
 const CACHE   = __DIR__ . '/.release-cache.json';
 const PREFIXE = 'https://github.com/ybediat/OCnotes/releases/download/';
+const ESSAI   = CACHE . '.essai';            // sa date de modification = dernier appel à GitHub
+const PAUSE   = 600;                         // délai minimal entre deux appels, en secondes
+const PAUSE_DIAG = 60;                       // idem quand l'appel est forcé par ?diag=1
 
 $diag  = isset($_GET['diag']);
 $trace = [];                                 // journal de dépannage, affiché seulement avec ?diag=1
@@ -124,21 +130,36 @@ function depuis_api() {
    - la date de publication, dans la première balise <relative-time datetime="…"> ;
    - le SHA-256, sur la ligne « SHA-256 APK : … » écrite dans le texte de chaque release.
    L'APK suit le nommage OCnotes-X.Y.Z.apk. */
-function depuis_page() {
+function depuis_page($ancien) {
     global $trace;
     list($code, $html, $finale) = requete('https://github.com/' . DEPOT . '/releases/latest');
-    if (!preg_match('#/releases/tag/v?([0-9][0-9A-Za-z.\-]*)$#', $finale, $m)) {
+    /* $m[1] = le tag tel quel (avec ou sans « v »), $m[2] = la version seule */
+    if (!preg_match('#/releases/tag/(v?([0-9][0-9A-Za-z.\-]*))$#i', $finale, $m)) {
         $trace[] = "page web : pas de version trouvée dans $finale";
         return null;
     }
-    $v   = $m[1];
+    $tag = $m[1];
+    $v   = $m[2];
     $nom = 'OCnotes-' . $v . '.apk';
-    $url = PREFIXE . 'v' . $v . '/' . $nom;
+    $url = PREFIXE . $tag . '/' . $nom;
 
-    $date = preg_match('#<relative-time[^>]*\bdatetime="(\d{4}-\d{2}-\d{2})#', $html, $d) ? $d[1] : '';
+    /* Date : première balise <relative-time> de la page, gardée seulement si c'est une vraie date.
+       Si GitHub change son HTML, la date est simplement omise par le site. */
+    $date = '';
+    if (preg_match('#<relative-time[^>]*\bdatetime="(\d{4})-(\d{2})-(\d{2})#', $html, $d)
+        && checkdate((int) $d[2], (int) $d[3], (int) $d[1])) {
+        $date = "$d[1]-$d[2]-$d[3]";
+    }
     /* texte brut de la page, normalisé (accents, espaces insécables, majuscules) avant la recherche */
     $texte = normaliser(html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
     $sha   = preg_match('#sha-?256\s*apk\s*:\s*([0-9a-f]{64})\b#', $texte, $h) ? $h[1] : '';
+    /* Garde-fou : la même empreinte que la version précédente trahit une ligne recopiée
+       d'une ancienne release. On ne l'affiche pas plutôt que d'afficher une empreinte fausse. */
+    if ($sha && is_array($ancien) && isset($ancien['version'], $ancien['sha256'])
+        && $ancien['version'] !== $v && $ancien['sha256'] === $sha) {
+        $trace[] = "page web : SHA-256 identique à celui de la version {$ancien['version']}, ignoré";
+        $sha = '';
+    }
     $trace[] = 'page web : date ' . ($date ?: 'absente') . ', SHA-256 ' . ($sha ? 'trouvé' : 'absent');
 
     /* On vérifie que l'APK existe vraiment (premier octet seulement) et on récupère sa taille */
@@ -147,42 +168,75 @@ function depuis_page() {
     return ['version' => $v, 'date' => $date, 'apk' => $nom, 'url' => $url, 'size' => max(0, $taille), 'sha256' => $sha];
 }
 
-/* Cache encore frais : on le renvoie tel quel (sauf en mode dépannage, qui force un appel) */
-$frais = is_file(CACHE) && (time() - filemtime(CACHE)) < DUREE;
-if (!$frais || $diag) {
+/* Lecture du cache : renvoie le tableau enregistré, ou null s'il est absent ou illisible */
+function lire_cache() {
+    $brut = is_file(CACHE) ? @file_get_contents(CACHE) : false;
+    $donnee = $brut ? json_decode($brut, true) : null;
+    return is_array($donnee) && !empty($donnee['url']) ? $donnee : null;
+}
+
+/* Âge d'un fichier en secondes (très grand s'il n'existe pas) */
+function age($fichier) {
+    clearstatcache(true, $fichier);
+    return is_file($fichier) ? time() - filemtime($fichier) : PHP_INT_MAX;
+}
+
+/* Faut-il rappeler GitHub ? Cache périmé (ou ?diag=1), et dernier appel assez ancien */
+function a_rafraichir($diag) {
+    if (!$diag && age(CACHE) < DUREE && lire_cache()) return false;
+    return age(ESSAI) >= ($diag ? PAUSE_DIAG : PAUSE);
+}
+
+if (a_rafraichir($diag)) {
     /* Verrou : un seul visiteur rafraîchit le cache, les autres lisent l'ancien */
     $verrou = @fopen(CACHE . '.lock', 'c');
     if (!$verrou) $trace[] = 'impossible de créer le verrou : dossier non accessible en écriture ?';
     if (!$verrou || flock($verrou, LOCK_EX | LOCK_NB)) {
-        $donnee = depuis_api();
-        if (!$donnee) $donnee = depuis_page();
-        if ($donnee) {
-            /* écriture atomique : fichier temporaire puis renommage */
-            $tmp = CACHE . '.tmp';
-            if (@file_put_contents($tmp, json_encode($donnee, JSON_UNESCAPED_SLASHES)) !== false && @rename($tmp, CACHE)) {
-                $trace[] = 'cache écrit';
+        /* Nouvelle vérification une fois le verrou obtenu : un autre visiteur vient peut-être de rafraîchir */
+        if (a_rafraichir($diag)) {
+            /* On note l'appel avant de le faire : succès ou échec, le suivant attendra PAUSE */
+            if (!@touch(ESSAI)) $trace[] = 'impossible de noter la date de l\'appel : GitHub sera rappelé à chaque visite';
+            $ancien = lire_cache();
+            $donnee = depuis_api();
+            if (!$donnee) $donnee = depuis_page($ancien);
+            $json = $donnee ? json_encode($donnee, JSON_UNESCAPED_SLASHES) : false;
+            if ($donnee && $json === false) $trace[] = 'réponse impossible à encoder en JSON : ' . json_last_error_msg();
+            if ($json !== false) {
+                /* écriture atomique : fichier temporaire propre à ce processus, puis renommage */
+                $tmp = CACHE . '.' . getmypid() . '.tmp';
+                if (@file_put_contents($tmp, $json) !== false && @rename($tmp, CACHE)) {
+                    $trace[] = 'cache écrit';
+                } else {
+                    @unlink($tmp);
+                    $trace[] = 'cache NON écrit : dossier non accessible en écriture';
+                    /* on sert quand même la réponse obtenue, sans cache */
+                    if (!$diag) { header('Cache-Control: no-store'); echo $json; exit; }
+                    $trace[] = 'réponse obtenue : ' . $json;
+                }
             } else {
-                $trace[] = 'cache NON écrit : dossier non accessible en écriture';
-                /* on sert quand même la réponse obtenue, sans cache */
-                if (!is_file(CACHE)) { header('Cache-Control: no-store'); echo $diag ? json_encode(['trace' => $trace, 'resultat' => $donnee], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : json_encode($donnee, JSON_UNESCAPED_SLASHES); exit; }
+                $trace[] = 'GitHub injoignable : ' . (lire_cache() ? 'ancienne réponse conservée' : 'aucune réponse à servir') . ', nouvel essai dans ' . (PAUSE / 60) . ' minutes';
             }
-        } elseif (is_file(CACHE)) {
-            /* GitHub indisponible : on garde l'ancienne réponse et on ne réessaie que dans 10 minutes */
-            @touch(CACHE, time() - DUREE + 600);
-            $trace[] = 'GitHub injoignable : ancienne réponse conservée';
+        } else {
+            $trace[] = 'un autre visiteur vient de rafraîchir le cache';
         }
         if ($verrou) flock($verrou, LOCK_UN);
+    } else {
+        $trace[] = 'rafraîchissement déjà en cours par un autre visiteur';
     }
     if ($verrou) fclose($verrou);
+} elseif ($diag) {
+    $trace[] = 'pas de nouvel appel à GitHub : le dernier date de ' . age(ESSAI) . ' s (minimum ' . PAUSE_DIAG . ' s en mode dépannage)';
 }
 
+$cache = lire_cache();
 if ($diag) {
     header('Cache-Control: no-store');
-    $trace[] = 'PHP ' . PHP_VERSION . ', cURL ' . (function_exists('curl_init') ? 'oui' : 'non') . ', allow_url_fopen ' . (ini_get('allow_url_fopen') ? 'oui' : 'non') . ', dossier inscriptible ' . (is_writable(__DIR__) ? 'oui' : 'non');
-    echo json_encode(['trace' => $trace, 'cache' => is_file(CACHE) ? json_decode(file_get_contents(CACHE), true) : null], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-} elseif (is_file(CACHE)) {
+    /* pas de version de PHP ici : l'adresse est publique */
+    $trace[] = 'cURL ' . (function_exists('curl_init') ? 'oui' : 'non') . ', allow_url_fopen ' . (ini_get('allow_url_fopen') ? 'oui' : 'non') . ', dossier inscriptible ' . (is_writable(__DIR__) ? 'oui' : 'non');
+    echo json_encode(['trace' => $trace, 'cache' => $cache], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE);
+} elseif ($cache) {
     header('Cache-Control: public, max-age=600');
-    readfile(CACHE);
+    echo json_encode($cache, JSON_UNESCAPED_SLASHES);
 } else {
     http_response_code(503);
     header('Cache-Control: no-store');
