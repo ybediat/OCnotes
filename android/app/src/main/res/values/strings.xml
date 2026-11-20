@@ -635,4 +635,20 @@
     <string name="diagnostic_partage_sujet">Rapport de diagnostic OCnotes</string>
     <string name="diagnostic_partage_via">Partager le rapport de diagnostic</string>
     <string name="diagnostic_github_copie">Rapport copié. Collez-le dans l\'issue GitHub avant de la publier.</string>
+
+    <!-- Chantier : recherche dans le contenu des notes. -->
+    <string name="browser_recherche_dans_le_texte">Dans le texte</string>
+    <string name="browser_recherche_vide_detail_texte">Aucune note ne contient ce texte, ni dans son nom ni dans son contenu.</string>
+    <plurals name="browser_recherche_occurrences">
+        <item quantity="one">%1$d occurrence</item>
+        <item quantity="other">%1$d occurrences</item>
+    </plurals>
+    <plurals name="browser_recherche_non_fouillees">
+        <item quantity="one">%1$d note non téléchargée n\'a pas été fouillée</item>
+        <item quantity="other">%1$d notes non téléchargées n\'ont pas été fouillées</item>
+    </plurals>
+    <plurals name="browser_recherche_tronquee">
+        <item quantity="one">Liste limitée à %1$d note : précisez la recherche.</item>
+        <item quantity="other">Liste limitée à %1$d notes : précisez la recherche.</item>
+    </plurals>
 </resources>

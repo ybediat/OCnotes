@@ -14,11 +14,15 @@ import eu.ocnotes.data.FolderRefDto
 import eu.ocnotes.data.OCnotesException
 import eu.ocnotes.data.OCnotesRepository
 import eu.ocnotes.data.PreferencesAffichage
+import eu.ocnotes.data.RechercheTexteDto
+import eu.ocnotes.data.ResultatTexteDto
 import eu.ocnotes.ui.common.cibleLibre
 import eu.ocnotes.ui.common.preparerDossierPartage
 import eu.ocnotes.ui.common.Texte
 import eu.ocnotes.ui.common.texte
 import eu.ocnotes.sync.SyncScheduler
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,6 +54,14 @@ data class BrowserUiState(
     val tri: Tri = Tri.DEFAUT,
     /** Filtre sur les noms affichés : ce dossier, ou toute la bibliothèque. */
     val recherche: String = "",
+    /**
+     * Réponse de Go à la recherche dans le texte, pour [recherche] et la
+     * portée affichée ; nulle tant qu'elle n'est pas arrivée, et effacée à
+     * chaque frappe : une réponse d'une requête précédente ne s'affiche jamais.
+     */
+    val rechercheTexte: RechercheTexteDto? = null,
+    /** Une recherche dans le texte est attendue (300 ms de calme) ou en cours. */
+    val rechercheTexteEnCours: Boolean = false,
     /** Arborescence ou liste plate. */
     val mode: ModeAffichage = ModeAffichage.DEFAUT,
     /** Dossiers proposés à la création d'une note. */
@@ -151,13 +163,24 @@ data class BrowserUiState(
     val entreesAffichees: List<FolderEntryDto> by lazy { classer(entrees, recherche, tri) }
 
     /**
-     * Le dossier a du contenu, mais la recherche n'en retient rien.
+     * Résultats de la recherche dans le texte, répartis entre les lignes déjà
+     * listées par leur nom (qui gagnent leur extrait) et la section « Dans le
+     * texte ».
+     */
+    val repartition: RepartitionRecherche by lazy {
+        repartirRecherche(entreesAffichees, rechercheTexte?.results.orEmpty())
+    }
+
+    /**
+     * Le dossier a du contenu, mais la recherche n'en retient rien : ni par
+     * le nom, ni dans le texte une fois Go revenu.
      *
      * Distinguer ce cas du dossier vide compte : le premier se corrige en
      * effaçant le champ, le second en créant une note.
      */
     val rechercheSansResultat: Boolean
-        get() = entrees.isNotEmpty() && entreesAffichees.isEmpty()
+        get() = entrees.isNotEmpty() && entreesAffichees.isEmpty() &&
+            repartition.dansLeTexte.isEmpty() && !rechercheTexteEnCours
 
     /**
      * Le dossier de notes est le plancher de la navigation : on ne remonte
@@ -185,6 +208,14 @@ data class BrowserUiState(
      */
     val dossierPropose: String
         get() = if (enListePlate) dernierDossier else cheminCourant
+
+    /**
+     * Portée de la recherche dans le texte, au sens de la façade : vide pour
+     * toute la bibliothèque (liste plate), le dossier affiché sinon — Go y
+     * ajoute ses sous-dossiers.
+     */
+    val porteeRecherche: String
+        get() = if (enListePlate) "" else cheminCourant
 }
 
 /** Ce que la vue doit faire une fois une opération terminée. */
@@ -369,6 +400,10 @@ class BrowserViewModel(
                 repository.refreshPending()
                 rechargerDossiers()
                 verifierSeuil()
+                // Une note a pu changer (retour de l'éditeur, synchro) : la
+                // recherche dans le texte se refait, sans effacer l'ancienne
+                // réponse, qui porte sur la même requête, d'ici là.
+                lancerRechercheTexte(delai = 0, effacer = false)
             } catch (e: OCnotesException) {
                 _uiState.update { it.copy(chargement = false, erreur = e.texte()) }
             }
@@ -436,11 +471,74 @@ class BrowserViewModel(
     }
 
     fun effacerRecherche() {
+        rechercheTexteJob?.cancel()
         _uiState.update { it.sansRecherche() }
     }
 
+    /**
+     * La frappe filtre les noms tout de suite ; la recherche dans le texte
+     * attend 300 ms de calme, et chaque frappe annule celle qui attendait.
+     */
     fun chercher(texte: String) {
         _uiState.update { it.copy(recherche = texte) }
+        lancerRechercheTexte(delai = DELAI_FRAPPE_MS, effacer = true)
+    }
+
+    /** Ouvre une note trouvée par son texte : comme un appui sur sa ligne. */
+    fun ouvrirResultat(resultat: ResultatTexteDto) {
+        _evenements.value = BrowserEvent.OuvrirNote(resultat.path)
+    }
+
+    /** Recherche dans le texte en attente, annulée par la frappe suivante. */
+    private var rechercheTexteJob: Job? = null
+
+    /** Constante du cœur, lue une fois : en dessous, seuls les noms sont filtrés. */
+    private val longueurMinTexte by lazy { repository.searchMinLength() }
+
+    /**
+     * Lance la recherche dans le texte pour la requête et la portée affichées.
+     *
+     * La portée suit le mode : toute la bibliothèque en liste plate, le
+     * dossier affiché et ses sous-dossiers en arborescence. [effacer] retire
+     * la réponse précédente tout de suite — vrai à la frappe, où elle
+     * porterait sur une autre requête.
+     *
+     * Une réponse n'est retenue que si la requête et la portée sont encore
+     * celles de l'écran : Go peut répondre après une frappe ou un changement
+     * de dossier, et son compteur de génération n'annule que les passes qu'il
+     * voit se chevaucher.
+     */
+    private fun lancerRechercheTexte(delai: Long, effacer: Boolean) {
+        rechercheTexteJob?.cancel()
+        val etat = _uiState.value
+        val requete = etat.recherche
+        val utile = requete.trim().let { it.codePointCount(0, it.length) } >= longueurMinTexte
+        if (!utile) {
+            _uiState.update { it.copy(rechercheTexte = null, rechercheTexteEnCours = false) }
+            return
+        }
+        val portee = etat.porteeRecherche
+        _uiState.update {
+            it.copy(rechercheTexteEnCours = true, rechercheTexte = if (effacer) null else it.rechercheTexte)
+        }
+        rechercheTexteJob = viewModelScope.launch {
+            delay(delai)
+            val reponse = try {
+                repository.search(requete, portee)
+            } catch (_: OCnotesException) {
+                // Sans réponse, la recherche par nom reste : rien n'est perdu,
+                // et un message pour une aide facultative serait du bruit.
+                null
+            }
+            if (reponse?.cancelled == true) return@launch
+            _uiState.update {
+                if (it.recherche != requete || it.porteeRecherche != portee) {
+                    it
+                } else {
+                    it.copy(rechercheTexte = reponse, rechercheTexteEnCours = false)
+                }
+            }
+        }
     }
 
     /**
@@ -450,7 +548,8 @@ class BrowserViewModel(
      * La laisser en place en changeant de dossier ferait apparaître un dossier
      * fraîchement ouvert comme presque vide, sans que rien ne l'explique.
      */
-    private fun BrowserUiState.sansRecherche(): BrowserUiState = copy(recherche = "")
+    private fun BrowserUiState.sansRecherche(): BrowserUiState =
+        copy(recherche = "", rechercheTexte = null, rechercheTexteEnCours = false)
 
     /**
      * Changer de dossier ou de mode d'affichage vide aussi la sélection : ses
@@ -458,7 +557,7 @@ class BrowserViewModel(
      * sur des lignes que l'utilisateur ne voit plus.
      */
     private fun BrowserUiState.sansRechercheNiSelection(): BrowserUiState =
-        copy(recherche = "", selection = emptySet())
+        sansRecherche().copy(selection = emptySet())
 
     // --- Sélection multiple ----------------------------------------------------
 
@@ -780,6 +879,9 @@ class BrowserViewModel(
     }
 
     companion object {
+        /** Calme attendu après la dernière frappe avant de fouiller le texte. */
+        private const val DELAI_FRAPPE_MS = 300L
+
         fun factory(container: AppContainer): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 BrowserViewModel(

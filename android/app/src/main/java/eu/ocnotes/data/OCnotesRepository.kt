@@ -696,6 +696,23 @@ class OCnotesRepository(
     suspend fun folders(): List<FolderRefDto> =
         callJson { it.foldersJSON() }
 
+    /**
+     * Cherche [query] dans le texte des notes de [dir] et de ses sous-dossiers
+     * ([dir] vide : toute la bibliothèque). Sans réseau : seules les notes
+     * déjà sur l'appareil sont lues, les autres sont comptées dans `skipped`.
+     */
+    suspend fun search(query: String, dir: String): RechercheTexteDto {
+        val debut = System.nanoTime()
+        val reponse: RechercheTexteDto = callJson { it.searchJSON(query, dir) }
+        // Durée et volume seulement : ni le terme ni les extraits ne vont au
+        // journal. Sert à la mesure sur téléphone (seuil de 500 ms).
+        Log.i(TAG, "recherche texte : ${(System.nanoTime() - debut) / 1_000_000} ms, ${reponse.results.size} trouvées, ${reponse.skipped} non fouillées, annulée=${reponse.cancelled}") // i18n-ok : mesure
+        return reponse
+    }
+
+    /** Longueur de requête à partir de laquelle [search] fouille le texte. */
+    fun searchMinLength(): Int = Mobile.searchMinLength().toInt()
+
     /** Droits connus d'un chemin, servis depuis l'index local sans réseau. */
     suspend fun capabilities(path: String): CapabilitiesDto =
         callJson { it.capabilitiesJSON(path) }

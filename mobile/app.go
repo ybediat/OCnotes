@@ -33,6 +33,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ybediat/OpenNote/internal/charset"
@@ -98,6 +99,15 @@ type App struct {
 	// ReadNote, pour que WriteNote les lui rende (voir rememberFormat). Sous
 	// editsMu, pour la même raison que edits.
 	formats map[string]noteFormat
+
+	// rechercheGen numérote les recherches dans le texte (voir SearchJSON) :
+	// une passe qui voit le compteur bouger sait qu'une frappe plus récente
+	// l'a rendue inutile, et s'arrête.
+	rechercheGen atomic.Uint64
+
+	// apresNoteFouillee, nul hors des tests, est appelé après chaque note
+	// fouillée : de quoi lancer une seconde recherche au milieu de la première.
+	apresNoteFouillee func()
 }
 
 // NewApp ouvre l'application dans un dossier de données.

@@ -124,6 +124,35 @@ data class FolderListingDto(
     val canCreateFolder: Boolean = true,
 )
 
+/** Une note dont le texte contient la requête (`App.searchJSON`). */
+@Serializable
+data class ResultatTexteDto(
+    val path: String = "",
+    val name: String = "",
+    val display: String = "",
+    /** Nombre d'occurrences dans toute la note. */
+    val count: Int = 0,
+    /** Ligne de la première occurrence, bornée, avec ellipses si coupée. */
+    val excerpt: String = "",
+    /** Bornes du terme dans [excerpt], en unités UTF-16 : celles de Kotlin. */
+    val start: Int = 0,
+    val end: Int = 0,
+)
+
+/** Réponse de `App.searchJSON(query, dir)`. */
+@Serializable
+data class RechercheTexteDto(
+    /** La requête telle qu'envoyée : sert à écarter une réponse périmée. */
+    val query: String = "",
+    val results: List<ResultatTexteDto> = emptyList(),
+    /** Notes de la portée non fouillées : absentes de l'appareil. */
+    val skipped: Int = 0,
+    /** La recherche s'est arrêtée à 50 notes trouvées. */
+    val truncated: Boolean = false,
+    /** Une recherche plus récente a rendu celle-ci inutile. */
+    val cancelled: Boolean = false,
+)
+
 /**
  * Un dossier proposé comme destination, tel que `App.foldersJSON()` le rend.
  *
