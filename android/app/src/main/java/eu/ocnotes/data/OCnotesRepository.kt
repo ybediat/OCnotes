@@ -923,6 +923,14 @@ class OCnotesRepository(
         callJson { it.renderNoteJSON(name, content) }
 
     /**
+     * Les seuls titres d'une note, pour son plan ouvert depuis la saisie : la
+     * même analyse que [renderNote], sans les autres blocs. Décoder ceux-ci
+     * pour les jeter coûtait plus d'une demi-seconde sur 296 ko.
+     */
+    suspend fun outlineNote(name: String, content: String): List<NoteBlockDto> =
+        callJson { it.outlineNoteJSON(name, content) }
+
+    /**
      * Blocs d'affichage d'un document Office, lu et analysé côté Go.
      *
      * Le fichier ne traverse jamais la frontière comme une chaîne : un .docx

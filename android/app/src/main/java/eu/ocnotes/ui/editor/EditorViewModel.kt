@@ -766,8 +766,9 @@ class EditorViewModel(
     }
 
     /**
-     * Ouvre le plan depuis la saisie : le texte du champ est rendu comme pour
-     * la bascule vers l'aperçu, hors du thread principal, et le plan n'est
+     * Ouvre le plan depuis la saisie : Go analyse le texte du champ comme pour
+     * la bascule vers l'aperçu, mais n'en renvoie que les titres
+     * (`OutlineNoteJSON`), décodés hors du thread principal ; le plan n'est
      * publié que si le champ n'a pas bougé entre-temps. [repere] est la
      * position du champ où l'on se trouve (voir `SessionEditeurNatif.repereVisible`).
      *
@@ -783,7 +784,9 @@ class EditorViewModel(
         calculPlan = viewModelScope.launch {
             val debut = System.nanoTime()
             try {
-                val blocs = repository.renderNote(nom, instantane.texte)
+                // Les titres seuls : le rendu complet faisait décoder ~1 100
+                // blocs pour en garder 300, plus d'une demi-seconde sur 296 ko.
+                val blocs = repository.outlineNote(nom, instantane.texte)
                 if (!revisionNativeToujoursCourante(instantane.revision, _revisionNative.value)) return@launch
                 val entrees = planDepuisBlocs(blocs).filter { it.source != null }
                 Log.i(TAG, "plan en saisie : ${(System.nanoTime() - debut) / 1_000_000} ms, ${instantane.texte.length} caractères, ${entrees.size} titres") // i18n-ok : mesure

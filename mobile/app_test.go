@@ -985,3 +985,66 @@ func TestPrepareEditJSONMotDemesureResteNonModifiable(t *testing.T) {
 		}
 	}
 }
+
+// Le plan doit voir exactement les titres que l'aperçu voit : même texte,
+// même niveau, même position. Un `#` dans un bloc de code n'en est pas un.
+func TestOutlineNoteJSONMemesTitresQueLeRendu(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	contenu := "😀 intro\n\n## Deux **gras**\n\n```\n# pas un titre\n```\n\n| a |\n|---|\n| 1 |\n\n#### Quatre\n\nSetext\n======\n"
+	rendu, err := app.RenderNoteJSON("note.md", contenu)
+	if err != nil {
+		t.Fatalf("RenderNoteJSON: %v", err)
+	}
+	var blocs []noteBlock
+	decodeJSON(t, rendu, &blocs)
+	var attendus []noteBlock
+	for _, b := range blocs {
+		if b.Kind == "heading" {
+			attendus = append(attendus, noteBlock{Kind: b.Kind, Text: b.Text, Level: b.Level, Source: b.Source})
+		}
+	}
+
+	raw, err := app.OutlineNoteJSON("note.md", contenu)
+	if err != nil {
+		t.Fatalf("OutlineNoteJSON: %v", err)
+	}
+	var titres []noteBlock
+	decodeJSON(t, raw, &titres)
+
+	if len(titres) != 3 || len(attendus) != 3 {
+		t.Fatalf("titres = %+v ; attendus = %+v", titres, attendus)
+	}
+	for i := range titres {
+		g, w := titres[i], attendus[i]
+		if g.Kind != w.Kind || g.Text != w.Text || g.Level != w.Level || g.Source == nil || w.Source == nil || *g.Source != *w.Source || len(g.Spans) != 0 {
+			t.Errorf("titre %d = %+v (source %v), attendu %+v (source %v)", i, g, g.Source, w, w.Source)
+		}
+	}
+	// « 😀 intro\n\n## » : 2 + 6 + 2 unités UTF-16, puis « ## ».
+	if *titres[0].Source != 13 {
+		t.Errorf("source du premier titre = %d, attendu 13", *titres[0].Source)
+	}
+}
+
+func TestOutlineNoteJSONSansTitreRendUnTableauVide(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	for _, nom := range []string{"note.md", "notes.txt"} {
+		raw, err := app.OutlineNoteJSON(nom, "# dièse\n\ntexte\n")
+		if err != nil {
+			t.Fatalf("OutlineNoteJSON(%s): %v", nom, err)
+		}
+		if nom == "notes.txt" && raw != "[]" {
+			t.Errorf("%s : %s ; un .txt n'a pas de titre", nom, raw)
+		}
+	}
+	if _, err := app.OutlineNoteJSON("doc.docx", "x"); err == nil {
+		t.Error("un document doit être refusé, comme pour RenderNoteJSON")
+	}
+}
