@@ -72,7 +72,9 @@ Avant de publier un binaire :
 - notez les changements visibles par les utilisateurs ;
 - assurez-vous que les mises à jour utilisent toujours la même clé de signature.
 - le bouton de téléchargement du site se met à jour seul (`site/release.php`,
-  cache d'une heure) : publiez l'APK signé sous le nom `OCnotes-<version>.apk`.
+  cache d'une heure) : publiez l'APK signé sous le nom `OCnotes-<version>.apk`
+  et gardez dans le texte de la release la ligne `SHA-256 APK : <empreinte>`,
+  que le site relit quand l'API GitHub refuse de répondre.
 
 Ne publiez aucune clé ni aucun mot de passe dans les artefacts de CI, les logs,
 les issues ou les releases.
