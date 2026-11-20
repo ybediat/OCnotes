@@ -3,6 +3,7 @@ package markdown
 import (
 	"strings"
 	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -85,6 +86,16 @@ type Block struct {
 	Lang    string   // bloc de code : le langage annoncé, s'il y en a un
 	Cells   []string // ligne de tableau
 	Header  bool     // ligne de tableau : c'est l'en-tête
+
+	// Source est la position, en unités UTF-16 du texte rendu, où commence le
+	// contenu du bloc : le « [ » de la case pour une tâche, le premier
+	// caractère du texte pour un titre ou un paragraphe. Elle sert à écrire
+	// dans le champ depuis l'aperçu (case cochée) et à y sauter (plan).
+	//
+	// nil quand la position est inconnue ou douteuse — bloc de document, de
+	// texte brut, ligne de tableau. Un pointeur et non un entier : zéro est une
+	// position valide, celle d'une tâche en tête de note.
+	Source *int
 }
 
 // parser est construit une fois : goldmark est sûr en usage concurrent, et
@@ -104,7 +115,7 @@ func Render(source string) []Block {
 		return nil
 	}
 	src := []byte(source)
-	r := &renderer{src: src}
+	r := &renderer{src: src, pos: positions{src: src}}
 	r.walk(parser.Parser().Parse(text.NewReader(src)), blockCtx{})
 	return r.out
 }
@@ -201,6 +212,70 @@ func (c blockCtx) quoted() blockCtx { c.quote++; return c }
 type renderer struct {
 	src []byte
 	out []Block
+	pos positions
+}
+
+// positions convertit les offsets en octets de goldmark en unités UTF-16.
+//
+// La conversion est cumulative : les blocs sont rendus dans l'ordre de la
+// source, donc chaque question reprend là où la précédente s'est arrêtée, et
+// toute la note se parcourt une seule fois. Recompter depuis le début à
+// chaque bloc rendrait Render quadratique sur la note de 295 ko.
+type positions struct {
+	src   []byte
+	octet int // dernier offset converti, en octets
+	unite int // le même, en unités UTF-16
+}
+
+func (p *positions) unites(octet int) int {
+	// Un retour en arrière n'arrive pas dans un parcours ordonné ; s'il
+	// arrivait, repartir du début reste juste, seulement plus lent.
+	if octet < p.octet {
+		p.octet, p.unite = 0, 0
+	}
+	for p.octet < octet && p.octet < len(p.src) {
+		r, taille := utf8.DecodeRune(p.src[p.octet:])
+		// Un octet invalide devient U+FFFD, une unité : c'est ce que fait la
+		// conversion d'une chaîne Go vers Java.
+		p.unite += utf16.RuneLen(r)
+		p.octet += taille
+	}
+	return p.unite
+}
+
+// debut renvoie la position UTF-16 où commence le texte d'un bloc, ou nil
+// quand le bloc n'a aucune ligne (titre vide).
+func (r *renderer) debut(n ast.Node) *int {
+	lignes := n.Lines()
+	if lignes == nil || lignes.Len() == 0 {
+		return nil
+	}
+	u := r.pos.unites(lignes.At(0).Start)
+	return &u
+}
+
+// caseSource renvoie la position du « [ » d'une case à cocher, ou nil si la
+// source ne montre pas « [ », un caractère, « ] » à cet endroit.
+//
+// C'est la garde de fabrication : la bascule écrira un caractère à
+// position+1, et une position douteuse ferait écrire au mauvais endroit dans
+// la vraie note. Mieux vaut une case qui reste décorative.
+func (r *renderer) caseSource(n ast.Node) *int {
+	lignes := n.Lines()
+	if lignes == nil || lignes.Len() == 0 {
+		return nil
+	}
+	o := lignes.At(0).Start
+	if o+2 >= len(r.src) || r.src[o] != '[' || r.src[o+2] != ']' {
+		return nil
+	}
+	switch r.src[o+1] {
+	case ' ', 'x', 'X':
+	default:
+		return nil
+	}
+	u := r.pos.unites(o)
+	return &u
 }
 
 func (r *renderer) walk(n ast.Node, ctx blockCtx) {
@@ -212,12 +287,12 @@ func (r *renderer) walk(n ast.Node, ctx blockCtx) {
 func (r *renderer) node(n ast.Node, ctx blockCtx) {
 	switch v := n.(type) {
 	case *ast.Heading:
-		r.inline(v, Block{Kind: KindHeading, Level: v.Level, Quote: ctx.quote})
+		r.inline(v, Block{Kind: KindHeading, Level: v.Level, Quote: ctx.quote, Source: r.debut(v)})
 
 	case *ast.Paragraph:
-		r.inline(v, Block{Kind: KindParagraph, Depth: ctx.depth, Quote: ctx.quote})
+		r.inline(v, Block{Kind: KindParagraph, Depth: ctx.depth, Quote: ctx.quote, Source: r.debut(v)})
 	case *ast.TextBlock:
-		r.inline(v, Block{Kind: KindParagraph, Depth: ctx.depth, Quote: ctx.quote})
+		r.inline(v, Block{Kind: KindParagraph, Depth: ctx.depth, Quote: ctx.quote, Source: r.debut(v)})
 
 	case *ast.FencedCodeBlock:
 		r.push(Block{
@@ -272,9 +347,10 @@ func (r *renderer) item(item ast.Node, kind Kind, number int, ctx blockCtx) {
 		if !marque {
 			switch c.(type) {
 			case *ast.TextBlock, *ast.Paragraph:
-				tpl := Block{Kind: kind, Number: number, Depth: ctx.depth, Quote: ctx.quote}
+				tpl := Block{Kind: kind, Number: number, Depth: ctx.depth, Quote: ctx.quote, Source: r.debut(c)}
 				if checked, ok := taskState(c); ok {
 					tpl.Kind, tpl.Checked, tpl.Number = KindTask, checked, 0
+					tpl.Source = r.caseSource(c)
 				}
 				r.inline(c, tpl)
 				marque = true
@@ -318,6 +394,9 @@ func (r *renderer) inline(n ast.Node, tpl Block) {
 		if img, ok := c.(*ast.Image); ok {
 			r.pushInline(b, tpl)
 			b = &inlineBuilder{}
+			// La position ne vaut que pour le premier morceau : ce qui suit
+			// l'image commence ailleurs, et on ne sait pas où sans recompter.
+			tpl.Source = nil
 			r.push(Block{Kind: KindImage, Text: altText(img, r.src), Depth: tpl.Depth, Quote: tpl.Quote})
 			continue
 		}

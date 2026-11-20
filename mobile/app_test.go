@@ -722,6 +722,39 @@ func TestRenderNoteJSONMarkdown(t *testing.T) {
 	}
 }
 
+// La position d'une case traverse la frontière en unités UTF-16 du texte
+// reçu : c'est là que l'aperçu écrira le « x ».
+func TestRenderNoteJSONPositionDesCases(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	raw, err := app.RenderNoteJSON("note.md", "😀\n\n- [ ] pain\n")
+	if err != nil {
+		t.Fatalf("RenderNoteJSON: %v", err)
+	}
+	if !strings.Contains(raw, `"source":6`) {
+		t.Errorf("JSON = %s ; attendu \"source\":6 sur la tâche", raw)
+	}
+	var blocks []noteBlock
+	decodeJSON(t, raw, &blocks)
+	if len(blocks) != 2 || blocks[1].Kind != "task" || blocks[1].Source == nil || *blocks[1].Source != 6 {
+		t.Fatalf("blocs = %+v", blocks)
+	}
+
+	// Un texte que le décodage modifie (fins de ligne, BOM) n'a plus les
+	// positions de celui que Kotlin a sous la main : aucune n'est émise,
+	// plutôt qu'une position qui ferait écrire à côté de la case.
+	raw, err = app.RenderNoteJSON("note.md", "titre\r\n\r\n- [ ] pain\r\n")
+	if err != nil {
+		t.Fatalf("RenderNoteJSON: %v", err)
+	}
+	if strings.Contains(raw, `"source"`) {
+		t.Errorf("JSON = %s ; aucune position attendue sur un texte en CRLF", raw)
+	}
+}
+
 // C'est le nom qui décide de l'interprétation, pas le contenu.
 func TestRenderNoteJSONTexteBrut(t *testing.T) {
 	app, err := NewApp(t.TempDir())
