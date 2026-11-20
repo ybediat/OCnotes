@@ -120,6 +120,33 @@ func TestSourceTacheApresImageEnLigne(t *testing.T) {
 	verifierCases(t, jetons, 1)
 }
 
+// Une image au milieu d'une tâche la coupe en deux morceaux : les deux
+// portent la position de la même case, pour basculer ensemble.
+func TestSourceTacheCoupeeParUneImage(t *testing.T) {
+	tt := verifierCases(t, "- [ ] avant ![i](ocnotes-image:1) après\n", 2)
+	if *tt[0].Source != 2 || *tt[1].Source != 2 {
+		t.Errorf("positions = %d, %d ; attendu 2, 2", *tt[0].Source, *tt[1].Source)
+	}
+}
+
+// Une tâche qui commence par une image n'a pas de premier morceau (il est
+// vide) : le morceau qui suit l'image garde quand même la case.
+func TestSourceTacheQuiCommenceParUneImage(t *testing.T) {
+	tt := verifierCases(t, "- [ ] ![i](ocnotes-image:1) après\n", 1)
+	if *tt[0].Source != 2 {
+		t.Errorf("position = %d ; attendu 2", *tt[0].Source)
+	}
+}
+
+// Un paragraphe coupé par une image ne garde sa position que sur le premier
+// morceau : la suite commence ailleurs.
+func TestSourceParagrapheCoupeParUneImage(t *testing.T) {
+	blocs := Render("avant ![i](ocnotes-image:1) après\n")
+	if len(blocs) != 3 || blocs[0].Source == nil || blocs[2].Source != nil {
+		t.Fatalf("blocs = %+v", blocs)
+	}
+}
+
 // Un bloc sans position connue n'en porte aucune : zéro est une position
 // valide, l'absence se dit par nil.
 func TestSourceAbsenteSansPosition(t *testing.T) {

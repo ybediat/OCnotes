@@ -74,4 +74,19 @@ class CaseACocherTest {
         // Une position inconnue ne touche à rien.
         assertEquals(blocs, basculerTacheDansBlocs(blocs, 99))
     }
+
+    // Une tâche coupée par une image arrive en deux morceaux qui portent la
+    // même case : ils basculent ensemble, et rien d'autre ne bouge.
+    @Test
+    fun lesMorceauxDUneTacheBasculentEnsemble() {
+        val blocs = listOf(
+            NoteBlockDto(kind = BlockKind.TACHE, text = "avant ", source = 2),
+            NoteBlockDto(kind = BlockKind.IMAGE, text = "photo"),
+            NoteBlockDto(kind = BlockKind.TACHE, text = " après", source = 2),
+            NoteBlockDto(kind = BlockKind.TACHE, text = "autre", source = 40),
+        )
+        val apres = basculerTacheDansBlocs(blocs, 2)
+        assertEquals(listOf(true, false, true, false), apres.map { it.checked })
+        assertEquals(blocs[3], apres[3])
+    }
 }

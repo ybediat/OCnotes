@@ -394,9 +394,17 @@ func (r *renderer) inline(n ast.Node, tpl Block) {
 		if img, ok := c.(*ast.Image); ok {
 			r.pushInline(b, tpl)
 			b = &inlineBuilder{}
-			// La position ne vaut que pour le premier morceau : ce qui suit
-			// l'image commence ailleurs, et on ne sait pas où sans recompter.
-			tpl.Source = nil
+			// La position d'un titre ou d'un paragraphe ne vaut que pour le
+			// premier morceau : ce qui suit l'image commence ailleurs, et on
+			// ne sait pas où sans recompter. Celle d'une tâche est celle de
+			// sa case, commune à tous ses morceaux : chacun la porte, pour
+			// que toucher l'un ou l'autre bascule la même case, et que les
+			// morceaux basculent ensemble. Sans cela, une tâche qui commence
+			// par une image (premier morceau vide, donc jamais émis) n'avait
+			// plus aucune case cliquable.
+			if tpl.Kind != KindTask {
+				tpl.Source = nil
+			}
 			r.push(Block{Kind: KindImage, Text: altText(img, r.src), Depth: tpl.Depth, Quote: tpl.Quote})
 			continue
 		}
