@@ -2,6 +2,21 @@ package eu.ocnotes.ui.editor
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.text.font.FontWeight
+import eu.ocnotes.data.BlockKind
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -176,6 +191,54 @@ fun EditorScreen(
     }
     BackHandler(onBack = quitter)
 
+    // L'état de la liste de l'aperçu, levé ici pour que le plan sache ce
+    // qu'elle montre et puisse la faire défiler. Une liste neuve à chaque
+    // entrée en aperçu, comme quand l'aperçu la créait lui-même.
+    val etatListeApercu = rememberSaveable(etat.apercu, etat.chargements, saver = LazyListState.Saver) {
+        LazyListState()
+    }
+    val plan by viewModel.plan.collectAsStateWithLifecycle()
+    val portee = rememberCoroutineScope()
+
+    // Le plan se demande là où l'on est : en aperçu, les blocs affichés
+    // suffisent ; en saisie, le texte du champ est rendu à la demande.
+    val ouvrirPlan: () -> Unit = {
+        if (viewModel.uiState.value.apercu) {
+            viewModel.ouvrirPlanApercu(etatListeApercu.firstVisibleItemIndex)
+        } else {
+            sessionNative.repereVisible()?.let { repere ->
+                viewModel.ouvrirPlanSaisie(sessionNative.instantane(), repere)
+            }
+        }
+    }
+    plan?.let { ouvert ->
+        FeuillePlan(
+            plan = ouvert,
+            onFermer = viewModel::fermerPlan,
+            onChoisir = { entree ->
+                viewModel.fermerPlan()
+                if (ouvert.enApercu) {
+                    // Une case cochée ne change que l'état d'une tâche : les
+                    // indices restent bons. Un bloc qui n'est plus un titre
+                    // dit que l'aperçu a été rendu de nouveau : plan à refaire.
+                    val blocs = viewModel.uiState.value.blocs
+                    if (blocs.getOrNull(entree.indiceBloc)?.kind == BlockKind.TITRE) {
+                        portee.launch { etatListeApercu.scrollToItem(indiceElement(blocs, entree.indiceBloc)) }
+                    } else {
+                        ouvrirPlan()
+                    }
+                } else {
+                    val source = entree.source
+                    if (source != null && !sessionNative.sauterVers(ouvert.revision, source)) {
+                        // Le champ a bougé depuis le rendu : la position ne
+                        // désigne plus le titre. On refait le plan.
+                        ouvrirPlan()
+                    }
+                }
+            },
+        )
+    }
+
     // Taille du texte de l'aperçu, commune à toutes les notes : lue
     // directement dans les préférences, comme la police dans `MainActivity`.
     val preferences = LocalContext.current.appContainer.preferencesAffichage
@@ -258,15 +321,19 @@ fun EditorScreen(
                         }
                     }
 
-                    // Seulement quand l'encodage a été choisi contre l'avis de
-                    // la détection : c'est l'annulation de « Ouvrir quand même ».
-                    if (etat.encodageForce) {
-                        MenuEncodage(
+                    // Le plan : sur ce qui a des titres à montrer, donc pas sur
+                    // un .txt, où un `#` n'est qu'un dièse. Le retour à la
+                    // détection, seulement quand l'encodage a été choisi contre
+                    // son avis : c'est l'annulation de « Ouvrir quand même ».
+                    val planPossible = etat.charge && !etat.chargement && !etat.texteBrut
+                    if (planPossible || etat.encodageForce) {
+                        MenuEditeur(
+                            onPlan = ouvrirPlan.takeIf { planPossible },
                             onRevenirALaDetection = {
                                 viewModel.revenirALaDetection(
                                     sessionNative.instantane() ?: dernierInstantaneNatif,
                                 )
-                            },
+                            }.takeIf { etat.encodageForce },
                         )
                     }
                 },
@@ -342,6 +409,7 @@ fun EditorScreen(
                         blocs = etat.blocs,
                         modifier = Modifier.weight(1f),
                         echelle = tailleLecture / 100f,
+                        etatListe = etatListeApercu,
                         // Pas de case cliquable sans champ où écrire : une note
                         // en lecture seule garde des cases décoratives.
                         onBasculerTache = if (etat.modifiable) {
@@ -591,26 +659,127 @@ private fun BandeauLectureSeule(
     }
 }
 
-/** Menu de l'éditeur, réduit pour l'instant au retour à la détection d'encodage. */
+/**
+ * Le menu ⋮ de l'éditeur. Une entrée nulle n'est pas proposée ; l'écran ne
+ * compose pas le menu quand aucune ne l'est.
+ */
 @Composable
-private fun MenuEncodage(onRevenirALaDetection: () -> Unit) {
+private fun MenuEditeur(
+    onPlan: (() -> Unit)?,
+    onRevenirALaDetection: (() -> Unit)?,
+) {
     var ouvert by remember { mutableStateOf(false) }
-    IconButton(onClick = { ouvert = true }) {
-        Icon(
-            imageVector = Icons.Default.MoreVert,
-            contentDescription = stringResource(R.string.editeur_plus_actions),
-        )
-    }
-    DropdownMenu(expanded = ouvert, onDismissRequest = { ouvert = false }) {
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.editeur_detection_automatique)) },
-            onClick = {
-                ouvert = false
-                onRevenirALaDetection()
-            },
-        )
+    Box {
+        IconButton(onClick = { ouvert = true }) {
+            Icon(
+                imageVector = Icons.Default.MoreVert,
+                contentDescription = stringResource(R.string.editeur_plus_actions),
+            )
+        }
+        DropdownMenu(expanded = ouvert, onDismissRequest = { ouvert = false }) {
+            onPlan?.let { action ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.editeur_plan)) },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+                    onClick = {
+                        ouvert = false
+                        action()
+                    },
+                )
+            }
+            onRevenirALaDetection?.let { action ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.editeur_detection_automatique)) },
+                    onClick = {
+                        ouvert = false
+                        action()
+                    },
+                )
+            }
+        }
     }
 }
+
+/**
+ * La feuille du plan : les titres dans l'ordre, indentés selon leur niveau,
+ * une ligne chacun. Elle s'ouvre défilée sur la section où l'on se trouve, mise
+ * en évidence ; une note sans titre le dit plutôt que de montrer une feuille
+ * vide.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FeuillePlan(
+    plan: PlanOuvert,
+    onFermer: () -> Unit,
+    onChoisir: (EntreePlan) -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onFermer) {
+        Text(
+            text = stringResource(R.string.editeur_plan_titre),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
+        )
+        if (plan.entrees.isEmpty()) {
+            Text(
+                text = stringResource(R.string.editeur_plan_vide),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 32.dp),
+            )
+            return@ModalBottomSheet
+        }
+        // Deux lignes de contexte au-dessus de la section courante : on voit
+        // d'où l'on vient, pas seulement où l'on est.
+        val etatListe = rememberLazyListState(
+            initialFirstVisibleItemIndex = (plan.courante - LIGNES_AVANT_COURANTE).coerceAtLeast(0),
+        )
+        // L'application est bord à bord : sans la hauteur de la barre de
+        // navigation, les derniers titres passaient sous ses boutons.
+        val barreNavigation = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        LazyColumn(
+            state = etatListe,
+            contentPadding = PaddingValues(bottom = 24.dp + barreNavigation),
+        ) {
+            itemsIndexed(plan.entrees) { index, entree ->
+                val courante = index == plan.courante
+                Text(
+                    text = entree.texte,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = if (entree.niveau == 0 || courante) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (courante) {
+                        MaterialTheme.colorScheme.onSecondaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (courante) {
+                                Modifier.background(MaterialTheme.colorScheme.secondaryContainer)
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .clickable { onChoisir(entree) }
+                        .padding(
+                            start = 24.dp + RETRAIT_NIVEAU_PLAN * entree.niveau,
+                            end = 24.dp,
+                            top = 12.dp,
+                            bottom = 12.dp,
+                        ),
+                )
+            }
+        }
+    }
+}
+
+/** Retrait d'un niveau de titre dans la feuille du plan. */
+private val RETRAIT_NIVEAU_PLAN = 16.dp
+
+/** Entrées montrées au-dessus de la section courante à l'ouverture du plan. */
+private const val LIGNES_AVANT_COURANTE = 2
 
 /**
  * Calme exigé avant l'enregistrement différé, en millisecondes.

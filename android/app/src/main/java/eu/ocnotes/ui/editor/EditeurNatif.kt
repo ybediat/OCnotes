@@ -223,6 +223,60 @@ class SessionEditeurNatif {
         return true
     }
 
+    /**
+     * L'endroit du texte où l'on se trouve, pour le plan : la ligne du curseur
+     * si elle est à l'écran, sinon la première ligne visible — on lit
+     * peut-être loin de l'endroit où l'on a tapé.
+     *
+     * Rendu en **fin** de ligne : un titre commence après son `## `, et un
+     * curseur posé en tête de la ligne du titre doit déjà compter comme dans
+     * sa section (vu sur le téléphone : à l'ouverture, curseur à 0, le
+     * premier titre n'était pas mis en évidence).
+     */
+    @MainThread
+    fun repereVisible(): Int? {
+        val vue = champ ?: return null
+        val mise = vue.layout ?: return vue.selectionStart.coerceAtLeast(0)
+        val haut = vue.scrollY
+        val bas = haut + vue.etatDefilementNatif().hauteurVisible
+        val curseur = vue.selectionStart.coerceIn(0, vue.length())
+        val ligneCurseur = mise.getLineForOffset(curseur)
+        val ligne = if (mise.getLineBottom(ligneCurseur) > haut && mise.getLineTop(ligneCurseur) < bas) {
+            ligneCurseur
+        } else {
+            mise.getLineForVertical(haut)
+        }
+        return mise.getLineEnd(ligne)
+    }
+
+    /**
+     * Saut du plan : pose le curseur à [position] et amène sa ligne en haut du
+     * champ.
+     *
+     * Rien n'est fait si le champ a changé depuis le rendu dont vient la
+     * position ([revisionAttendue]) : elle ne désignerait plus le titre.
+     * L'appelant refait alors le plan. Ni texte ni spans ne sont touchés, et le
+     * clavier n'est pas demandé : fermé, il le reste.
+     *
+     * Le suivi du curseur de [ChampEditeur], que la nouvelle sélection
+     * autorise, n'amène la ligne que *dans* l'écran ; le défilement explicite
+     * qui suit la met en haut, et le suivi du dessin suivant n'a alors plus
+     * rien à faire — le curseur est visible. La coloration du code suit le
+     * défilement d'elle-même (`setOnScrollChangeListener`).
+     */
+    @MainThread
+    fun sauterVers(revisionAttendue: Long, position: Int): Boolean {
+        val vue = champ ?: return false
+        if (!revisionNativeToujoursCourante(revisionAttendue, revision)) return false
+        val cible = position.coerceIn(0, vue.length())
+        vue.setSelection(cible)
+        // Pas encore de mise en page : le suivi du curseur l'amènera à l'écran.
+        val mise = vue.layout ?: return true
+        val haut = mise.getLineTop(mise.getLineForOffset(cible))
+        vue.scrollTo(vue.scrollX, haut.coerceIn(0, vue.etatDefilementNatif().maximum))
+        return true
+    }
+
     @MainThread
     internal fun attacher(vue: EditText, revisionInitiale: Long) {
         check(champ == null || champ === vue) {

@@ -1,5 +1,6 @@
 package eu.ocnotes.ui.editor
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -292,6 +293,15 @@ class EditorViewModel(
      */
     private val _revisionNative = MutableStateFlow(0L)
     val revisionNative: StateFlow<Long> = _revisionNative.asStateFlow()
+
+    /**
+     * Le plan affiché dans sa feuille, `null` feuille fermée. Hors de
+     * [uiState] : il ne vit que le temps de la feuille, et un plan gardé au-delà
+     * serait périmé à la première frappe.
+     */
+    private val _plan = MutableStateFlow<PlanOuvert?>(null)
+    val plan: StateFlow<PlanOuvert?> = _plan.asStateFlow()
+    private var calculPlan: Job? = null
 
     private var enregistrement: Job? = null
 
@@ -737,6 +747,64 @@ class EditorViewModel(
         }
     }
 
+    /**
+     * Ouvre le plan depuis l'aperçu : ses blocs sont déjà là, rien à rendre.
+     * [elementVisible] est le premier élément visible de la liste, qui décide
+     * de la section mise en évidence.
+     */
+    fun ouvrirPlanApercu(elementVisible: Int) {
+        val etat = _uiState.value
+        if (!etat.apercu || etat.texteBrut) return
+        val entrees = planDepuisBlocs(etat.blocs)
+        val reperes = entrees.map { indiceElement(etat.blocs, it.indiceBloc) }
+        _plan.value = PlanOuvert(
+            entrees = entrees,
+            courante = sectionCourante(reperes, elementVisible),
+            enApercu = true,
+            revision = etat.revisionApercu,
+        )
+    }
+
+    /**
+     * Ouvre le plan depuis la saisie : le texte du champ est rendu comme pour
+     * la bascule vers l'aperçu, hors du thread principal, et le plan n'est
+     * publié que si le champ n'a pas bougé entre-temps. [repere] est la
+     * position du champ où l'on se trouve (voir `SessionEditeurNatif.repereVisible`).
+     *
+     * Une entrée sans position n'est pas proposée : en saisie, on ne saurait
+     * pas où sauter, et chercher le titre dans le texte serait une règle de
+     * Markdown en Kotlin.
+     */
+    fun ouvrirPlanSaisie(instantane: InstantaneEditeurNatif?, repere: Int) {
+        val etat = _uiState.value
+        if (etat.apercu || !etat.modifiable || etat.texteBrut) return
+        if (instantane == null || instantane.revision != _revisionNative.value) return
+        calculPlan?.cancel()
+        calculPlan = viewModelScope.launch {
+            val debut = System.nanoTime()
+            try {
+                val blocs = repository.renderNote(nom, instantane.texte)
+                if (!revisionNativeToujoursCourante(instantane.revision, _revisionNative.value)) return@launch
+                val entrees = planDepuisBlocs(blocs).filter { it.source != null }
+                Log.i(TAG, "plan en saisie : ${(System.nanoTime() - debut) / 1_000_000} ms, ${instantane.texte.length} caractères, ${entrees.size} titres") // i18n-ok : mesure
+                _plan.value = PlanOuvert(
+                    entrees = entrees,
+                    courante = sectionCourante(entrees.map { it.source }, repere),
+                    enApercu = false,
+                    revision = instantane.revision,
+                )
+            } catch (e: OCnotesException) {
+                _uiState.update { it.copy(erreur = e.texte()) }
+            }
+        }
+    }
+
+    /** Ferme la feuille du plan, et abandonne un rendu encore en cours. */
+    fun fermerPlan() {
+        calculPlan?.cancel()
+        _plan.value = null
+    }
+
     private suspend fun ecrire(contenu: String, revision: Long) {
         // Dernière garde avant le cache, et la seule qui compte : on n'écrit
         // que ce qu'on a su lire. Une note en lecture seule serait écrasée par
@@ -868,6 +936,9 @@ class EditorViewModel(
 
         /** Nom Go de l'UTF-8 (`charset.UTF8`), le seul à ne rien refuser. */
         private const val ENCODAGE_UTF8 = "UTF-8"
+
+        /** Étiquette du journal pour la mesure d'ouverture du plan. */
+        private const val TAG = "OCnotesEditeur"
 
         fun factory(container: AppContainer, chemin: String): ViewModelProvider.Factory =
             viewModelFactory {

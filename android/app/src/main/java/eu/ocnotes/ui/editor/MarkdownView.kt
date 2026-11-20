@@ -119,6 +119,12 @@ fun VueMarkdown(
     echelle: Float = 1f,
     /** Reçoit la tâche dont la case est touchée ; nul sur une note non modifiable. */
     onBasculerTache: ((NoteBlockDto) -> Unit)? = null,
+    /**
+     * L'état de la liste, levé quand l'écran doit la faire défiler — le saut
+     * du plan — ou savoir ce qu'elle montre. Ses indices sont ceux des
+     * éléments, pas des blocs : voir [indiceElement].
+     */
+    etatListe: LazyListState = rememberLazyListState(),
 ) {
     // La loupe agit en multipliant l'échelle de police : tout le texte de
     // l'aperçu est en `sp`, donc titres, listes, code et tableaux grossissent
@@ -128,7 +134,7 @@ fun VueMarkdown(
     CompositionLocalProvider(
         LocalDensity provides Density(densite.density, densite.fontScale * echelle),
     ) {
-        ContenuMarkdown(blocs, modifier, onBasculerTache)
+        ContenuMarkdown(blocs, modifier, onBasculerTache, etatListe)
     }
 }
 
@@ -137,6 +143,7 @@ private fun ContenuMarkdown(
     blocs: List<NoteBlockDto>,
     modifier: Modifier,
     onBasculerTache: ((NoteBlockDto) -> Unit)?,
+    etatListe: LazyListState,
 ) {
     if (blocs.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -166,7 +173,6 @@ private fun ContenuMarkdown(
     // Le doigt qui étend une sélection, jamais lu pendant la composition : il
     // change à chaque mouvement, et seul [defilerPendantSelection] s'en sert.
     val doigt = remember { mutableStateOf<Float?>(null) }
-    val etatListe = rememberLazyListState()
     val reperes = remember { ReperesListe() }
     val suivi = remember { SuiviSelection() }
     val vue = LocalView.current
@@ -621,13 +627,36 @@ private const val LARGEUR_BARRE_DP = 3
 private const val PAS_BARRE_DP = 13 // barre de 3 dp + 10 dp d'air
 
 /** Un élément de la liste visible, avec les tableaux reconstitués. */
-private sealed interface ElementApercu {
+internal sealed interface ElementApercu {
     data class Bloc(val bloc: NoteBlockDto) : ElementApercu
     data class Tableau(val lignes: List<NoteBlockDto>) : ElementApercu
 }
 
+/**
+ * Indice, dans la liste de l'aperçu, de l'élément qui dessine le bloc
+ * [indiceBloc] — les lignes d'un tableau n'y font qu'un élément.
+ *
+ * Doit suivre exactement [grouperPourApercu] : un saut du plan qui tomberait
+ * un élément trop haut montrerait le tableau d'avant au lieu du titre.
+ * `PlanNoteTest` les confronte. Hors bornes : ramené au premier ou au dernier
+ * élément, plutôt qu'un saut dans le vide.
+ */
+internal fun indiceElement(blocs: List<NoteBlockDto>, indiceBloc: Int): Int {
+    val borne = indiceBloc.coerceIn(0, (blocs.size - 1).coerceAtLeast(0))
+    var element = -1
+    for (index in 0..borne) {
+        if (index >= blocs.size) break
+        // Une ligne de tableau précédée d'une autre ne commence pas d'élément.
+        val suiteDeTableau = index > 0 &&
+            blocs[index].kind == BlockKind.LIGNE_TABLEAU &&
+            blocs[index - 1].kind == BlockKind.LIGNE_TABLEAU
+        if (!suiteDeTableau) element++
+    }
+    return element.coerceAtLeast(0)
+}
+
 /** Réunit uniquement les lignes consécutives d'un même tableau. */
-private fun grouperPourApercu(blocs: List<NoteBlockDto>): List<ElementApercu> {
+internal fun grouperPourApercu(blocs: List<NoteBlockDto>): List<ElementApercu> {
     val elements = mutableListOf<ElementApercu>()
     var index = 0
     while (index < blocs.size) {
