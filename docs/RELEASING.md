@@ -71,9 +71,8 @@ Avant de publier un binaire :
   build, et l'artefact CI expire après 90 jours ;
 - notez les changements visibles par les utilisateurs ;
 - assurez-vous que les mises à jour utilisent toujours la même clé de signature.
-- mettez à jour `site/assets/release.json` (version, date AAAA-MM-JJ, nom et
-  URL de l'APK signé, taille en octets, SHA-256) : le bouton de téléchargement
-  du site lit ce fichier et n'interroge plus l'API GitHub.
+- le bouton de téléchargement du site se met à jour seul (`site/release.php`,
+  cache d'une heure) : publiez l'APK signé sous le nom `OCnotes-<version>.apk`.
 
 Ne publiez aucune clé ni aucun mot de passe dans les artefacts de CI, les logs,
 les issues ou les releases.

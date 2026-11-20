@@ -3,9 +3,9 @@
    le bandeau de langue, fermer le menu mobile et préciser le lien de téléchargement. */
 (function () {
   var en = document.documentElement.lang === "en";
-  /* Adresse de release.json, à côté de ce script (fonctionne depuis / comme depuis /en/) */
+  /* Adresse de release.php, à la racine du site (calculée depuis ce script : marche depuis / comme depuis /en/) */
   var script = document.currentScript;
-  var releaseUrl = new URL("release.json", script ? script.src : location.href);
+  var releaseUrl = new URL("../release.php", script ? script.src : location.href);
 
   /* Normalisation des textes lus : sans accents, espaces insécables remplacées, minuscules */
   var norm = function (s) {
@@ -58,9 +58,9 @@
   }
 
   /* ---------- Bouton de téléchargement ----------
-     Sans JavaScript, ou si release.json est absent, le lien reste /releases/latest,
-     qui fonctionne aussi. Les infos viennent d'un fichier du site lui-même :
-     aucun appel à un service tiers, donc l'adresse IP du visiteur ne sort pas. */
+     Sans JavaScript, ou si release.php ne répond pas, le lien reste /releases/latest,
+     qui fonctionne aussi. Les infos viennent du site lui-même (release.php relaie
+     GitHub côté serveur, avec un cache d'une heure) : l'adresse IP du visiteur ne sort pas. */
   var size = function (octets) {
     var mo = (octets / 1048576).toFixed(1);
     return en ? mo + " MB" : mo.replace(".", ",") + " Mo";
@@ -71,7 +71,7 @@
     return m ? m[3] + "/" + m[2] + "/" + m[1] : "";
   };
 
-  fetch(releaseUrl, { cache: "no-cache" })
+  fetch(releaseUrl)
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function (rel) {
       /* On n'accepte qu'un APK signé : jamais l'artefact « unsigned » de la CI */
