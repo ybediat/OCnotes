@@ -35,6 +35,17 @@ class EnregistrementNatifTest {
         assertTrue(doitEnregistrerInstantaneNatif(etat(), 4, instantane))
     }
 
+    // Passer en aperçu enregistre tout de suite ; le délai de 700 ms qui
+    // expire ensuite ne doit pas annuler cette écriture pour refaire la même.
+    @Test
+    fun memeRevisionEnCoursNEstPasRelancee() {
+        assertTrue(enregistrementDejaEnCours(actif = true, revisionEnCours = 4, revision = 4))
+        // Une révision plus récente remplace l'écriture en cours.
+        assertFalse(enregistrementDejaEnCours(actif = true, revisionEnCours = 4, revision = 5))
+        // L'écriture est finie (ou annulée) : on peut écrire de nouveau.
+        assertFalse(enregistrementDejaEnCours(actif = false, revisionEnCours = 4, revision = 4))
+    }
+
     private fun etat(
         charge: Boolean = true,
         modifiable: Boolean = true,

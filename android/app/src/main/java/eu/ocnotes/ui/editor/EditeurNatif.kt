@@ -180,13 +180,23 @@ class SessionEditeurNatif {
         val remplacement = basculerCase(editable, position) ?: return null
         val debut = vue.selectionStart
         val fin = vue.selectionEnd
-        editable.replace(remplacement.debut, remplacement.fin, remplacement.texte)
-        // Longueur inchangée : la sélection d'avant reste valide telle quelle.
-        if (debut >= 0 && fin >= 0) vue.setSelection(debut, fin)
-        // Le changement de texte rouvre le suivi du curseur, qui ramènerait le
-        // champ sur le curseur au prochain dessin : un retour en saisie ne
-        // retrouverait plus l'endroit où l'on lisait.
-        (vue as? ChampEditeur)?.refuserSuiviCurseur()
+        val defilementX = vue.scrollX
+        val defilementY = vue.scrollY
+        val ecrire = {
+            editable.replace(remplacement.debut, remplacement.fin, remplacement.texte)
+            // Longueur inchangée : la sélection d'avant reste valide telle quelle.
+            if (debut >= 0 && fin >= 0) vue.setSelection(debut, fin)
+        }
+        // Pendant le `replace`, `TextView.updateAfterEdit` appelle aussitôt
+        // `bringPointIntoView` : retirer le droit de suivi *après* coup laissait
+        // le champ masqué se recadrer sur le curseur, et le retour en saisie ne
+        // retrouvait plus l'endroit où l'on lisait. Le suivi est donc coupé
+        // pendant toute l'écriture, puis le droit accordé par le changement de
+        // texte est retiré, pour le dessin qui suivra.
+        if (vue is ChampEditeur) vue.sansSuiviCurseur(ecrire) else ecrire()
+        // Ceinture et bretelles : un `EditText` ordinaire (harnais debug) n'a
+        // pas ce garde ; le défilement d'avant est remis tel quel.
+        if (vue.scrollX != defilementX || vue.scrollY != defilementY) vue.scrollTo(defilementX, defilementY)
         return revision
     }
 
@@ -617,9 +627,26 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
         suiviCurseurAutorise = true
     }
 
-    /** Retire le droit de suivi accordé par un changement fait hors de la saisie. */
-    internal fun refuserSuiviCurseur() {
-        suiviCurseurAutorise = false
+    /** Vrai pendant [sansSuiviCurseur] : aucun recadrage, même différé. */
+    private var suiviSuspendu = false
+
+    /**
+     * Exécute [action] — un changement fait hors de la saisie, comme une case
+     * cochée depuis l'aperçu — sans que le champ se recadre sur le curseur.
+     *
+     * `bringPointIntoView` est refusé pendant l'action, y compris l'appel
+     * immédiat de `TextView.updateAfterEdit`, et le droit de suivi que le
+     * changement de texte vient d'accorder est retiré à la fin : le dessin
+     * suivant ne recadre pas non plus.
+     */
+    internal fun sansSuiviCurseur(action: () -> Unit) {
+        suiviSuspendu = true
+        try {
+            action()
+        } finally {
+            suiviSuspendu = false
+            suiviCurseurAutorise = false
+        }
     }
 
     override fun onSelectionChanged(selStart: Int, selEnd: Int) {
@@ -653,6 +680,7 @@ internal open class ChampEditeur(context: Context) : EditText(context) {
     }
 
     override fun bringPointIntoView(offset: Int): Boolean {
+        if (suiviSuspendu) return false
         val cible = extremiteTiree?.takeIf { it in 0..length() } ?: offset
         return when (suiviCurseur(suiviCurseurAutorise, isLayoutRequested)) {
             SuiviCurseur.REFUSER -> false

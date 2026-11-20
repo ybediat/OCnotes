@@ -202,7 +202,6 @@ enum class RaisonLectureSeule {
 internal fun brouillonApres(etat: EditorUiState, enAttente: Int): Boolean =
     etat.brouillon && (etat.modifie || enAttente > 0)
 
-/** Garde pure du chemin natif : aucune ouverture ou révision périmée n'écrit. */
 /**
  * Les blocs après la bascule de la tâche dont la case est à [source].
  *
@@ -214,6 +213,16 @@ internal fun basculerTacheDansBlocs(blocs: List<NoteBlockDto>, source: Int): Lis
         if (bloc.kind == BlockKind.TACHE && bloc.source == source) bloc.copy(checked = !bloc.checked) else bloc
     }
 
+/**
+ * Vrai quand l'enregistrement différé qui arrive porte une révision déjà en
+ * cours d'écriture : le relancer annulerait l'écriture en cours pour refaire
+ * la même. Arrive quand on passe en aperçu moins de 700 ms après la dernière
+ * frappe — le passage enregistre tout de suite, puis le délai expire.
+ */
+internal fun enregistrementDejaEnCours(actif: Boolean, revisionEnCours: Long, revision: Long): Boolean =
+    actif && revisionEnCours == revision
+
+/** Garde pure du chemin natif : aucune ouverture ou révision périmée n'écrit. */
 internal fun doitEnregistrerInstantaneNatif(
     etat: EditorUiState,
     revisionCourante: Long,
@@ -285,6 +294,9 @@ class EditorViewModel(
     val revisionNative: StateFlow<Long> = _revisionNative.asStateFlow()
 
     private var enregistrement: Job? = null
+
+    /** Révision qu'écrit [enregistrement], tant qu'il tourne. */
+    private var revisionEnregistrement = Long.MIN_VALUE
     private var revisionNativeDeSortie: Long? = null
     private var instantaneNatifConserve: InstantaneEditeurNatif? = null
 
@@ -559,6 +571,12 @@ class EditorViewModel(
         // `cancel()`, sinon la première serait tuée sans jamais être relancée.
         if (survivreEcran && revisionNativeDeSortie == instantane.revision) return
         if (survivreEcran) revisionNativeDeSortie = instantane.revision
+        // Même photo déjà en cours d'écriture : rien à refaire.
+        if (!survivreEcran &&
+            enregistrementDejaEnCours(enregistrement?.isActive == true, revisionEnregistrement, instantane.revision)
+        ) {
+            return
+        }
 
         enregistrement?.cancel()
         val portee = if (survivreEcran) applicationScope else viewModelScope
@@ -566,7 +584,12 @@ class EditorViewModel(
             ecrire(instantane.texte, instantane.revision)
             syncScheduler.syncAfterLocalChange()
         }
-        if (survivreEcran) ecritureDeSortie = travail else enregistrement = travail
+        if (survivreEcran) {
+            ecritureDeSortie = travail
+        } else {
+            enregistrement = travail
+            revisionEnregistrement = instantane.revision
+        }
     }
 
     data class FormatNatifApplique(
