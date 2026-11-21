@@ -367,6 +367,12 @@ data class NoteBlockDto(
      * brut, ligne de tableau) — zéro est une position valide.
      */
     val source: Int? = null,
+    /**
+     * Morceau qui continue le bloc précédent : Go découpe un paragraphe ou un
+     * bloc de code trop long pour un seul `Text`. À coller au précédent, sans
+     * marqueur de liste ni case.
+     */
+    val cont: Boolean = false,
 )
 
 /** Valeurs du champ `kind` d'un [NoteBlockDto]. */

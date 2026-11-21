@@ -96,6 +96,11 @@ type Block struct {
 	// texte brut, ligne de tableau. Un pointeur et non un entier : zéro est une
 	// position valide, celle d'une tâche en tête de note.
 	Source *int
+
+	// Cont marque un morceau qui continue le bloc précédent : un paragraphe
+	// ou un bloc de code trop long, découpé par decouperGrosBlocs. L'aperçu
+	// le colle au précédent, sans marqueur de liste ni case.
+	Cont bool
 }
 
 // parser est construit une fois : goldmark est sûr en usage concurrent, et
@@ -117,7 +122,7 @@ func Render(source string) []Block {
 	src := []byte(source)
 	r := &renderer{src: src, pos: positions{src: src}}
 	r.walk(parser.Parser().Parse(text.NewReader(src)), blockCtx{})
-	return r.out
+	return decouperGrosBlocs(r.out)
 }
 
 // maxPlainLines borne le nombre de lignes d'un bloc de texte brut.
