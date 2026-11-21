@@ -88,6 +88,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -131,6 +132,14 @@ fun VueMarkdown(
      * éléments, pas des blocs : voir [indiceElement].
      */
     etatListe: LazyListState = rememberLazyListState(),
+    /**
+     * Les occurrences d'une recherche ouverte, `null` sinon. Chaque élément ne
+     * lit que les siennes, au moment où la liste le dessine : la note entière
+     * n'est jamais recomposée pour surligner.
+     */
+    surlignage: SurlignageApercu? = null,
+    /** Reçoit la mise en page du texte qui porte l'occurrence courante. */
+    positionOccurrence: PositionOccurrence? = null,
 ) {
     // La loupe agit en multipliant l'échelle de police : tout le texte de
     // l'aperçu est en `sp`, donc titres, listes, code et tableaux grossissent
@@ -140,7 +149,7 @@ fun VueMarkdown(
     CompositionLocalProvider(
         LocalDensity provides Density(densite.density, densite.fontScale * echelle),
     ) {
-        ContenuMarkdown(blocs, modifier, onBasculerTache, etatListe)
+        ContenuMarkdown(blocs, modifier, onBasculerTache, etatListe, surlignage, positionOccurrence)
     }
 }
 
@@ -150,6 +159,8 @@ private fun ContenuMarkdown(
     modifier: Modifier,
     onBasculerTache: ((NoteBlockDto) -> Unit)?,
     etatListe: LazyListState,
+    surlignage: SurlignageApercu?,
+    positionOccurrence: PositionOccurrence?,
 ) {
     if (blocs.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -241,20 +252,40 @@ private fun ContenuMarkdown(
                         if (index > 0 && !(element is ElementApercu.Bloc && element.bloc.cont)) {
                             Spacer(Modifier.height(ECART_BLOCS_DP.dp))
                         }
+                        // Seul l'élément de l'occurrence courante rapporte la
+                        // mise en page de son texte (voir [PositionOccurrence]).
+                        val rapport: (TextLayoutResult) -> Unit = if (
+                            positionOccurrence != null && surlignage?.courante?.element == index
+                        ) {
+                            { mise -> positionOccurrence.retenir(index, mise) }
+                        } else {
+                            RAPPORT_MUET
+                        }
                         Box(Modifier.onPlaced { reperes.elements[index] = it }) {
-                            when (element) {
-                                is ElementApercu.Bloc -> {
-                                    // Seul un bloc de code découpé partage son
-                                    // défilement ; les autres gardent le leur.
-                                    val decoupe = element.bloc.cont || element.avantSuite
-                                    val defilement = if (element.bloc.kind == BlockKind.CODE && decoupe) {
-                                        defilementsCode.getOrPut(element.tete) { DefilementCode() }
-                                    } else {
-                                        null
+                            CompositionLocalProvider(LocalRapportOccurrence provides rapport) {
+                                when (element) {
+                                    is ElementApercu.Bloc -> {
+                                        // Seul un bloc de code découpé partage son
+                                        // défilement ; les autres gardent le leur.
+                                        val decoupe = element.bloc.cont || element.avantSuite
+                                        val defilement = if (element.bloc.kind == BlockKind.CODE && decoupe) {
+                                            defilementsCode.getOrPut(element.tete) { DefilementCode() }
+                                        } else {
+                                            null
+                                        }
+                                        Bloc(
+                                            element.bloc,
+                                            element.avantSuite,
+                                            onBasculerTache,
+                                            element.suiteDeTache,
+                                            defilement,
+                                            surlignage?.marques(index),
+                                        )
                                     }
-                                    Bloc(element.bloc, element.avantSuite, onBasculerTache, element.suiteDeTache, defilement)
+                                    is ElementApercu.Tableau -> Tableau(element.lignes) { ligne, colonne ->
+                                        surlignage?.marques(index, ligne, colonne)
+                                    }
                                 }
-                                is ElementApercu.Tableau -> Tableau(element.lignes)
                             }
                         }
                     }
@@ -590,6 +621,47 @@ private tailrec fun Context.activite(): Activity? = when (this) {
 private val LocalOuvrirLien = staticCompositionLocalOf<(String) -> Unit> { {} }
 
 /**
+ * Où se trouve, dans la liste de l'aperçu, l'occurrence courante d'une
+ * recherche.
+ *
+ * Go découpe un long paragraphe en morceaux, mais un morceau peut encore
+ * dépasser l'écran : amener l'élément en haut laissait l'occurrence dessous,
+ * hors de vue (constaté sur la note de 295 ko, occurrence 3799/3800). Le texte
+ * qui porte l'occurrence courante rapporte donc sa mise en page, et l'écran en
+ * tire la hauteur de la ligne dans l'élément. Rien n'est retenu pour les
+ * autres textes, ni pour les cellules d'un tableau, dont les lignes sont
+ * courtes.
+ */
+class PositionOccurrence {
+    var element: Int = -1
+        private set
+    var mise: TextLayoutResult? = null
+        private set
+
+    fun retenir(element: Int, mise: TextLayoutResult) {
+        this.element = element
+        this.mise = mise
+    }
+
+    /** Haut de la ligne de [position] dans le texte de [element], `null` sans mise en page. */
+    fun hautDeLigne(element: Int, position: Int): Int? {
+        val texte = mise?.takeIf { this.element == element } ?: return null
+        val borne = position.coerceIn(0, texte.layoutInput.text.length)
+        return texte.getLineTop(texte.getLineForOffset(borne)).toInt()
+    }
+}
+
+private val RAPPORT_MUET: (TextLayoutResult) -> Unit = {}
+
+/** Le rapport de mise en page de l'élément en cours de composition (voir [PositionOccurrence]). */
+private val LocalRapportOccurrence = staticCompositionLocalOf { RAPPORT_MUET }
+
+/** Le rapport, pour le seul texte qui porte l'occurrence courante. */
+@Composable
+private fun rapportOccurrence(marques: MarquesTexte?): (TextLayoutResult) -> Unit =
+    if (marques?.courante != null) LocalRapportOccurrence.current else RAPPORT_MUET
+
+/**
  * Demande confirmation avant d'ouvrir un lien de l'aperçu.
  *
  * Le libellé d'un lien est choisi par l'auteur de la note, qui peut être
@@ -788,6 +860,7 @@ private fun Bloc(
     onBasculerTache: ((NoteBlockDto) -> Unit)?,
     suiteDeTache: Boolean = false,
     defilementCode: DefilementCode? = null,
+    marques: MarquesTexte? = null,
 ) {
     val couleurBarre = MaterialTheme.colorScheme.outlineVariant
     Row(
@@ -812,31 +885,39 @@ private fun Bloc(
     ) {
         Column(Modifier.weight(1f)) {
             when (bloc.kind) {
-                BlockKind.TITRE -> Titre(bloc)
+                BlockKind.TITRE -> Titre(bloc, marques)
                 // Une suite garde le retrait du texte, sans répéter le
                 // marqueur ni la case.
-                BlockKind.PUCE -> Puce(bloc, marqueur = if (bloc.cont) "" else "•") // i18n-ok
-                BlockKind.NUMEROTE -> Puce(bloc, marqueur = if (bloc.cont) "" else "${bloc.number}.") // i18n-ok
+                BlockKind.PUCE -> Puce(bloc, marqueur = if (bloc.cont) "" else "•", marques) // i18n-ok
+                BlockKind.NUMEROTE -> Puce(bloc, marqueur = if (bloc.cont) "" else "${bloc.number}.", marques) // i18n-ok
                 // Une suite (bloc découpé, ou tâche coupée par une image) n'a
                 // pas de case : elle est sur le premier morceau.
                 BlockKind.TACHE -> {
                     val avecCase = !bloc.cont && !suiteDeTache
-                    Tache(bloc, if (avecCase) onBasculerTache else null, avecCase = avecCase)
+                    Tache(bloc, if (avecCase) onBasculerTache else null, avecCase = avecCase, marques = marques)
                 }
-                BlockKind.CODE -> BlocDeCode(bloc, avantSuite, defilementCode)
+                BlockKind.CODE -> BlocDeCode(bloc, avantSuite, defilementCode, marques)
                 BlockKind.TRAIT -> HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                BlockKind.IMAGE -> Image(bloc)
+                BlockKind.IMAGE -> Image(bloc, marques)
                 BlockKind.LIGNE_TABLEAU -> LigneTableau(bloc)
                 BlockKind.SAUT_DE_PAGE -> SautDePage()
-                BlockKind.BRUT -> Text(bloc.text, style = StyleEditeur)
-                else -> Text(enrichi(bloc), style = MaterialTheme.typography.bodyLarge)
+                BlockKind.BRUT -> Text(
+                    avecMarques(bloc.text, marques),
+                    style = StyleEditeur,
+                    onTextLayout = rapportOccurrence(marques),
+                )
+                else -> Text(
+                    enrichi(bloc, marques),
+                    style = MaterialTheme.typography.bodyLarge,
+                    onTextLayout = rapportOccurrence(marques),
+                )
             }
         }
     }
 }
 
 @Composable
-private fun Titre(bloc: NoteBlockDto) {
+private fun Titre(bloc: NoteBlockDto, marques: MarquesTexte?) {
     val typo = MaterialTheme.typography
     val style = when (bloc.level) {
         1 -> typo.headlineSmall
@@ -845,14 +926,15 @@ private fun Titre(bloc: NoteBlockDto) {
         else -> typo.titleSmall
     }
     Text(
-        text = enrichi(bloc),
+        text = enrichi(bloc, marques),
         style = style.copy(fontWeight = FontWeight.SemiBold),
+        onTextLayout = rapportOccurrence(marques),
         modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
     )
 }
 
 @Composable
-private fun Puce(bloc: NoteBlockDto, marqueur: String) {
+private fun Puce(bloc: NoteBlockDto, marqueur: String, marques: MarquesTexte?) {
     Row(Modifier.fillMaxWidth()) {
         Text(
             text = marqueur,
@@ -862,7 +944,11 @@ private fun Puce(bloc: NoteBlockDto, marqueur: String) {
                 .width(LARGEUR_MARQUEUR_DP.dp)
                 .padding(end = 6.dp),
         )
-        Text(enrichi(bloc), style = MaterialTheme.typography.bodyLarge)
+        Text(
+            enrichi(bloc, marques),
+            style = MaterialTheme.typography.bodyLarge,
+            onTextLayout = rapportOccurrence(marques),
+        )
     }
 }
 
@@ -883,7 +969,12 @@ private fun Puce(bloc: NoteBlockDto, marqueur: String) {
  * d'elle, sans déplacer le texte.
  */
 @Composable
-private fun Tache(bloc: NoteBlockDto, onBasculerTache: ((NoteBlockDto) -> Unit)?, avecCase: Boolean = true) {
+private fun Tache(
+    bloc: NoteBlockDto,
+    onBasculerTache: ((NoteBlockDto) -> Unit)?,
+    avecCase: Boolean = true,
+    marques: MarquesTexte? = null,
+) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         val forme = Modifier
             .width(LARGEUR_MARQUEUR_DP.dp)
@@ -917,8 +1008,9 @@ private fun Tache(bloc: NoteBlockDto, onBasculerTache: ((NoteBlockDto) -> Unit)?
             )
         }
         Text(
-            text = enrichi(bloc),
+            text = enrichi(bloc, marques),
             style = MaterialTheme.typography.bodyLarge,
+            onTextLayout = rapportOccurrence(marques),
             textDecoration = if (bloc.checked) TextDecoration.LineThrough else null,
             color = if (bloc.checked) {
                 MaterialTheme.colorScheme.onSurfaceVariant
@@ -936,7 +1028,7 @@ private fun Tache(bloc: NoteBlockDto, onBasculerTache: ((NoteBlockDto) -> Unit)?
  * faire défiler que la réorganiser.
  */
 @Composable
-private fun BlocDeCode(bloc: NoteBlockDto, avantSuite: Boolean, partage: DefilementCode?) {
+private fun BlocDeCode(bloc: NoteBlockDto, avantSuite: Boolean, partage: DefilementCode?, marques: MarquesTexte?) {
     // Un bloc découpé par Go garde un fond continu : ni coin arrondi ni marge
     // à la jointure de deux morceaux.
     val haut = if (bloc.cont) 0.dp else 6.dp
@@ -979,8 +1071,9 @@ private fun BlocDeCode(bloc: NoteBlockDto, avantSuite: Boolean, partage: Defilem
                 ),
         ) {
             Text(
-                text = bloc.text,
+                text = avecMarques(bloc.text, marques),
                 style = StyleEditeur,
+                onTextLayout = rapportOccurrence(marques),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -1008,7 +1101,7 @@ internal class DefilementCode {
  * chantier à part, pas une ligne de plus.
  */
 @Composable
-private fun Image(bloc: NoteBlockDto) {
+private fun Image(bloc: NoteBlockDto, marques: MarquesTexte?) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         shape = RoundedCornerShape(6.dp),
@@ -1025,7 +1118,13 @@ private fun Image(bloc: NoteBlockDto) {
                 modifier = Modifier.padding(end = 10.dp),
             )
             Text(
-                text = bloc.text.ifBlank { stringResource(R.string.apercu_image) },
+                // Le libellé de repli n'est pas dans le texte cherché : il n'a
+                // pas de marques.
+                text = if (bloc.text.isBlank()) {
+                    AnnotatedString(stringResource(R.string.apercu_image))
+                } else {
+                    avecMarques(bloc.text, marques)
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 fontStyle = FontStyle.Italic,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1075,7 +1174,11 @@ private fun SautDePage() {
  * et n'ajoute ni analyse, ni conversion, ni cache de document.
  */
 @Composable
-private fun Tableau(lignes: List<NoteBlockDto>) {
+private fun Tableau(
+    lignes: List<NoteBlockDto>,
+    /** Les marques de la cellule (ligne, colonne), `null` sans recherche. */
+    marques: (Int, Int) -> MarquesTexte? = { _, _ -> null },
+) {
     if (lignes.isEmpty()) return
 
     val colonnes = lignes.maxOf { it.cells.size }.coerceAtLeast(1)
@@ -1088,7 +1191,7 @@ private fun Tableau(lignes: List<NoteBlockDto>) {
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.horizontalScroll(rememberScrollState())) {
-            lignes.forEach { ligne ->
+            lignes.forEachIndexed { rang, ligne ->
                 val fond = if (ligne.header) {
                     Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
                 } else {
@@ -1097,7 +1200,7 @@ private fun Tableau(lignes: List<NoteBlockDto>) {
                 Row(fond) {
                     repeat(colonnes) { index ->
                         Text(
-                            text = ligne.cells.getOrElse(index) { "" },
+                            text = avecMarques(ligne.cells.getOrElse(index) { "" }, marques(rang, index)),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = if (ligne.header) FontWeight.SemiBold else FontWeight.Normal,
                             modifier = Modifier
@@ -1126,8 +1229,8 @@ private fun Tableau(lignes: List<NoteBlockDto>) {
  * pire qu'un gras au mauvais endroit.
  */
 @Composable
-private fun enrichi(bloc: NoteBlockDto): AnnotatedString {
-    if (bloc.spans.isEmpty()) return AnnotatedString(bloc.text)
+private fun enrichi(bloc: NoteBlockDto, marques: MarquesTexte? = null): AnnotatedString {
+    if (bloc.spans.isEmpty()) return avecMarques(bloc.text, marques)
 
     val couleurLien = MaterialTheme.colorScheme.primary
     val ouvrirLien = LocalOuvrirLien.current
@@ -1137,7 +1240,7 @@ private fun enrichi(bloc: NoteBlockDto): AnnotatedString {
     // traverse pas la façade : « marqué » est la seule information portée.
     val fondSurligne = Color(0xFFFFF176).copy(alpha = 0.40f)
 
-    return remember(bloc) {
+    return remember(bloc, marques) {
         buildAnnotatedString {
             append(bloc.text)
             val fin = bloc.text.length
@@ -1186,7 +1289,38 @@ private fun enrichi(bloc: NoteBlockDto): AnnotatedString {
                 }
                 addStyle(style, debut, terme)
             }
+            // Les occurrences en dernier : leur fond passe par-dessus celui
+            // d'un code en ligne ou d'un surligné.
+            ajouterMarques(marques, fin)
         }
+    }
+}
+
+/** Un texte sans mise en forme, avec les fonds des occurrences d'une recherche. */
+@Composable
+private fun avecMarques(texte: String, marques: MarquesTexte?): AnnotatedString {
+    if (marques == null) return AnnotatedString(texte)
+    return remember(texte, marques) {
+        buildAnnotatedString {
+            append(texte)
+            ajouterMarques(marques, texte.length)
+        }
+    }
+}
+
+/**
+ * Les fonds des occurrences, la courante plus franche. Bornes ramenées dans le
+ * texte, comme les spans de Go : une plage périmée ne doit pas faire lever
+ * `addStyle`.
+ */
+private fun AnnotatedString.Builder.ajouterMarques(marques: MarquesTexte?, fin: Int) {
+    if (marques == null) return
+    marques.plages.forEach { plage ->
+        val debut = plage.first.coerceIn(0, fin)
+        val terme = (plage.last + 1).coerceIn(debut, fin)
+        if (debut == terme) return@forEach
+        val fond = if (plage == marques.courante) FOND_OCCURRENCE_COURANTE else FOND_OCCURRENCE
+        addStyle(SpanStyle(background = fond), debut, terme)
     }
 }
 

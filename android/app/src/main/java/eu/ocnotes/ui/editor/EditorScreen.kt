@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TextDecrease
 import androidx.compose.material.icons.filled.TextIncrease
 import androidx.compose.material.icons.filled.Visibility
@@ -55,7 +56,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -75,6 +79,7 @@ import eu.ocnotes.ui.common.EtatVide
 import eu.ocnotes.ui.common.resoudre
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 
 /**
  * Éditeur plein écran.
@@ -200,6 +205,112 @@ fun EditorScreen(
     val plan by viewModel.plan.collectAsStateWithLifecycle()
     val portee = rememberCoroutineScope()
 
+    // --- Recherche dans la note --------------------------------------------
+    val recherche by viewModel.recherche.collectAsStateWithLifecycle()
+    val surlignageApercu by viewModel.surlignageApercu.collectAsStateWithLifecycle()
+    val rechercheOuverte = recherche != null
+
+    // Cherche là où l'on est : les blocs affichés en aperçu, une photo du
+    // champ en saisie. Le repère visible ne sert qu'en arrivant de l'autre
+    // mode ; sinon la recherche repart de l'occurrence courante.
+    val relancerRecherche = rememberUpdatedState {
+        if (viewModel.uiState.value.apercu) {
+            viewModel.chercherApercu(etatListeApercu.firstVisibleItemIndex)
+        } else {
+            sessionNative.positionVisible()?.let { depuis ->
+                viewModel.chercherSaisie(sessionNative.instantane(), depuis)
+            }
+        }
+    }
+
+    // Recalcul au terme changé (150 ms de calme), à la bascule de mode et à
+    // l'arrivée de nouveaux blocs d'aperçu. `natifPret` : en saisie, le champ
+    // n'a rien à photographier avant son premier dessin.
+    val termeRecherche = recherche?.terme
+    LaunchedEffect(termeRecherche, etat.apercu, etat.blocs, natifPret) {
+        if (termeRecherche == null) return@LaunchedEffect
+        delay(DELAI_RECHERCHE_TERME_MS)
+        relancerRecherche.value()
+    }
+
+    // En saisie, une frappe pendant la recherche décale les occurrences : la
+    // photo est reprise après le même calme que l'enregistrement, jamais à
+    // chaque touche.
+    LaunchedEffect(rechercheOuverte, etat.apercu, viewModel) {
+        if (!rechercheOuverte || etat.apercu) return@LaunchedEffect
+        viewModel.revisionNative.drop(1).collectLatest {
+            delay(DELAI_ENREGISTREMENT_MS)
+            relancerRecherche.value()
+        }
+    }
+
+    // En saisie : une seule occurrence marquée, amenée à l'écran. Une
+    // révision périmée ne déplace rien ; on recherche.
+    val deplacement = recherche?.deplacement
+    val couleurOccurrence = FOND_OCCURRENCE.toArgb()
+    val couleurCourante = FOND_OCCURRENCE_COURANTE.toArgb()
+    LaunchedEffect(deplacement, etat.apercu, natifPret) {
+        val ouverte = viewModel.recherche.value
+        val plage = ouverte?.plage?.takeIf { !ouverte.enApercu }
+        if (etat.apercu) return@LaunchedEffect
+        if (plage == null) {
+            sessionNative.effacerOccurrence()
+            return@LaunchedEffect
+        }
+        if (!natifPret) return@LaunchedEffect
+        if (!sessionNative.montrerOccurrence(ouverte.revision, plage, couleurOccurrence, couleurCourante)) {
+            relancerRecherche.value()
+        }
+    }
+
+    // En aperçu : la ligne de l'occurrence courante est amenée au quart haut
+    // de la liste, sauf si elle est déjà à l'écran au-dessus du clavier — on ne
+    // fait pas sauter ce qu'on lit. Un élément peut dépasser l'écran : la
+    // hauteur de la ligne dans l'élément vient de la mise en page de son
+    // texte, qui n'existe qu'une fois l'élément composé — d'où deux temps.
+    val positionOccurrence = remember(etatListeApercu) { PositionOccurrence() }
+    LaunchedEffect(deplacement, etat.apercu) {
+        val occurrence = viewModel.recherche.value?.takeIf { it.enApercu }?.occurrenceApercu
+        if (!etat.apercu || occurrence == null) return@LaunchedEffect
+        val element = occurrence.element
+        val debut = occurrence.plage.first
+        val info = etatListeApercu.layoutInfo
+        // L'aperçu s'arrête au-dessus du clavier (`imePadding`) : la fin de
+        // la liste, et donc la dernière occurrence, n'est jamais dessous.
+        val basVisible = info.viewportEndOffset
+        val visible = info.visibleItemsInfo.firstOrNull { it.index == element }
+        val ligne = positionOccurrence.hautDeLigne(element, debut)
+        if (visible != null) {
+            // Sans mise en page (cellule de tableau), l'élément entier compte.
+            val haut = visible.offset + (ligne ?: 0)
+            val bas = if (ligne != null) haut + HAUTEUR_LIGNE_MIN_PX else visible.offset + visible.size
+            if (haut >= info.viewportStartOffset && bas <= basVisible) return@LaunchedEffect
+        }
+        etatListeApercu.scrollToItem(element)
+        // Attendre le dessin de l'élément, pour lire la mise en page de son texte.
+        withFrameNanos { }
+        val dansElement = positionOccurrence.hautDeLigne(element, debut) ?: return@LaunchedEffect
+        val hauteur = (basVisible - info.viewportStartOffset).coerceAtLeast(0)
+        val decalage = dansElement - hauteur / 4
+        if (decalage > 0) etatListeApercu.scrollToItem(element, decalage)
+    }
+
+    // Fermer rend le titre et retire la mise en évidence ; en saisie, le
+    // curseur reste sur la dernière occurrence visitée, champ actif.
+    val fermerRecherche = {
+        val fermee = viewModel.fermerRecherche()
+        sessionNative.effacerOccurrence()
+        val plage = fermee?.plage?.takeIf { !fermee.enApercu }
+        if (!viewModel.uiState.value.apercu && plage != null &&
+            sessionNative.poserCurseur(fermee.revision, plage.first)
+        ) {
+            sessionNative.demanderFocusEtClavier()
+        }
+    }
+    // Déclaré après celui de la sortie : le dernier inscrit passe en premier.
+    // Retour arrière ferme d'abord la recherche, quitte la note ensuite.
+    BackHandler(enabled = rechercheOuverte, onBack = fermerRecherche)
+
     // Le plan se demande là où l'on est : en aperçu, les blocs affichés
     // suffisent ; en saisie, le texte du champ est rendu à la demande.
     val ouvrirPlan: () -> Unit = {
@@ -248,6 +359,17 @@ fun EditorScreen(
         modifier = modifier,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
+            // La recherche remplace la barre de titre tant qu'elle est ouverte.
+            recherche?.let { ouverte ->
+                BarreRecherche(
+                    recherche = ouverte,
+                    onTerme = viewModel::changerTermeRecherche,
+                    onPrecedente = { viewModel.occurrenceVoisine(-1) },
+                    onSuivante = { viewModel.occurrenceVoisine(1) },
+                    onFermer = fermerRecherche,
+                )
+                return@Scaffold
+            }
             TopAppBar(
                 title = {
                     Column {
@@ -326,8 +448,12 @@ fun EditorScreen(
                     // détection, seulement quand l'encodage a été choisi contre
                     // son avis : c'est l'annulation de « Ouvrir quand même ».
                     val planPossible = etat.charge && !etat.chargement && !etat.texteBrut
-                    if (planPossible || etat.encodageForce) {
+                    // La recherche, elle, vaut aussi pour un .txt et pour une
+                    // note en lecture seule : il suffit qu'il y ait un texte.
+                    val recherchePossible = etat.charge && !etat.chargement
+                    if (recherchePossible || etat.encodageForce) {
                         MenuEditeur(
+                            onRechercher = viewModel::ouvrirRecherche.takeIf { recherchePossible },
                             onPlan = ouvrirPlan.takeIf { planPossible },
                             onRevenirALaDetection = {
                                 viewModel.revenirALaDetection(
@@ -396,7 +522,12 @@ fun EditorScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surface),
+                        .background(MaterialTheme.colorScheme.surface)
+                        // Le clavier n'y paraît que pour la recherche : la
+                        // liste raccourcit au-dessus de lui, sans quoi une
+                        // occurrence en fin de note restait dessous.
+                        .consumeWindowInsets(paddings)
+                        .imePadding(),
                 ) {
                     if (!etat.modifiable) {
                         BandeauLectureSeule(
@@ -410,6 +541,8 @@ fun EditorScreen(
                         modifier = Modifier.weight(1f),
                         echelle = tailleLecture / 100f,
                         etatListe = etatListeApercu,
+                        surlignage = surlignageApercu,
+                        positionOccurrence = positionOccurrence,
                         // Pas de case cliquable sans champ où écrire : une note
                         // en lecture seule garde des cases décoratives.
                         onBasculerTache = if (etat.modifiable) {
@@ -673,6 +806,7 @@ private fun BandeauLectureSeule(
  */
 @Composable
 private fun MenuEditeur(
+    onRechercher: (() -> Unit)?,
     onPlan: (() -> Unit)?,
     onRevenirALaDetection: (() -> Unit)?,
 ) {
@@ -685,6 +819,16 @@ private fun MenuEditeur(
             )
         }
         DropdownMenu(expanded = ouvert, onDismissRequest = { ouvert = false }) {
+            onRechercher?.let { action ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.recherche_action)) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    onClick = {
+                        ouvert = false
+                        action()
+                    },
+                )
+            }
             onPlan?.let { action ->
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.editeur_plan)) },
@@ -798,6 +942,15 @@ private const val LIGNES_AVANT_COURANTE = 2
  * propre anti-rebond dans `SyncScheduler`.
  */
 private const val DELAI_ENREGISTREMENT_MS = 700L
+
+/**
+ * Hauteur d'une ligne de texte de l'aperçu, en pixels, pour juger qu'une ligne
+ * est à l'écran : une borne basse suffit, la ligne est ensuite placée au quart.
+ */
+private const val HAUTEUR_LIGNE_MIN_PX = 48
+
+/** Calme exigé après une lettre tapée dans la recherche avant de chercher, en millisecondes. */
+private const val DELAI_RECHERCHE_TERME_MS = 150L
 
 /** Nom d'écran du fil d'Ariane de diagnostic. */
 private const val ECRAN_EDITEUR = "editeur" // i18n-ok

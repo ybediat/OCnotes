@@ -658,4 +658,15 @@
     <string name="editeur_plan">Plan</string>
     <string name="editeur_plan_titre">Plan de la note</string>
     <string name="editeur_plan_vide">Cette note n\'a pas de titre</string>
+    <!-- Chantier 3 : rechercher dans la note ouverte. L’entrée du menu ⋮, l’invite du champ, les trois boutons de la barre, et le compteur « 3/17 ». -->
+    <string name="recherche_action">Rechercher</string>
+    <string name="recherche_invite">Rechercher dans la note</string>
+    <string name="recherche_precedente">Occurrence précédente</string>
+    <string name="recherche_suivante">Occurrence suivante</string>
+    <string name="recherche_fermer">Fermer la recherche</string>
+    <string name="recherche_compteur" translatable="false">%1$d/%2$d</string>
+    <string name="recherche_compteur_plafond" translatable="false">%1$d/%2$d+</string>
+    <string name="recherche_compteur_zero" translatable="false">0</string>
+    <string name="recherche_compteur_description">Occurrence %1$d sur %2$d</string>
+    <string name="recherche_aucune_occurrence">Aucune occurrence</string>
 </resources>

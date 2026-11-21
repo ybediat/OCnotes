@@ -643,4 +643,12 @@
     <string name="editeur_plan">Outline</string>
     <string name="editeur_plan_titre">Note outline</string>
     <string name="editeur_plan_vide">This note has no headings</string>
+    <!-- Chantier 3 : rechercher dans la note ouverte. -->
+    <string name="recherche_action">Find in note</string>
+    <string name="recherche_invite">Find in note</string>
+    <string name="recherche_precedente">Previous match</string>
+    <string name="recherche_suivante">Next match</string>
+    <string name="recherche_fermer">Close search</string>
+    <string name="recherche_compteur_description">Match %1$d of %2$d</string>
+    <string name="recherche_aucune_occurrence">No matches</string>
 </resources>

@@ -14,8 +14,10 @@ import eu.ocnotes.data.FormatAction
 import eu.ocnotes.data.NoteBlockDto
 import eu.ocnotes.data.OCnotesException
 import eu.ocnotes.data.OCnotesRepository
+import eu.ocnotes.ui.common.MAX_OCCURRENCES
 import eu.ocnotes.ui.common.Texte
 import eu.ocnotes.ui.common.texte
+import eu.ocnotes.ui.common.trouverOccurrences
 import eu.ocnotes.sync.SyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -169,6 +171,31 @@ data class EditorUiState(
      * n'est pas reproductible à la main.
      */
     val enregistrable: Boolean get() = charge && modifiable
+}
+
+/**
+ * La barre de recherche ouverte.
+ *
+ * [terme] est ce qui est tapé, [termeCherche] le terme dont viennent les
+ * résultats : ils diffèrent le temps d'un calcul. [enApercu] dit d'où viennent
+ * les résultats — [plage] et [revision] en saisie, [occurrenceApercu] en
+ * aperçu. [deplacement] change à chaque occurrence montrée, même identique à la
+ * précédente : « suivant » sur une occurrence unique la ramène à l'écran.
+ */
+data class RechercheOuverte(
+    val terme: String = "",
+    val termeCherche: String? = null,
+    val total: Int = 0,
+    val plafond: Boolean = false,
+    val indice: Int = -1,
+    val enApercu: Boolean = false,
+    val revision: Long = -1,
+    val plage: IntRange? = null,
+    val occurrenceApercu: OccurrenceApercu? = null,
+    val deplacement: Int = 0,
+) {
+    /** Un terme cherché qui ne trouve rien : le champ prend la couleur d'erreur. */
+    val aucune: Boolean get() = terme.isNotEmpty() && termeCherche == terme && total == 0
 }
 
 /**
@@ -821,6 +848,149 @@ class EditorViewModel(
     fun fermerPlan() {
         calculPlan?.cancel()
         _plan.value = null
+    }
+
+    // --- Recherche dans la note --------------------------------------------
+    //
+    // Le ViewModel garde le terme, l'occurrence courante et leur nombre : ils
+    // survivent à une rotation. Les occurrences elles-mêmes restent hors de
+    // `uiState` — 5 000 plages n'ont pas à recomposer l'écran — et le texte
+    // cherché n'est qu'une photo prise aux frontières (ouverture, terme
+    // changé, calme après une frappe), jamais à chaque touche. Le terme n'est
+    // ni journalisé ni versé au diagnostic.
+
+    private val _recherche = MutableStateFlow<RechercheOuverte?>(null)
+
+    /** La barre de recherche, `null` fermée. */
+    val recherche: StateFlow<RechercheOuverte?> = _recherche.asStateFlow()
+
+    private val _surlignageApercu = MutableStateFlow<SurlignageApercu?>(null)
+
+    /** Les occurrences de l'aperçu par élément, que l'aperçu surligne à mesure qu'il dessine. */
+    val surlignageApercu: StateFlow<SurlignageApercu?> = _surlignageApercu.asStateFlow()
+
+    private var occurrencesSaisie: List<IntRange> = emptyList()
+    private var occurrencesApercu: List<OccurrenceApercu> = emptyList()
+    private var calculRecherche: Job? = null
+
+    fun ouvrirRecherche() {
+        if (_recherche.value == null) _recherche.value = RechercheOuverte()
+    }
+
+    /** Le terme tapé. Les résultats d'avant restent affichés jusqu'au calcul suivant. */
+    fun changerTermeRecherche(terme: String) {
+        _recherche.update { it?.copy(terme = terme) }
+    }
+
+    /**
+     * Cherche le terme courant dans la photo [instantane] du champ, hors du
+     * thread principal.
+     *
+     * L'occurrence courante est la première à partir de la courante d'avant —
+     * on affine un terme sans être renvoyé en haut de la note —, ou, en
+     * arrivant de l'aperçu, de [depuis], la position visible du champ.
+     * Un résultat est écarté si le champ ou le terme ont bougé entre-temps :
+     * l'écran recherche alors de lui-même.
+     */
+    fun chercherSaisie(instantane: InstantaneEditeurNatif?, depuis: Int) {
+        val ouverte = _recherche.value ?: return
+        if (instantane == null || instantane.revision != _revisionNative.value) return
+        val terme = ouverte.terme
+        val repere = (ouverte.plage?.takeIf { !ouverte.enApercu }?.first ?: depuis).toLong()
+        calculRecherche?.cancel()
+        calculRecherche = viewModelScope.launch {
+            val trouvees = withContext(Dispatchers.Default) {
+                trouverOccurrences(instantane.texte, terme, MAX_OCCURRENCES + 1)
+            }
+            val courante = _recherche.value ?: return@launch
+            if (courante.terme != terme) return@launch
+            if (!revisionNativeToujoursCourante(instantane.revision, _revisionNative.value)) return@launch
+            occurrencesSaisie = trouvees.take(MAX_OCCURRENCES)
+            occurrencesApercu = emptyList()
+            _surlignageApercu.value = null
+            val indice = premiereApres(occurrencesSaisie, repere) { it.first.toLong() }
+            _recherche.value = courante.copy(
+                termeCherche = terme,
+                total = occurrencesSaisie.size,
+                plafond = trouvees.size > MAX_OCCURRENCES,
+                indice = indice,
+                enApercu = false,
+                revision = instantane.revision,
+                plage = occurrencesSaisie.getOrNull(indice),
+                occurrenceApercu = null,
+                deplacement = courante.deplacement + 1,
+            )
+        }
+    }
+
+    /**
+     * Cherche le terme courant dans les blocs affichés par l'aperçu, hors du
+     * thread principal. [depuis] est le premier élément visible de la liste,
+     * qui sert quand on arrive de la saisie.
+     */
+    fun chercherApercu(depuis: Int) {
+        val ouverte = _recherche.value ?: return
+        val etat = _uiState.value
+        if (!etat.apercu) return
+        val terme = ouverte.terme
+        val blocs = etat.blocs
+        val repere = ouverte.occurrenceApercu?.takeIf { ouverte.enApercu }
+            ?.let { repereApercu(it.element, it.plage.first) }
+            ?: repereApercu(depuis)
+        calculRecherche?.cancel()
+        calculRecherche = viewModelScope.launch {
+            val (trouvees, parElement) = withContext(Dispatchers.Default) {
+                val liste = occurrencesApercu(blocs, terme, MAX_OCCURRENCES + 1)
+                liste to liste.take(MAX_OCCURRENCES).groupBy { it.element }
+            }
+            val courante = _recherche.value ?: return@launch
+            if (courante.terme != terme || _uiState.value.blocs !== blocs) return@launch
+            occurrencesApercu = trouvees.take(MAX_OCCURRENCES)
+            occurrencesSaisie = emptyList()
+            val indice = premiereApres(occurrencesApercu, repere) { repereApercu(it.element, it.plage.first) }
+            val occurrence = occurrencesApercu.getOrNull(indice)
+            _surlignageApercu.value = SurlignageApercu(parElement, occurrence)
+            _recherche.value = courante.copy(
+                termeCherche = terme,
+                total = occurrencesApercu.size,
+                plafond = trouvees.size > MAX_OCCURRENCES,
+                indice = indice,
+                enApercu = true,
+                plage = null,
+                occurrenceApercu = occurrence,
+                deplacement = courante.deplacement + 1,
+            )
+        }
+    }
+
+    /** « Suivant » ([pas] = 1) ou « précédent » (-1), en boucle. */
+    fun occurrenceVoisine(pas: Int) {
+        val ouverte = _recherche.value ?: return
+        val indice = indiceVoisin(ouverte.indice, ouverte.total, pas)
+        if (indice < 0) return
+        if (ouverte.enApercu) {
+            val occurrence = occurrencesApercu.getOrNull(indice) ?: return
+            _surlignageApercu.update { it?.copy(courante = occurrence) }
+            _recherche.value = ouverte.copy(
+                indice = indice,
+                occurrenceApercu = occurrence,
+                deplacement = ouverte.deplacement + 1,
+            )
+        } else {
+            val plage = occurrencesSaisie.getOrNull(indice) ?: return
+            _recherche.value = ouverte.copy(indice = indice, plage = plage, deplacement = ouverte.deplacement + 1)
+        }
+    }
+
+    /** Ferme la barre et rend ce qu'elle montrait, pour y laisser le curseur. */
+    fun fermerRecherche(): RechercheOuverte? {
+        calculRecherche?.cancel()
+        val ouverte = _recherche.value
+        _recherche.value = null
+        _surlignageApercu.value = null
+        occurrencesSaisie = emptyList()
+        occurrencesApercu = emptyList()
+        return ouverte
     }
 
     private suspend fun ecrire(contenu: String, revision: Long) {
