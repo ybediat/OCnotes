@@ -327,7 +327,9 @@ class SessionEditeurNatif {
      * Le défilement est explicite, comme le saut du plan : la ligne de
      * l'occurrence est posée au tiers de la hauteur visible quand elle n'est
      * pas déjà entièrement à l'écran. La hauteur visible tient compte du
-     * clavier, qui rétrécit le champ (`imePadding`).
+     * clavier, qui rétrécit le champ (`imePadding`). [defiler] faux (recherche
+     * refaite après une frappe) : l'occurrence est marquée, le champ reste où
+     * l'on tape.
      */
     @MainThread
     fun montrerOccurrence(
@@ -335,6 +337,7 @@ class SessionEditeurNatif {
         plage: IntRange,
         couleur: Int,
         couleurCourante: Int,
+        defiler: Boolean = true,
     ): Boolean {
         val vue = champ ?: return false
         if (!revisionNativeToujoursCourante(revisionAttendue, revision)) return false
@@ -346,13 +349,18 @@ class SessionEditeurNatif {
             vue.setSearchResultHighlights(debut, fin)
             vue.focusedSearchResultIndex = 0
         } else {
-            val marque = marqueRecherche ?: android.text.style.BackgroundColorSpan(couleurCourante)
-                .also { marqueRecherche = it }
+            // Un span garde sa couleur : au changement de thème, l'ancien est
+            // retiré et un nouveau posé à la teinte du thème.
+            val ancienne = marqueRecherche
+            val marque = ancienne?.takeIf { it.backgroundColor == couleurCourante }
+                ?: android.text.style.BackgroundColorSpan(couleurCourante).also { marqueRecherche = it }
             val poser = {
+                if (ancienne != null && ancienne !== marque) vue.text.removeSpan(ancienne)
                 vue.text.setSpan(marque, debut, fin, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
             if (vue is ChampEditeur) vue.sansSuiviCurseur(poser) else poser()
         }
+        if (!defiler) return true
         val mise = vue.layout ?: return true
         val ligne = mise.getLineForOffset(debut)
         val haut = vue.scrollY
@@ -371,6 +379,12 @@ class SessionEditeurNatif {
     fun effacerOccurrence() {
         val vue = champ ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // L'indice d'abord : `focusedSearchResultIndex` lève une exception
+            // s'il n'y a pas de plages, et un indice resté à 0 désignerait une
+            // plage qui n'existe plus.
+            if (vue.searchResultHighlights != null) {
+                vue.focusedSearchResultIndex = android.widget.TextView.FOCUSED_SEARCH_RESULT_INDEX_NONE
+            }
             vue.setSearchResultHighlights(*IntArray(0))
         }
         marqueRecherche?.let { marque ->

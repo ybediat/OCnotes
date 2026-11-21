@@ -181,6 +181,8 @@ data class EditorUiState(
  * les résultats — [plage] et [revision] en saisie, [occurrenceApercu] en
  * aperçu. [deplacement] change à chaque occurrence montrée, même identique à la
  * précédente : « suivant » sur une occurrence unique la ramène à l'écran.
+ * [defiler] est faux quand la recherche a été refaite après une frappe dans la
+ * note : l'occurrence est remarquée, mais le champ ne quitte pas le curseur.
  */
 data class RechercheOuverte(
     val terme: String = "",
@@ -193,6 +195,7 @@ data class RechercheOuverte(
     val plage: IntRange? = null,
     val occurrenceApercu: OccurrenceApercu? = null,
     val deplacement: Int = 0,
+    val defiler: Boolean = true,
 ) {
     /** Un terme cherché qui ne trouve rien : le champ prend la couleur d'erreur. */
     val aucune: Boolean get() = terme.isNotEmpty() && termeCherche == terme && total == 0
@@ -891,16 +894,28 @@ class EditorViewModel(
      * arrivant de l'aperçu, de [depuis], la position visible du champ.
      * Un résultat est écarté si le champ ou le terme ont bougé entre-temps :
      * l'écran recherche alors de lui-même.
+     *
+     * [defiler] faux : la recherche suit une frappe dans la note, le champ ne
+     * doit pas sauter loin de là où l'on tape.
      */
-    fun chercherSaisie(instantane: InstantaneEditeurNatif?, depuis: Int) {
+    fun chercherSaisie(instantane: InstantaneEditeurNatif?, depuis: Int, defiler: Boolean = true) {
         val ouverte = _recherche.value ?: return
         if (instantane == null || instantane.revision != _revisionNative.value) return
         val terme = ouverte.terme
         val repere = (ouverte.plage?.takeIf { !ouverte.enApercu }?.first ?: depuis).toLong()
         calculRecherche?.cancel()
         calculRecherche = viewModelScope.launch {
-            val trouvees = withContext(Dispatchers.Default) {
-                trouverOccurrences(instantane.texte, terme, MAX_OCCURRENCES + 1)
+            val (trouvees, fenetre) = withContext(Dispatchers.Default) {
+                val depuisLeHaut = trouverOccurrences(instantane.texte, terme, MAX_OCCURRENCES + 1)
+                // Au plafond, si l'on lit au-delà de la dernière occurrence
+                // retenue, la fenêtre repart du repère : sans cela on était
+                // renvoyé en haut, et la suite de la note restait hors d'atteinte.
+                val derniere = depuisLeHaut.getOrNull(MAX_OCCURRENCES - 1)
+                if (depuisLeHaut.size > MAX_OCCURRENCES && derniere != null && derniere.first < repere) {
+                    trouverOccurrences(instantane.texte, terme, MAX_OCCURRENCES + 1, repere.toInt()) to true
+                } else {
+                    depuisLeHaut to false
+                }
             }
             val courante = _recherche.value ?: return@launch
             if (courante.terme != terme) return@launch
@@ -912,13 +927,16 @@ class EditorViewModel(
             _recherche.value = courante.copy(
                 termeCherche = terme,
                 total = occurrencesSaisie.size,
-                plafond = trouvees.size > MAX_OCCURRENCES,
+                // Une fenêtre partie du repère laisse des occurrences avant
+                // elle : le compte est un minimum.
+                plafond = fenetre || trouvees.size > MAX_OCCURRENCES,
                 indice = indice,
                 enApercu = false,
                 revision = instantane.revision,
                 plage = occurrencesSaisie.getOrNull(indice),
                 occurrenceApercu = null,
                 deplacement = courante.deplacement + 1,
+                defiler = defiler,
             )
         }
     }
@@ -939,10 +957,20 @@ class EditorViewModel(
             ?: repereApercu(depuis)
         calculRecherche?.cancel()
         calculRecherche = viewModelScope.launch {
-            val (trouvees, parElement) = withContext(Dispatchers.Default) {
-                val liste = occurrencesApercu(blocs, terme, MAX_OCCURRENCES + 1)
-                liste to liste.take(MAX_OCCURRENCES).groupBy { it.element }
+            val (trouvees, fenetre) = withContext(Dispatchers.Default) {
+                val depuisLeHaut = occurrencesApercu(blocs, terme, MAX_OCCURRENCES + 1)
+                // Même fenêtre qu'en saisie : au plafond, on part du repère
+                // s'il est au-delà de la dernière occurrence retenue.
+                val derniere = depuisLeHaut.getOrNull(MAX_OCCURRENCES - 1)
+                if (depuisLeHaut.size > MAX_OCCURRENCES && derniere != null &&
+                    repereApercu(derniere.element, derniere.plage.first) < repere
+                ) {
+                    occurrencesApercu(blocs, terme, MAX_OCCURRENCES + 1, repere) to true
+                } else {
+                    depuisLeHaut to false
+                }
             }
+            val parElement = trouvees.take(MAX_OCCURRENCES).groupBy { it.element }
             val courante = _recherche.value ?: return@launch
             if (courante.terme != terme || _uiState.value.blocs !== blocs) return@launch
             occurrencesApercu = trouvees.take(MAX_OCCURRENCES)
@@ -953,12 +981,13 @@ class EditorViewModel(
             _recherche.value = courante.copy(
                 termeCherche = terme,
                 total = occurrencesApercu.size,
-                plafond = trouvees.size > MAX_OCCURRENCES,
+                plafond = fenetre || trouvees.size > MAX_OCCURRENCES,
                 indice = indice,
                 enApercu = true,
                 plage = null,
                 occurrenceApercu = occurrence,
                 deplacement = courante.deplacement + 1,
+                defiler = true,
             )
         }
     }
@@ -975,10 +1004,16 @@ class EditorViewModel(
                 indice = indice,
                 occurrenceApercu = occurrence,
                 deplacement = ouverte.deplacement + 1,
+                defiler = true,
             )
         } else {
             val plage = occurrencesSaisie.getOrNull(indice) ?: return
-            _recherche.value = ouverte.copy(indice = indice, plage = plage, deplacement = ouverte.deplacement + 1)
+            _recherche.value = ouverte.copy(
+                indice = indice,
+                plage = plage,
+                deplacement = ouverte.deplacement + 1,
+                defiler = true,
+            )
         }
     }
 

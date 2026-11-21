@@ -25,8 +25,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -41,8 +44,27 @@ import eu.ocnotes.R
  * occurrence, ni la teinte de la sélection : une occurrence n'est pas une
  * sélection, rien ne la copie.
  */
-internal val FOND_OCCURRENCE = Color(0xFFFFB74D).copy(alpha = 0.35f)
-internal val FOND_OCCURRENCE_COURANTE = Color(0xFFFF9800).copy(alpha = 0.75f)
+internal data class CouleursRecherche(val occurrence: Color, val courante: Color)
+
+/** Thème clair : le texte sombre reste lisible sur un orangé vif. */
+private val COULEURS_RECHERCHE_CLAIR = CouleursRecherche(
+    occurrence = Color(0xFFFFB74D).copy(alpha = 0.35f),
+    courante = Color(0xFFFF9800).copy(alpha = 0.75f),
+)
+
+/**
+ * Thème sombre : le texte y est clair, un orangé vif le rendait illisible. Un
+ * orangé brun garde la teinte et un contraste d'environ 5:1 avec le texte.
+ */
+private val COULEURS_RECHERCHE_SOMBRE = CouleursRecherche(
+    occurrence = Color(0xFF8A4B00).copy(alpha = 0.45f),
+    courante = Color(0xFF8A4B00),
+)
+
+/** Les couleurs de la recherche pour le thème affiché, clair ou sombre. */
+@Composable
+internal fun couleursRecherche(): CouleursRecherche =
+    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) COULEURS_RECHERCHE_SOMBRE else COULEURS_RECHERCHE_CLAIR
 
 /**
  * La barre de recherche, qui remplace la barre de titre tant qu'elle est
@@ -123,12 +145,25 @@ private fun Compteur(recherche: RechercheOuverte) {
             if (recherche.plafond) R.string.recherche_compteur_plafond else R.string.recherche_compteur,
             rang,
             recherche.total,
-        ) to stringResource(R.string.recherche_compteur_description, rang, recherche.total)
+        ) to stringResource(
+            if (recherche.plafond) {
+                R.string.recherche_compteur_description_plafond
+            } else {
+                R.string.recherche_compteur_description
+            },
+            rang,
+            recherche.total,
+        )
     }
     Text(
         text = texte,
         style = MaterialTheme.typography.labelLarge,
         color = if (recherche.total == 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.semantics { contentDescription = description },
+        // Région vivante : TalkBack annonce le compteur quand il change, sans
+        // que le focus quitte le champ de recherche.
+        modifier = Modifier.semantics {
+            contentDescription = description
+            liveRegion = LiveRegionMode.Polite
+        },
     )
 }

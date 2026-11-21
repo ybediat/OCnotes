@@ -27,20 +27,30 @@ data class OccurrenceApercu(
  * tombe juste dans le `Text` qui la dessine. Un bloc de code et le texte
  * alternatif d'une image sont cherchés comme les autres ; une occurrence ne
  * franchit jamais la limite d'un bloc ou d'une cellule.
+ *
+ * [depuis] est un repère (voir [repereApercu]) : seules les occurrences à
+ * partir de lui sont retenues. Sert quand le plafond est atteint, pour que la
+ * fenêtre parte de là où l'on lit. Dans un tableau, l'élément entier compte.
  */
 internal fun occurrencesApercu(
     blocs: List<NoteBlockDto>,
     terme: String,
     limite: Int,
+    depuis: Long = 0,
 ): List<OccurrenceApercu> {
     val resultat = ArrayList<OccurrenceApercu>()
+    val elementDepart = (depuis ushr 32).toInt()
+    val positionDepart = (depuis and 0xFFFFFFFFL).toInt()
     grouperPourApercu(blocs).forEachIndexed { indice, element ->
         if (resultat.size >= limite) return resultat
+        if (indice < elementDepart) return@forEachIndexed
         when (element) {
-            is ElementApercu.Bloc ->
-                trouverOccurrences(element.bloc.text, terme, limite - resultat.size).forEach {
+            is ElementApercu.Bloc -> {
+                val position = if (indice == elementDepart) positionDepart else 0
+                trouverOccurrences(element.bloc.text, terme, limite - resultat.size, position).forEach {
                     resultat += OccurrenceApercu(indice, it)
                 }
+            }
             is ElementApercu.Tableau ->
                 element.lignes.forEachIndexed { ligne, bloc ->
                     bloc.cells.forEachIndexed { colonne, cellule ->

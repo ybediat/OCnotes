@@ -631,5 +631,6 @@
     <string name="recherche_suivante">Nächster Treffer</string>
     <string name="recherche_fermer">Suche schließen</string>
     <string name="recherche_compteur_description">Treffer %1$d von %2$d</string>
+    <string name="recherche_compteur_description_plafond">Treffer %1$d von mehr als %2$d</string>
     <string name="recherche_aucune_occurrence">Keine Treffer</string>
 </resources>

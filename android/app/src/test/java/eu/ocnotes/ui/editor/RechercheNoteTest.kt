@@ -101,6 +101,34 @@ class RechercheNoteTest {
         assertEquals(listOf("cœur"), trouverOccurrences("un cœur", "coeur").map { "un cœur".substring(it) })
     }
 
+    /** Une occurrence couvre des caractères entiers : « e » seul ne trouve pas le « œ ». */
+    @Test
+    fun pasDOccurrenceDansUneLigature() {
+        assertEquals(listOf(5 until 6), trouverOccurrences("cœur e", "e"))
+        assertEquals(emptyList<IntRange>(), trouverOccurrences("Straße", "s").filter { it.first == 4 })
+        assertEquals(listOf(0 until 1, 2 until 4), trouverOccurrences("œ oe", "oe"))
+    }
+
+    /** Au plafond, la fenêtre part du repère : la suite de la note reste atteignable. */
+    @Test
+    fun occurrencesDepuisUnePosition() {
+        val texte = "lorem ipsum lorem ipsum lorem"
+        assertEquals(listOf(12 until 17, 24 until 29), trouverOccurrences(texte, "lorem", depuis = 6))
+        assertEquals(listOf(12 until 17), trouverOccurrences(texte, "lorem", limite = 1, depuis = 12))
+        assertEquals(emptyList<IntRange>(), trouverOccurrences(texte, "lorem", depuis = 25))
+        // Un repère au milieu d'un caractère décomposé part du caractère suivant.
+        assertEquals(listOf(3 until 4), trouverOccurrences("e\u0301 e", "e", depuis = 1))
+    }
+
+    @Test
+    fun occurrencesApercuDepuisUnRepere() {
+        val blocs = listOf(paragraphe("lorem"), paragraphe("lorem lorem"), paragraphe("lorem"))
+        assertEquals(
+            listOf(OccurrenceApercu(1, 6 until 11), OccurrenceApercu(2, 0 until 5)),
+            occurrencesApercu(blocs, "lorem", 100, depuis = repereApercu(1, 1)),
+        )
+    }
+
     @Test
     fun espacesInsecables() {
         val texte = "10 € et 10 €"
