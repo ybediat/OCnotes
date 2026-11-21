@@ -2505,6 +2505,9 @@ type noteBlock struct {
 	// où commence le contenu du bloc — le « [ » d'une tâche. Absente quand
 	// elle est inconnue : zéro est une position valide.
 	Source *int `json:"source,omitempty"`
+	// Cont marque un morceau qui continue le bloc précédent, découpé parce
+	// que trop long pour l'aperçu : à coller au précédent, sans marqueur.
+	Cont bool `json:"cont,omitempty"`
 }
 
 // RenderNoteJSON prépare l'affichage d'une note en lecture seule.
@@ -2621,6 +2624,7 @@ func versNoteBlocks(blocks []markdown.Block) []noteBlock {
 			Cells:   b.Cells,
 			Header:  b.Header,
 			Source:  b.Source,
+			Cont:    b.Cont,
 		}
 		for _, s := range b.Spans {
 			converti.Spans = append(converti.Spans, noteSpan{

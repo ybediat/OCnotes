@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -212,7 +213,6 @@ private fun ContenuMarkdown(
                         )
                     },
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 itemsIndexed(
                     items = elements,
@@ -225,10 +225,19 @@ private fun ContenuMarkdown(
                 ) { index, element ->
                     Epingle(actif = selectionPossible)
                     DisposableEffect(index) { onDispose { reperes.elements.remove(index) } }
-                    Box(Modifier.onPlaced { reperes.elements[index] = it }) {
-                        when (element) {
-                            is ElementApercu.Bloc -> Bloc(element.bloc, onBasculerTache, element.suiteDeTache)
-                            is ElementApercu.Tableau -> Tableau(element.lignes)
+                    // L'écart entre deux blocs, sauf avant un morceau qui
+                    // continue le précédent : un paragraphe découpé par Go doit
+                    // se lire d'un seul tenant. L'écart est hors du Box repéré,
+                    // pour que sa position reste celle du contenu.
+                    Column {
+                        if (index > 0 && !(element is ElementApercu.Bloc && element.bloc.cont)) {
+                            Spacer(Modifier.height(ECART_BLOCS_DP.dp))
+                        }
+                        Box(Modifier.onPlaced { reperes.elements[index] = it }) {
+                            when (element) {
+                                is ElementApercu.Bloc -> Bloc(element.bloc, element.avantSuite, onBasculerTache, element.suiteDeTache)
+                                is ElementApercu.Tableau -> Tableau(element.lignes)
+                            }
                         }
                     }
                 }
@@ -624,17 +633,24 @@ private fun ConfirmationLien(url: String, onFermer: () -> Unit) {
 }
 
 private const val MAX_URL_AFFICHEE = 500
+/** Écart vertical entre deux blocs de l'aperçu ; nul avant un morceau de suite. */
+private const val ECART_BLOCS_DP = 10
 private const val LARGEUR_BARRE_DP = 3
 private const val PAS_BARRE_DP = 13 // barre de 3 dp + 10 dp d'air
 
 /** Un élément de la liste visible, avec les tableaux reconstitués. */
 internal sealed interface ElementApercu {
+    /** [avantSuite] : le bloc suivant le continue (voir `NoteBlockDto.cont`). */
     /**
      * [suiteDeTache] : morceau d'une tâche coupée par une image, qui n'est pas
-     * le premier. Il porte la même case que le premier morceau (même
-     * position source) et ne la redessine pas : une tâche, une case.
+     * le premier. Il porte la même case que le premier morceau (même position
+     * source) et ne la redessine pas : une tâche, une case.
      */
-    data class Bloc(val bloc: NoteBlockDto, val suiteDeTache: Boolean = false) : ElementApercu
+    data class Bloc(
+        val bloc: NoteBlockDto,
+        val avantSuite: Boolean = false,
+        val suiteDeTache: Boolean = false,
+    ) : ElementApercu
     data class Tableau(val lignes: List<NoteBlockDto>) : ElementApercu
 }
 
@@ -662,8 +678,31 @@ internal fun indiceElement(blocs: List<NoteBlockDto>, indiceBloc: Int): Int {
 }
 
 /**
- * Réunit uniquement les lignes consécutives d'un même tableau, et repère les
- * morceaux de tâche qui suivent le premier (voir [ElementApercu.Bloc]).
+ * Retire, pour l'affichage seulement, le retour à la ligne qui termine un
+ * morceau suivi d'une suite.
+ *
+ * Go coupe un long bloc juste après un « \n », qu'il garde pour que les
+ * morceaux recollés rendent le texte exact. Affiché tel quel, ce retour
+ * ajouterait une ligne vide à la jointure. La copie d'une sélection n'y perd
+ * rien : la sélection remet un retour entre deux `Text`.
+ */
+internal fun sansRetourFinal(bloc: NoteBlockDto): NoteBlockDto {
+    if (!bloc.text.endsWith('\n')) return bloc
+    val fin = bloc.text.length - 1
+    return bloc.copy(
+        text = bloc.text.substring(0, fin),
+        spans = bloc.spans.mapNotNull { span ->
+            val debut = span.start.coerceAtMost(fin)
+            val terme = span.end.coerceAtMost(fin)
+            if (debut < terme) span.copy(start = debut, end = terme) else null
+        },
+    )
+}
+
+/**
+ * Réunit uniquement les lignes consécutives d'un même tableau, marque le
+ * morceau que le suivant continue, et repère les morceaux d'une tâche coupée
+ * par une image qui suivent le premier (voir [ElementApercu.Bloc]).
  */
 internal fun grouperPourApercu(blocs: List<NoteBlockDto>): List<ElementApercu> {
     val elements = mutableListOf<ElementApercu>()
@@ -675,14 +714,19 @@ internal fun grouperPourApercu(blocs: List<NoteBlockDto>): List<ElementApercu> {
     while (index < blocs.size) {
         val bloc = blocs[index]
         if (bloc.kind != BlockKind.LIGNE_TABLEAU) {
-            val suite = bloc.kind == BlockKind.TACHE && bloc.source != null && bloc.source == sourceTache
+            val avantSuite = blocs.getOrNull(index + 1)?.cont == true
+            val suiteDeTache = bloc.kind == BlockKind.TACHE && bloc.source != null && bloc.source == sourceTache
             if (bloc.kind == BlockKind.TACHE) {
                 sourceTache = bloc.source
             } else if (bloc.kind != BlockKind.IMAGE) {
                 // Seule une image sépare les morceaux d'une même tâche.
                 sourceTache = null
             }
-            elements += ElementApercu.Bloc(bloc, suiteDeTache = suite)
+            elements += ElementApercu.Bloc(
+                if (avantSuite) sansRetourFinal(bloc) else bloc,
+                avantSuite,
+                suiteDeTache,
+            )
             index++
             continue
         }
@@ -705,6 +749,7 @@ internal fun grouperPourApercu(blocs: List<NoteBlockDto>): List<ElementApercu> {
 @Composable
 private fun Bloc(
     bloc: NoteBlockDto,
+    avantSuite: Boolean,
     onBasculerTache: ((NoteBlockDto) -> Unit)?,
     suiteDeTache: Boolean = false,
 ) {
@@ -732,10 +777,17 @@ private fun Bloc(
         Column(Modifier.weight(1f)) {
             when (bloc.kind) {
                 BlockKind.TITRE -> Titre(bloc)
-                BlockKind.PUCE -> Puce(bloc, marqueur = "•") // i18n-ok
-                BlockKind.NUMEROTE -> Puce(bloc, marqueur = "${bloc.number}.") // i18n-ok
-                BlockKind.TACHE -> Tache(bloc, onBasculerTache, suiteDeTache)
-                BlockKind.CODE -> BlocDeCode(bloc)
+                // Une suite garde le retrait du texte, sans répéter le
+                // marqueur ni la case.
+                BlockKind.PUCE -> Puce(bloc, marqueur = if (bloc.cont) "" else "•") // i18n-ok
+                BlockKind.NUMEROTE -> Puce(bloc, marqueur = if (bloc.cont) "" else "${bloc.number}.") // i18n-ok
+                // Une suite (bloc découpé, ou tâche coupée par une image) n'a
+                // pas de case : elle est sur le premier morceau.
+                BlockKind.TACHE -> {
+                    val avecCase = !bloc.cont && !suiteDeTache
+                    Tache(bloc, if (avecCase) onBasculerTache else null, avecCase = avecCase)
+                }
+                BlockKind.CODE -> BlocDeCode(bloc, avantSuite)
                 BlockKind.TRAIT -> HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 BlockKind.IMAGE -> Image(bloc)
                 BlockKind.LIGNE_TABLEAU -> LigneTableau(bloc)
@@ -795,16 +847,14 @@ private fun Puce(bloc: NoteBlockDto, marqueur: String) {
  * d'elle, sans déplacer le texte.
  */
 @Composable
-private fun Tache(bloc: NoteBlockDto, onBasculerTache: ((NoteBlockDto) -> Unit)?, suiteDeTache: Boolean = false) {
+private fun Tache(bloc: NoteBlockDto, onBasculerTache: ((NoteBlockDto) -> Unit)?, avecCase: Boolean = true) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         val forme = Modifier
             .width(LARGEUR_MARQUEUR_DP.dp)
             .padding(end = 6.dp, top = 2.dp)
         val icone = if (bloc.checked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank
-        if (suiteDeTache) {
-            // Suite d'une tâche coupée par une image : la case est sur le
-            // premier morceau. On garde sa largeur pour que le texte reste
-            // aligné sous celui du premier morceau.
+        if (!avecCase) {
+            // Suite d'une tâche découpée : la case est sur le premier morceau.
             Spacer(forme)
         } else if (onBasculerTache != null && bloc.source != null) {
             val libelle = stringResource(R.string.apercu_case_tache, bloc.text)
@@ -850,16 +900,25 @@ private fun Tache(bloc: NoteBlockDto, onBasculerTache: ((NoteBlockDto) -> Unit)?
  * faire défiler que la réorganiser.
  */
 @Composable
-private fun BlocDeCode(bloc: NoteBlockDto) {
+private fun BlocDeCode(bloc: NoteBlockDto, avantSuite: Boolean) {
+    // Un bloc découpé par Go garde un fond continu : ni coin arrondi ni marge
+    // à la jointure de deux morceaux.
+    val haut = if (bloc.cont) 0.dp else 6.dp
+    val bas = if (avantSuite) 0.dp else 6.dp
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(6.dp),
+        shape = RoundedCornerShape(topStart = haut, topEnd = haut, bottomStart = bas, bottomEnd = bas),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
             Modifier
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(
+                    start = 12.dp,
+                    end = 12.dp,
+                    top = if (bloc.cont) 0.dp else 10.dp,
+                    bottom = if (avantSuite) 0.dp else 10.dp,
+                ),
         ) {
             Text(
                 text = bloc.text,

@@ -777,10 +777,34 @@ func (s *Store) Pull(ctx context.Context, remote Remote, notePath string) error 
 	entry, known := s.entries[notePath]
 	dirty := known && entry.Dirty
 	obs := s.observeLocked(notePath)
+	// Le blob peut manquer alors que l'index connaît la note (voir
+	// getObserved) : sans lui, il n'y a rien à garder, il faut télécharger.
+	enCache := known && entry.ETag != "" && s.blobPresentLocked(entry)
 	s.mu.Unlock()
 
 	if dirty {
 		return nil
+	}
+
+	// Une note en cache, propre, dont on connaît la version : on demande
+	// d'abord son ETag seul. Un PROPFIND sans corps de note coûte une
+	// trentaine de millisecondes, là où le GET de 300 ko d'une grosse note en
+	// coûtait 140 à 375, mesuré sur le téléphone le 21/11/2026. Le serveur
+	// ignore If-None-Match, même en lecture : un GET conditionnel renvoie
+	// tout le contenu.
+	//
+	// Version identique : le cache est la note du serveur, rien à poser.
+	// Absente : le GET qui suit en fait le constat, avec le traitement
+	// habituel. Toute autre erreur est celle qu'aurait rendue le GET : le
+	// réseau ne répond pas, inutile de le lui redemander.
+	if enCache {
+		etag, err := remote.Stat(ctx, notePath)
+		switch {
+		case err == nil && memeVersion(etag, entry.ETag):
+			return nil
+		case err != nil && !errors.Is(err, opencloud.ErrNotFound):
+			return err
+		}
 	}
 
 	// La note a pu être modifiée pendant la lecture : l'éditeur enregistre
@@ -912,4 +936,22 @@ func (s *Store) Clear() error {
 	// Une réponse du serveur encore en route ne doit rien réécrire ici.
 	s.epoch++
 	return s.save()
+}
+
+// memeVersion compare deux ETag sans s'arrêter à leur écriture : guillemets
+// et préfixe « W/ » d'une validation faible ne changent pas la version, et
+// l'ETag d'un PROPFIND (getetag) n'est pas forcément écrit comme celui d'un
+// GET.
+func memeVersion(a, b string) bool {
+	nettoyer := func(e string) string {
+		return strings.Trim(strings.TrimPrefix(strings.TrimSpace(e), "W/"), `"`)
+	}
+	return a != "" && nettoyer(a) == nettoyer(b)
+}
+
+// blobPresentLocked dit si le fichier du cache d'une entrée existe. À
+// appeler sous s.mu.
+func (s *Store) blobPresentLocked(entry *Entry) bool {
+	_, err := os.Stat(s.blobPath(entry.Cache))
+	return err == nil
 }

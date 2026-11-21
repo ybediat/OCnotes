@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -101,6 +102,32 @@ func rejectInsecureRedirect(req *http.Request, _ []*http.Request) error {
 	return nil
 }
 
+// Délais courts du transport. Le délai global du client (30 s) borne toute
+// la requête, transfert compris ; ceux-ci abandonnent bien plus tôt un serveur
+// injoignable ou muet. Sans eux, une passe de synchronisation lancée au réveil,
+// sur un réseau pas encore rétabli, attendait une demi-minute avant de conclure
+// « hors ligne ». Des variables et non des constantes : les tests les réduisent.
+var (
+	delaiConnexion  = 10 * time.Second
+	delaiPoigneeTLS = 10 * time.Second
+	delaiEntetes    = 20 * time.Second
+)
+
+// nouveauTransport part du transport par défaut de Go, pour garder le proxy
+// système et HTTP/2, et n'en change que les délais.
+func nouveauTransport() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.DialContext = (&net.Dialer{
+		Timeout:   delaiConnexion,
+		KeepAlive: 30 * time.Second,
+	}).DialContext
+	t.TLSHandshakeTimeout = delaiPoigneeTLS
+	// Compté après l'envoi complet de la requête : un PUT volumineux n'est
+	// donc pas pénalisé, seule l'attente de la réponse l'est.
+	t.ResponseHeaderTimeout = delaiEntetes
+	return t
+}
+
 // CodeServerURLInvalid signale une adresse de serveur refusée. La valeur est
 // celle de config.CodeServerURLInvalid : Android rédige le même message que la
 // règle soit posée par la configuration ou par le client.
@@ -128,6 +155,7 @@ func New(serverURL string, auth Authenticator) (*Client, error) {
 		base: u,
 		auth: auth,
 		hc: &http.Client{
+			Transport:     nouveauTransport(),
 			Timeout:       30 * time.Second,
 			CheckRedirect: rejectInsecureRedirect,
 		},
