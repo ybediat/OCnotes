@@ -125,6 +125,14 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        // Les deux libgojni.so du cœur Go pèsent 17,5 Mo, laissés non
+        // compressés par défaut dans l'APK. Compressés, l'APK téléchargé est
+        // bien plus léger ; en échange, Android les extrait à l'installation.
+        // La lib x86_64 reste embarquée : elle sert à ChromeOS, à Waydroid et
+        // à l'émulateur.
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 

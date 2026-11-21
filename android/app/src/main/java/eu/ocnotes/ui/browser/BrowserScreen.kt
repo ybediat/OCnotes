@@ -67,6 +67,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,9 +75,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
@@ -1021,9 +1021,12 @@ private fun IndicateurSynchronisation(
 ) {
     val orange = if (isSystemInDarkTheme()) Color(0xFFFFB45C) else Color(0xFFC75B00)
     val vert = if (isSystemInDarkTheme()) Color(0xFF6DD58C) else Color(0xFF19753A)
-    val pulsation = if (enCours) {
+    // On garde l'état de l'animation sans le lire ici : sa valeur n'est lue
+    // que dans `graphicsLayer`, au dessin. Lue pendant la composition, elle
+    // recomposait la pastille à chaque image pendant toute la synchro.
+    val pulsation: State<Float>? = if (enCours) {
         val transition = rememberInfiniteTransition(label = "synchronisation")
-        val valeur by transition.animateFloat(
+        transition.animateFloat(
             initialValue = 0.42f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(
@@ -1032,9 +1035,8 @@ private fun IndicateurSynchronisation(
             ),
             label = "pulsation-synchronisation",
         )
-        valeur
     } else {
-        1f
+        null
     }
     val description = when {
         enCours -> stringResource(R.string.browser_sync_en_cours)
@@ -1051,8 +1053,17 @@ private fun IndicateurSynchronisation(
         modifier = modifier
             .size(10.dp)
             .then(
-                if (enCours) {
-                    Modifier.scale(0.85f + pulsation * 0.15f).alpha(pulsation)
+                if (pulsation != null) {
+                    // Même rendu que `scale(...).alpha(...)` : une seule couche,
+                    // découpée à ses bords comme le fait `alpha`.
+                    Modifier.graphicsLayer {
+                        val valeur = pulsation.value
+                        val echelle = 0.85f + valeur * 0.15f
+                        scaleX = echelle
+                        scaleY = echelle
+                        alpha = valeur
+                        clip = true
+                    }
                 } else {
                     Modifier
                 },
