@@ -102,7 +102,16 @@ private fun OCnotesApp(
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(container, accountId) {
+        // Au lancement, le mode vaut UNSET tant que l'état n'est pas relu :
+        // cela veut dire « pas encore connu », pas « sans serveur ». Le prendre
+        // pour un arrêt annulait tous les travaux du profil — la passe de
+        // lancement à peine partie, celle qui suit une écriture, et le
+        // calendrier de la passe horaire. Seul un UNSET venu après un mode
+        // connu (une déconnexion) coupe la synchronisation.
+        var modeConnu = false
         container.repository.mode.collect { mode ->
+            if (mode == AppMode.UNSET && !modeConnu) return@collect
+            modeConnu = true
             container.syncScheduler.setServerEnabled(mode == AppMode.SERVER)
         }
     }
