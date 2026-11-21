@@ -641,5 +641,6 @@
     <string name="recherche_suivante">Coincidencia siguiente</string>
     <string name="recherche_fermer">Cerrar la búsqueda</string>
     <string name="recherche_compteur_description">Coincidencia %1$d de %2$d</string>
+    <string name="recherche_compteur_description_plafond">Coincidencia %1$d de más de %2$d</string>
     <string name="recherche_aucune_occurrence">Ninguna coincidencia</string>
 </resources>

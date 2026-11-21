@@ -27,6 +27,30 @@ internal class TexteReplie(
 ) {
     /** Bornes UTF-16, dans le texte d'origine, de la plage repliée [debut, fin[. */
     fun origine(debut: Int, fin: Int): IntRange = debuts[debut] until fins[fin - 1]
+
+    /**
+     * Vrai si la plage repliée [debut, fin[ couvre des caractères d'origine
+     * entiers. Une ligature produit plusieurs caractères repliés (« œ » →
+     * « oe ») : chercher « e » ne doit pas surligner le « œ » entier.
+     */
+    fun alignee(debut: Int, fin: Int): Boolean =
+        (debut == 0 || debuts[debut] != debuts[debut - 1]) &&
+            (fin == texte.length || debuts[fin] != debuts[fin - 1])
+
+    /**
+     * Premier indice replié dont le caractère d'origine commence à [position]
+     * ou après ; la longueur du texte replié s'il n'y en a pas. Les débuts
+     * croissent avec l'indice : une dichotomie suffit.
+     */
+    fun indiceDepuis(position: Int): Int {
+        var bas = 0
+        var haut = texte.length
+        while (bas < haut) {
+            val milieu = (bas + haut) ushr 1
+            if (debuts[milieu] < position) bas = milieu + 1 else haut = milieu
+        }
+        return bas
+    }
 }
 
 /**
@@ -92,22 +116,37 @@ internal fun replieAvecPositions(texte: CharSequence): TexteReplie {
  * `AnnotatedString`. Les occurrences ne se chevauchent pas (« aa » dans
  * « aaaa » en donne deux) et s'arrêtent à [limite]. Un terme vide, ou qui ne
  * garde rien une fois replié, ne trouve rien.
+ *
+ * Une occurrence couvre toujours des caractères entiers : « coeur » trouve
+ * « cœur », mais « e » seul ne trouve pas le « œ ».
+ *
+ * [depuis] est une position UTF-16 du texte d'origine : seules les
+ * occurrences qui commencent là ou après sont retenues. Sert quand le plafond
+ * est atteint, pour que la fenêtre de [limite] occurrences parte de là où
+ * l'on lit et non du haut de la note.
  */
 fun trouverOccurrences(
     texte: CharSequence,
     terme: String,
     limite: Int = MAX_OCCURRENCES,
+    depuis: Int = 0,
 ): List<IntRange> {
     val cible = replie(terme)
     if (cible.isEmpty() || texte.isEmpty() || limite <= 0) return emptyList()
     val replieTexte = replieAvecPositions(texte)
     val occurrences = ArrayList<IntRange>()
-    var depuis = 0
+    var curseur = if (depuis > 0) replieTexte.indiceDepuis(depuis) else 0
     while (occurrences.size < limite) {
-        val trouve = replieTexte.texte.indexOf(cible, depuis)
+        val trouve = replieTexte.texte.indexOf(cible, curseur)
         if (trouve < 0) break
-        occurrences += replieTexte.origine(trouve, trouve + cible.length)
-        depuis = trouve + cible.length
+        val fin = trouve + cible.length
+        if (!replieTexte.alignee(trouve, fin)) {
+            // À cheval sur une ligature : on retente un caractère plus loin.
+            curseur = trouve + 1
+            continue
+        }
+        occurrences += replieTexte.origine(trouve, fin)
+        curseur = fin
     }
     return occurrences
 }

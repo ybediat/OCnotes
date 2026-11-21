@@ -248,18 +248,25 @@ private fun ContenuMarkdown(
                     // continue le précédent : un paragraphe découpé par Go doit
                     // se lire d'un seul tenant. L'écart est hors du Box repéré,
                     // pour que sa position reste celle du contenu.
-                    Column {
+                    // L'élément de l'occurrence courante donne sa position, pour
+                    // mesurer où son texte commence (voir [PositionOccurrence]).
+                    val placement = if (positionOccurrence != null && surlignage?.courante?.element == index) {
+                        Modifier.onPlaced { positionOccurrence.retenirElement(index, it) }
+                    } else {
+                        Modifier
+                    }
+                    Column(placement) {
                         if (index > 0 && !(element is ElementApercu.Bloc && element.bloc.cont)) {
                             Spacer(Modifier.height(ECART_BLOCS_DP.dp))
                         }
                         // Seul l'élément de l'occurrence courante rapporte la
                         // mise en page de son texte (voir [PositionOccurrence]).
-                        val rapport: (TextLayoutResult) -> Unit = if (
+                        val rapport: RapportOccurrence? = if (
                             positionOccurrence != null && surlignage?.courante?.element == index
                         ) {
-                            { mise -> positionOccurrence.retenir(index, mise) }
+                            RapportOccurrence(index, positionOccurrence)
                         } else {
-                            RAPPORT_MUET
+                            null
                         }
                         Box(Modifier.onPlaced { reperes.elements[index] = it }) {
                             CompositionLocalProvider(LocalRapportOccurrence provides rapport) {
@@ -638,28 +645,74 @@ class PositionOccurrence {
     var mise: TextLayoutResult? = null
         private set
 
+    /** Le texte qui porte l'occurrence, et l'élément de liste qui le contient. */
+    private var coordonneesTexte: LayoutCoordinates? = null
+    private var elementTexte: Int = -1
+    private var coordonneesElement: LayoutCoordinates? = null
+    private var elementPlace: Int = -1
+
     fun retenir(element: Int, mise: TextLayoutResult) {
         this.element = element
         this.mise = mise
     }
 
-    /** Haut de la ligne de [position] dans le texte de [element], `null` sans mise en page. */
+    fun retenirTexte(element: Int, coordonnees: LayoutCoordinates) {
+        elementTexte = element
+        coordonneesTexte = coordonnees
+    }
+
+    fun retenirElement(element: Int, coordonnees: LayoutCoordinates) {
+        elementPlace = element
+        coordonneesElement = coordonnees
+    }
+
+    /**
+     * Haut de la ligne de [position] dans [element], `null` sans mise en page.
+     *
+     * Mesuré depuis le haut de l'élément de liste, et non du texte : l'écart
+     * entre blocs et la marge d'un titre ou d'un bloc de code sont au-dessus
+     * du texte. Sans leurs positions, on retombe sur le haut du texte.
+     */
     fun hautDeLigne(element: Int, position: Int): Int? {
         val texte = mise?.takeIf { this.element == element } ?: return null
         val borne = position.coerceIn(0, texte.layoutInput.text.length)
-        return texte.getLineTop(texte.getLineForOffset(borne)).toInt()
+        val dansTexte = texte.getLineTop(texte.getLineForOffset(borne)).toInt()
+        val coordTexte = coordonneesTexte?.takeIf { it.isAttached && elementTexte == element }
+        val coordElement = coordonneesElement?.takeIf { it.isAttached && elementPlace == element }
+        val decalage = if (coordTexte != null && coordElement != null) {
+            coordElement.localPositionOf(coordTexte, Offset.Zero).y.toInt()
+        } else {
+            0
+        }
+        return decalage + dansTexte
     }
 }
 
+/** Ce que reçoit le texte de l'élément qui porte l'occurrence courante. */
+private class RapportOccurrence(val element: Int, val position: PositionOccurrence)
+
 private val RAPPORT_MUET: (TextLayoutResult) -> Unit = {}
 
-/** Le rapport de mise en page de l'élément en cours de composition (voir [PositionOccurrence]). */
-private val LocalRapportOccurrence = staticCompositionLocalOf { RAPPORT_MUET }
+/** Le rapport de l'élément en cours de composition, `null` hors de l'occurrence courante. */
+private val LocalRapportOccurrence = staticCompositionLocalOf<RapportOccurrence?> { null }
 
-/** Le rapport, pour le seul texte qui porte l'occurrence courante. */
+/** Le rapport de mise en page, pour le seul texte qui porte l'occurrence courante. */
 @Composable
-private fun rapportOccurrence(marques: MarquesTexte?): (TextLayoutResult) -> Unit =
-    if (marques?.courante != null) LocalRapportOccurrence.current else RAPPORT_MUET
+private fun rapportOccurrence(marques: MarquesTexte?): (TextLayoutResult) -> Unit {
+    val rapport = LocalRapportOccurrence.current
+    if (marques?.courante == null || rapport == null) return RAPPORT_MUET
+    return remember(rapport.element, rapport.position) {
+        { mise: TextLayoutResult -> rapport.position.retenir(rapport.element, mise) }
+    }
+}
+
+/** La position du texte qui porte l'occurrence courante ; rien pour les autres. */
+@Composable
+private fun placementOccurrence(marques: MarquesTexte?): Modifier {
+    val rapport = LocalRapportOccurrence.current
+    if (marques?.courante == null || rapport == null) return Modifier
+    return Modifier.onPlaced { rapport.position.retenirTexte(rapport.element, it) }
+}
 
 /**
  * Demande confirmation avant d'ouvrir un lien de l'aperçu.
@@ -905,11 +958,13 @@ private fun Bloc(
                     avecMarques(bloc.text, marques),
                     style = StyleEditeur,
                     onTextLayout = rapportOccurrence(marques),
+                    modifier = placementOccurrence(marques),
                 )
                 else -> Text(
                     enrichi(bloc, marques),
                     style = MaterialTheme.typography.bodyLarge,
                     onTextLayout = rapportOccurrence(marques),
+                    modifier = placementOccurrence(marques),
                 )
             }
         }
@@ -929,7 +984,7 @@ private fun Titre(bloc: NoteBlockDto, marques: MarquesTexte?) {
         text = enrichi(bloc, marques),
         style = style.copy(fontWeight = FontWeight.SemiBold),
         onTextLayout = rapportOccurrence(marques),
-        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
+        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp).then(placementOccurrence(marques)),
     )
 }
 
@@ -948,6 +1003,7 @@ private fun Puce(bloc: NoteBlockDto, marqueur: String, marques: MarquesTexte?) {
             enrichi(bloc, marques),
             style = MaterialTheme.typography.bodyLarge,
             onTextLayout = rapportOccurrence(marques),
+            modifier = placementOccurrence(marques),
         )
     }
 }
@@ -1011,6 +1067,7 @@ private fun Tache(
             text = enrichi(bloc, marques),
             style = MaterialTheme.typography.bodyLarge,
             onTextLayout = rapportOccurrence(marques),
+            modifier = placementOccurrence(marques),
             textDecoration = if (bloc.checked) TextDecoration.LineThrough else null,
             color = if (bloc.checked) {
                 MaterialTheme.colorScheme.onSurfaceVariant
@@ -1074,6 +1131,7 @@ private fun BlocDeCode(bloc: NoteBlockDto, avantSuite: Boolean, partage: Defilem
                 text = avecMarques(bloc.text, marques),
                 style = StyleEditeur,
                 onTextLayout = rapportOccurrence(marques),
+                modifier = placementOccurrence(marques),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -1231,6 +1289,7 @@ private fun Tableau(
 @Composable
 private fun enrichi(bloc: NoteBlockDto, marques: MarquesTexte? = null): AnnotatedString {
     if (bloc.spans.isEmpty()) return avecMarques(bloc.text, marques)
+    val couleursMarques = couleursRecherche()
 
     val couleurLien = MaterialTheme.colorScheme.primary
     val ouvrirLien = LocalOuvrirLien.current
@@ -1240,7 +1299,7 @@ private fun enrichi(bloc: NoteBlockDto, marques: MarquesTexte? = null): Annotate
     // traverse pas la façade : « marqué » est la seule information portée.
     val fondSurligne = Color(0xFFFFF176).copy(alpha = 0.40f)
 
-    return remember(bloc, marques) {
+    return remember(bloc, marques, couleursMarques) {
         buildAnnotatedString {
             append(bloc.text)
             val fin = bloc.text.length
@@ -1291,7 +1350,7 @@ private fun enrichi(bloc: NoteBlockDto, marques: MarquesTexte? = null): Annotate
             }
             // Les occurrences en dernier : leur fond passe par-dessus celui
             // d'un code en ligne ou d'un surligné.
-            ajouterMarques(marques, fin)
+            ajouterMarques(marques, fin, couleursMarques)
         }
     }
 }
@@ -1300,10 +1359,11 @@ private fun enrichi(bloc: NoteBlockDto, marques: MarquesTexte? = null): Annotate
 @Composable
 private fun avecMarques(texte: String, marques: MarquesTexte?): AnnotatedString {
     if (marques == null) return AnnotatedString(texte)
-    return remember(texte, marques) {
+    val couleurs = couleursRecherche()
+    return remember(texte, marques, couleurs) {
         buildAnnotatedString {
             append(texte)
-            ajouterMarques(marques, texte.length)
+            ajouterMarques(marques, texte.length, couleurs)
         }
     }
 }
@@ -1313,13 +1373,13 @@ private fun avecMarques(texte: String, marques: MarquesTexte?): AnnotatedString 
  * texte, comme les spans de Go : une plage périmée ne doit pas faire lever
  * `addStyle`.
  */
-private fun AnnotatedString.Builder.ajouterMarques(marques: MarquesTexte?, fin: Int) {
+private fun AnnotatedString.Builder.ajouterMarques(marques: MarquesTexte?, fin: Int, couleurs: CouleursRecherche) {
     if (marques == null) return
     marques.plages.forEach { plage ->
         val debut = plage.first.coerceIn(0, fin)
         val terme = (plage.last + 1).coerceIn(debut, fin)
         if (debut == terme) return@forEach
-        val fond = if (plage == marques.courante) FOND_OCCURRENCE_COURANTE else FOND_OCCURRENCE
+        val fond = if (plage == marques.courante) couleurs.courante else couleurs.occurrence
         addStyle(SpanStyle(background = fond), debut, terme)
     }
 }

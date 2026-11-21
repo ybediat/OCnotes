@@ -212,44 +212,50 @@ fun EditorScreen(
 
     // Cherche là où l'on est : les blocs affichés en aperçu, une photo du
     // champ en saisie. Le repère visible ne sert qu'en arrivant de l'autre
-    // mode ; sinon la recherche repart de l'occurrence courante.
-    val relancerRecherche = rememberUpdatedState {
+    // mode ; sinon la recherche repart de l'occurrence courante. `defiler`
+    // faux : en saisie, l'occurrence est marquée sans faire défiler le champ.
+    val relancerRecherche = rememberUpdatedState { defiler: Boolean ->
         if (viewModel.uiState.value.apercu) {
             viewModel.chercherApercu(etatListeApercu.firstVisibleItemIndex)
         } else {
             sessionNative.positionVisible()?.let { depuis ->
-                viewModel.chercherSaisie(sessionNative.instantane(), depuis)
+                viewModel.chercherSaisie(sessionNative.instantane(), depuis, defiler)
             }
         }
     }
 
     // Recalcul au terme changé (150 ms de calme), à la bascule de mode et à
     // l'arrivée de nouveaux blocs d'aperçu. `natifPret` : en saisie, le champ
-    // n'a rien à photographier avant son premier dessin.
+    // n'a rien à photographier avant son premier dessin. Les blocs ne comptent
+    // qu'en aperçu : en saisie, ils changent après une frappe, que l'effet
+    // suivant traite déjà sans faire défiler.
     val termeRecherche = recherche?.terme
-    LaunchedEffect(termeRecherche, etat.apercu, etat.blocs, natifPret) {
+    val blocsCherches = etat.blocs.takeIf { etat.apercu }
+    LaunchedEffect(termeRecherche, etat.apercu, blocsCherches, natifPret) {
         if (termeRecherche == null) return@LaunchedEffect
         delay(DELAI_RECHERCHE_TERME_MS)
-        relancerRecherche.value()
+        relancerRecherche.value(true)
     }
 
     // En saisie, une frappe pendant la recherche décale les occurrences : la
     // photo est reprise après le même calme que l'enregistrement, jamais à
-    // chaque touche.
+    // chaque touche. Le champ ne défile pas : on tape peut-être loin de
+    // l'occurrence courante, ou on vient de la corriger.
     LaunchedEffect(rechercheOuverte, etat.apercu, viewModel) {
         if (!rechercheOuverte || etat.apercu) return@LaunchedEffect
         viewModel.revisionNative.drop(1).collectLatest {
             delay(DELAI_ENREGISTREMENT_MS)
-            relancerRecherche.value()
+            relancerRecherche.value(false)
         }
     }
 
     // En saisie : une seule occurrence marquée, amenée à l'écran. Une
     // révision périmée ne déplace rien ; on recherche.
     val deplacement = recherche?.deplacement
-    val couleurOccurrence = FOND_OCCURRENCE.toArgb()
-    val couleurCourante = FOND_OCCURRENCE_COURANTE.toArgb()
-    LaunchedEffect(deplacement, etat.apercu, natifPret) {
+    val couleurs = couleursRecherche()
+    val couleurOccurrence = couleurs.occurrence.toArgb()
+    val couleurCourante = couleurs.courante.toArgb()
+    LaunchedEffect(deplacement, etat.apercu, natifPret, couleurCourante) {
         val ouverte = viewModel.recherche.value
         val plage = ouverte?.plage?.takeIf { !ouverte.enApercu }
         if (etat.apercu) return@LaunchedEffect
@@ -258,8 +264,15 @@ fun EditorScreen(
             return@LaunchedEffect
         }
         if (!natifPret) return@LaunchedEffect
-        if (!sessionNative.montrerOccurrence(ouverte.revision, plage, couleurOccurrence, couleurCourante)) {
-            relancerRecherche.value()
+        if (!sessionNative.montrerOccurrence(
+                ouverte.revision,
+                plage,
+                couleurOccurrence,
+                couleurCourante,
+                defiler = ouverte.defiler,
+            )
+        ) {
+            relancerRecherche.value(ouverte.defiler)
         }
     }
 
