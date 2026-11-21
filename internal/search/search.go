@@ -7,6 +7,8 @@
 package search
 
 import (
+	"regexp"
+	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf16"
@@ -136,6 +138,9 @@ func Find(text, query string, max int) (int, Match) {
 
 	plie, origine := replier(text, true)
 	texte := string(plie)
+	// Les adresses des liens ne se voient pas dans la note rendue : un terme
+	// qui n'y apparaît que dans « (https://…) » ne la fait pas trouver.
+	cachees := adressesDeLiens(text)
 
 	premier, count := -1, 0
 	for depuis := 0; ; {
@@ -143,11 +148,15 @@ func Find(text, query string, max int) (int, Match) {
 		if i < 0 {
 			break
 		}
+		pos := depuis + i
+		depuis = pos + len(cible)
+		if dansUneAdresse(cachees, int(origine[pos])) {
+			continue
+		}
 		if premier < 0 {
-			premier = depuis + i
+			premier = pos
 		}
 		count++
-		depuis += i + len(cible)
 	}
 	if count == 0 {
 		return 0, Match{}
@@ -178,10 +187,12 @@ func extrait(text string, debut, fin, largeur int) Match {
 	if n := strings.IndexByte(text[debut:], '\n'); n >= 0 {
 		ligneFin = debut + n
 	}
-	// Le retrait d'une liste ou d'un bloc ne dit rien et coûte de la place.
-	avant := []rune(strings.TrimLeftFunc(text[ligneDebut:debut], unicode.IsSpace))
+	// Le retrait d'une liste ou d'un bloc ne dit rien et coûte de la place,
+	// pas plus que la syntaxe Markdown : l'extrait se lit comme la note
+	// rendue, sans « - [ ] », « ## », « ** » ni adresse de lien.
+	avant := []rune(nettoyerAvant(strings.TrimLeftFunc(text[ligneDebut:debut], unicode.IsSpace)))
 	terme := []rune(text[debut:fin])
-	apres := []rune(strings.TrimRightFunc(text[fin:ligneFin], unicode.IsSpace))
+	apres := []rune(nettoyerApres(strings.TrimRightFunc(text[fin:ligneFin], unicode.IsSpace)))
 
 	ligne := make([]rune, 0, len(avant)+len(terme)+len(apres))
 	ligne = append(append(append(ligne, avant...), terme...), apres...)
@@ -230,4 +241,111 @@ func unites(r []rune) int {
 		n += utf16.RuneLen(c)
 	}
 	return n
+}
+
+// --- Syntaxe Markdown dans la recherche --------------------------------------
+
+// plage est un intervalle [debut, fin) d'octets du texte d'origine.
+type plage struct{ debut, fin int }
+
+// adressesDeLiens repère les adresses des liens et des images en ligne,
+// « [texte](adresse) », et la fin des lignes de définition de lien,
+// « [id]: adresse ». Ce qui est entre les parenthèses ne s'affiche pas.
+//
+// Repérage volontairement simple, ligne par ligne : une parenthèse fermante
+// absente avant la fin de ligne veut dire que ce n'était pas un lien, et rien
+// n'est caché. Mieux vaut trouver une adresse de trop que manquer du texte.
+func adressesDeLiens(text string) []plage {
+	var out []plage
+	ligne := 0
+	for ligne <= len(text) {
+		finLigne := strings.IndexByte(text[ligne:], '\n')
+		if finLigne < 0 {
+			finLigne = len(text)
+		} else {
+			finLigne += ligne
+		}
+		l := text[ligne:finLigne]
+		// La regex n'est essayée que sur une ligne qui commence par « [ » :
+		// les autres lignes n'en paient pas le prix.
+		if m := definitionPossible(l); m != nil {
+			out = append(out, plage{ligne + m[1], finLigne})
+		} else {
+			for depuis := 0; ; {
+				i := strings.Index(l[depuis:], "](")
+				if i < 0 {
+					break
+				}
+				ouvre := depuis + i + 2
+				ferme := strings.IndexByte(l[ouvre:], ')')
+				if ferme < 0 {
+					break
+				}
+				out = append(out, plage{ligne + ouvre, ligne + ouvre + ferme})
+				depuis = ouvre + ferme + 1
+			}
+		}
+		ligne = finLigne + 1
+	}
+	return out
+}
+
+// definitionPossible renvoie les bornes de « [id]: » en tête de ligne, ou nil.
+func definitionPossible(l string) []int {
+	t := strings.TrimLeft(l, " ")
+	if t == "" || t[0] != '[' {
+		return nil
+	}
+	return definitionDeLien.FindStringIndex(l)
+}
+
+// dansUneAdresse dit si l'octet pos tombe dans une des plages, rangées dans
+// l'ordre du texte.
+func dansUneAdresse(plages []plage, pos int) bool {
+	i := sort.Search(len(plages), func(i int) bool { return plages[i].fin > pos })
+	return i < len(plages) && plages[i].debut <= pos
+}
+
+var (
+	// « [id]: adresse » en début de ligne, jusqu'à l'adresse.
+	definitionDeLien = regexp.MustCompile(`^\s{0,3}\[[^\]]+\]:\s*`)
+	// Marqueurs de bloc en tête de ligne : citation, titre, puce, numéro,
+	// case à cocher. Répétés : « > - [ ] » s'enlève en entier.
+	marqueursDeBloc = regexp.MustCompile(`^(?:(?:>\s*)|(?:#{1,6}\s+)|(?:[-*+]\s+)|(?:\d{1,9}[.)]\s+)|(?:\[[ xX]\]\s+))+`)
+	// Lien ou image complet : on garde le texte, on retire l'adresse.
+	lienComplet = regexp.MustCompile(`!?\[([^\]]*)\]\([^)]*\)`)
+	// Fin d'un lien dont le texte contient le terme : « ](adresse) ».
+	finDeLien = regexp.MustCompile(`^[^\[]*?\]\([^)]*\)`)
+	// Début d'un lien dont le texte contient le terme : « [ » ou « ![ ».
+	debutDeLien = regexp.MustCompile(`!?\[[^\]]*$`)
+	// Gras, barré, code : marqueurs doubles ou accent grave, sans ambiguïté.
+	// L'italique simple (« * », « _ ») reste : « snake_case » n'est pas une
+	// mise en forme.
+	marqueursEnLigne = regexp.MustCompile("\\*\\*|__|~~|`")
+)
+
+// nettoyerAvant retire la syntaxe Markdown de ce qui précède le terme sur sa
+// ligne.
+func nettoyerAvant(s string) string {
+	s = marqueursDeBloc.ReplaceAllString(s, "")
+	s = lienComplet.ReplaceAllString(s, "$1")
+	// Le « [ » d'un lien qui s'ouvre avant le terme : on garde le texte qui
+	// suit le crochet.
+	if m := debutDeLien.FindStringIndex(s); m != nil {
+		crochet := strings.IndexByte(s[m[0]:], '[')
+		s = s[:m[0]] + s[m[0]+crochet+1:]
+	}
+	return marqueursEnLigne.ReplaceAllString(s, "")
+}
+
+// nettoyerApres retire la syntaxe Markdown de ce qui suit le terme.
+func nettoyerApres(s string) string {
+	// « ](adresse) » qui ferme un lien ouvert avant le terme : on garde le
+	// texte qui précède le crochet.
+	if m := finDeLien.FindStringIndex(s); m != nil {
+		crochet := strings.IndexByte(s, ']')
+		s = s[:crochet] + s[m[1]:]
+	}
+	s = lienComplet.ReplaceAllString(s, "$1")
+	return marqueursEnLigne.ReplaceAllString(s, "")
 }

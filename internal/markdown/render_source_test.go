@@ -194,3 +194,41 @@ func BenchmarkRenderGrosseNote(b *testing.B) {
 		Render(src)
 	}
 }
+
+// Un titre qui commence par une image garde une position, celle du début du
+// titre : sans elle, il disparaissait du plan en saisie.
+func TestTitreQuiCommenceParUneImageGardeSaPosition(t *testing.T) {
+	src := "intro\n\n## ![logo](x.png) Titre image\n"
+	for _, b := range Render(src) {
+		if b.Kind != KindHeading {
+			continue
+		}
+		if b.Source == nil {
+			t.Fatalf("titre sans position : %+v", b)
+		}
+		if got := sousTexte(src, *b.Source, 2); got != "![" {
+			t.Errorf("position sur %q, attendu le début du titre", got)
+		}
+		return
+	}
+	t.Fatal("aucun titre rendu")
+}
+
+// Une image au milieu d'un titre : le morceau qui suit n'a toujours pas de
+// position, on ne sait pas où il commence.
+func TestTitreCoupeParUneImageNePositionneQueLePremierMorceau(t *testing.T) {
+	var avec, sans int
+	for _, b := range Render("## Début ![logo](x.png) fin\n") {
+		if b.Kind != KindHeading {
+			continue
+		}
+		if b.Source != nil {
+			avec++
+		} else {
+			sans++
+		}
+	}
+	if avec != 1 || sans != 1 {
+		t.Errorf("%d morceaux avec position, %d sans ; attendu 1 et 1", avec, sans)
+	}
+}
