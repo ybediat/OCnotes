@@ -21,14 +21,21 @@ func TestServeurMuetAbandonneVite(t *testing.T) {
 	}
 	defer ecoute.Close()
 
-	// Les connexions sont acceptées et gardées ouvertes, sans un octet.
+	// Les connexions sont acceptées et gardées ouvertes, sans un octet. Elles
+	// sont fermées à la fin du test, une fois l'écoute arrêtée.
 	go func() {
+		var ouvertes []net.Conn
+		defer func() {
+			for _, c := range ouvertes {
+				c.Close()
+			}
+		}()
 		for {
 			conn, err := ecoute.Accept()
 			if err != nil {
 				return
 			}
-			defer conn.Close()
+			ouvertes = append(ouvertes, conn)
 		}
 	}()
 
@@ -94,5 +101,40 @@ func TestServeurSansReponseAbandonneVite(t *testing.T) {
 	}
 	if duree > 5*time.Second {
 		t.Fatalf("serveur sans réponse abandonné en %v : le délai des en-têtes n'est pas appliqué", duree)
+	}
+}
+
+// Une recherche serveur ou un envoi peuvent tarder sans que le serveur soit en
+// panne : le délai court des en-têtes ne doit pas les couper.
+func TestRequeteLenteNonCoupeeParLeDelaiDesEntetes(t *testing.T) {
+	serveur := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Plus long que le délai des en-têtes réduit ci-dessous.
+		time.Sleep(600 * time.Millisecond)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer serveur.Close()
+
+	ancien := delaiEntetes
+	delaiEntetes = 200 * time.Millisecond
+	defer func() { delaiEntetes = ancien }()
+
+	client, err := New(serveur.URL, AppTokenAuth{Username: "u", Token: "t"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := serveur.Client().Transport.(*http.Transport).TLSClientConfig
+	client.hc.Transport.(*http.Transport).TLSClientConfig = config
+	client.hcLent.Transport.(*http.Transport).TLSClientConfig = config
+
+	u := client.resolve("/note.md")
+	if _, _, err := client.do(context.Background(), http.MethodPut, u, []byte("x"), nil); err != nil {
+		t.Fatalf("PUT lent coupé : %v", err)
+	}
+	if _, _, err := client.do(context.Background(), "REPORT", u, []byte("x"), nil); err != nil {
+		t.Fatalf("REPORT lent coupé : %v", err)
+	}
+	// Une lecture, elle, reste soumise au délai court.
+	if _, _, err := client.do(context.Background(), http.MethodGet, u, nil, nil); !errors.Is(err, ErrOffline) {
+		t.Fatalf("GET lent : erreur attendue ErrOffline, reçue %v", err)
 	}
 }

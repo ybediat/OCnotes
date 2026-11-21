@@ -27,11 +27,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -51,6 +53,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -73,6 +76,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.LocalPinnableContainer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
@@ -162,6 +166,10 @@ private fun ContenuMarkdown(
     // les autres blocs. Les regrouper ici permet au tableau entier de partager
     // un défilement horizontal et la même largeur de colonnes.
     val elements = grouperPourApercu(blocs)
+    // Un défilement horizontal par bloc de code découpé, partagé par ses
+    // morceaux. Gardé hors des éléments de la liste : un morceau qui sort de
+    // l'écran puis revient retrouve la position des autres.
+    val defilementsCode = remember(blocs) { HashMap<Int, DefilementCode>() }
 
     // Un lien touché n'est jamais ouvert d'office : sa destination réelle est
     // montrée d'abord, parce que le libellé affiché peut dire autre chose.
@@ -235,7 +243,17 @@ private fun ContenuMarkdown(
                         }
                         Box(Modifier.onPlaced { reperes.elements[index] = it }) {
                             when (element) {
-                                is ElementApercu.Bloc -> Bloc(element.bloc, element.avantSuite, onBasculerTache, element.suiteDeTache)
+                                is ElementApercu.Bloc -> {
+                                    // Seul un bloc de code découpé partage son
+                                    // défilement ; les autres gardent le leur.
+                                    val decoupe = element.bloc.cont || element.avantSuite
+                                    val defilement = if (element.bloc.kind == BlockKind.CODE && decoupe) {
+                                        defilementsCode.getOrPut(element.tete) { DefilementCode() }
+                                    } else {
+                                        null
+                                    }
+                                    Bloc(element.bloc, element.avantSuite, onBasculerTache, element.suiteDeTache, defilement)
+                                }
                                 is ElementApercu.Tableau -> Tableau(element.lignes)
                             }
                         }
@@ -640,16 +658,25 @@ private const val PAS_BARRE_DP = 13 // barre de 3 dp + 10 dp d'air
 
 /** Un élément de la liste visible, avec les tableaux reconstitués. */
 internal sealed interface ElementApercu {
-    /** [avantSuite] : le bloc suivant le continue (voir `NoteBlockDto.cont`). */
     /**
+     * Un bloc, ou un morceau de bloc découpé par Go.
+     *
+     * [avantSuite] : le bloc suivant le continue (voir `NoteBlockDto.cont`).
+     *
      * [suiteDeTache] : morceau d'une tâche coupée par une image, qui n'est pas
      * le premier. Il porte la même case que le premier morceau (même position
      * source) et ne la redessine pas : une tâche, une case.
+     *
+     * [tete] : indice, dans la liste des éléments, du premier morceau du bloc
+     * découpé par Go auquel celui-ci appartient (lui-même s'il n'est pas une
+     * suite). Les morceaux d'un même bloc de code s'en servent pour défiler
+     * ensemble à l'horizontale.
      */
     data class Bloc(
         val bloc: NoteBlockDto,
         val avantSuite: Boolean = false,
         val suiteDeTache: Boolean = false,
+        val tete: Int = 0,
     ) : ElementApercu
     data class Tableau(val lignes: List<NoteBlockDto>) : ElementApercu
 }
@@ -683,8 +710,12 @@ internal fun indiceElement(blocs: List<NoteBlockDto>, indiceBloc: Int): Int {
  *
  * Go coupe un long bloc juste après un « \n », qu'il garde pour que les
  * morceaux recollés rendent le texte exact. Affiché tel quel, ce retour
- * ajouterait une ligne vide à la jointure. La copie d'une sélection n'y perd
- * rien : la sélection remet un retour entre deux `Text`.
+ * ajouterait une ligne vide à la jointure.
+ *
+ * Limite connue, non vérifiée sur appareil : `SelectionContainer` recolle
+ * les textes de plusieurs `Text` sans séparateur, à notre connaissance. Une
+ * sélection copiée à cheval sur une jointure perdrait alors ce retour, et les
+ * deux lignes s'y retrouveraient collées.
  */
 internal fun sansRetourFinal(bloc: NoteBlockDto): NoteBlockDto {
     if (!bloc.text.endsWith('\n')) return bloc
@@ -710,6 +741,8 @@ internal fun grouperPourApercu(blocs: List<NoteBlockDto>): List<ElementApercu> {
     // position à tous les morceaux d'une tâche coupée par une image ; deux
     // tâches distinctes n'en partagent jamais une.
     var sourceTache: Int? = null
+    // Indice du premier morceau du bloc découpé en cours.
+    var tete = 0
     var index = 0
     while (index < blocs.size) {
         val bloc = blocs[index]
@@ -722,10 +755,12 @@ internal fun grouperPourApercu(blocs: List<NoteBlockDto>): List<ElementApercu> {
                 // Seule une image sépare les morceaux d'une même tâche.
                 sourceTache = null
             }
+            if (!bloc.cont) tete = elements.size
             elements += ElementApercu.Bloc(
                 if (avantSuite) sansRetourFinal(bloc) else bloc,
                 avantSuite,
                 suiteDeTache,
+                tete,
             )
             index++
             continue
@@ -752,6 +787,7 @@ private fun Bloc(
     avantSuite: Boolean,
     onBasculerTache: ((NoteBlockDto) -> Unit)?,
     suiteDeTache: Boolean = false,
+    defilementCode: DefilementCode? = null,
 ) {
     val couleurBarre = MaterialTheme.colorScheme.outlineVariant
     Row(
@@ -787,7 +823,7 @@ private fun Bloc(
                     val avecCase = !bloc.cont && !suiteDeTache
                     Tache(bloc, if (avecCase) onBasculerTache else null, avecCase = avecCase)
                 }
-                BlockKind.CODE -> BlocDeCode(bloc, avantSuite)
+                BlockKind.CODE -> BlocDeCode(bloc, avantSuite, defilementCode)
                 BlockKind.TRAIT -> HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 BlockKind.IMAGE -> Image(bloc)
                 BlockKind.LIGNE_TABLEAU -> LigneTableau(bloc)
@@ -900,7 +936,7 @@ private fun Tache(bloc: NoteBlockDto, onBasculerTache: ((NoteBlockDto) -> Unit)?
  * faire défiler que la réorganiser.
  */
 @Composable
-private fun BlocDeCode(bloc: NoteBlockDto, avantSuite: Boolean) {
+private fun BlocDeCode(bloc: NoteBlockDto, avantSuite: Boolean, partage: DefilementCode?) {
     // Un bloc découpé par Go garde un fond continu : ni coin arrondi ni marge
     // à la jointure de deux morceaux.
     val haut = if (bloc.cont) 0.dp else 6.dp
@@ -910,9 +946,31 @@ private fun BlocDeCode(bloc: NoteBlockDto, avantSuite: Boolean) {
         shape = RoundedCornerShape(topStart = haut, topEnd = haut, bottomStart = bas, bottomEnd = bas),
         modifier = Modifier.fillMaxWidth(),
     ) {
+        val propre = rememberScrollState()
+        val densite = LocalDensity.current
+        val largeurCommune = if (partage != null) {
+            with(densite) { partage.largeur.intValue.toDp() }
+        } else {
+            0.dp
+        }
         Column(
             Modifier
-                .horizontalScroll(rememberScrollState())
+                .horizontalScroll(partage?.etat ?: propre)
+                // Morceaux d'un bloc découpé : tous prennent la largeur du plus
+                // large déjà vu. Leurs limites de défilement sont alors les
+                // mêmes, et l'état commun n'est jamais ramené en arrière par
+                // un morceau plus étroit. La largeur ne fait que croître.
+                .then(
+                    if (partage != null) {
+                        Modifier
+                            .onSizeChanged { taille ->
+                                if (taille.width > partage.largeur.intValue) partage.largeur.intValue = taille.width
+                            }
+                            .widthIn(min = largeurCommune)
+                    } else {
+                        Modifier
+                    },
+                )
                 .padding(
                     start = 12.dp,
                     end = 12.dp,
@@ -927,6 +985,18 @@ private fun BlocDeCode(bloc: NoteBlockDto, avantSuite: Boolean) {
             )
         }
     }
+}
+
+/**
+ * Défilement horizontal commun aux morceaux d'un bloc de code découpé par Go.
+ *
+ * Avec un défilement par morceau, faire glisser une ligne longue ne déplaçait
+ * que ses 40 lignes : les lignes ne s'alignaient plus aux jointures.
+ * [largeur] retient la plus grande largeur de contenu vue parmi les morceaux.
+ */
+internal class DefilementCode {
+    val etat = ScrollState(0)
+    val largeur = mutableIntStateOf(0)
 }
 
 /**

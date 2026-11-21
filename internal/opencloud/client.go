@@ -90,6 +90,10 @@ type Client struct {
 	base *url.URL
 	auth Authenticator
 	hc   *http.Client
+	// hcLent sert aux requêtes dont la réponse peut légitimement tarder (voir
+	// requeteLente) : mêmes délais de connexion, sans délai d'en-têtes. Nil
+	// après SetHTTPClient : toutes les requêtes passent alors par hc.
+	hcLent *http.Client
 }
 
 // rejectInsecureRedirect interdit une dégradation HTTPS vers HTTP. Le jeton
@@ -128,6 +132,15 @@ func nouveauTransport() *http.Transport {
 	return t
 }
 
+// requeteLente dit si le serveur peut mettre plus de delaiEntetes à répondre
+// sans être en panne : la recherche serveur (REPORT) fouille tout l'espace, et
+// un gros PUT n'est confirmé qu'une fois le fichier enregistré. Pour elles,
+// seul le délai global du client (30 s) s'applique, comme avant les délais
+// courts ; la connexion et la poignée TLS restent bornées à 10 s.
+func requeteLente(method string) bool {
+	return method == http.MethodPut || method == "REPORT"
+}
+
 // CodeServerURLInvalid signale une adresse de serveur refusée. La valeur est
 // celle de config.CodeServerURLInvalid : Android rédige le même message que la
 // règle soit posée par la configuration ou par le client.
@@ -151,11 +164,18 @@ func New(serverURL string, auth Authenticator) (*Client, error) {
 		return nil, fmt.Errorf("opencloud: [%s] URL de serveur invalide %q: hôte manquant", CodeServerURLInvalid, serverURL)
 	}
 
+	lent := nouveauTransport()
+	lent.ResponseHeaderTimeout = 0
 	return &Client{
 		base: u,
 		auth: auth,
 		hc: &http.Client{
 			Transport:     nouveauTransport(),
+			Timeout:       30 * time.Second,
+			CheckRedirect: rejectInsecureRedirect,
+		},
+		hcLent: &http.Client{
+			Transport:     lent,
 			Timeout:       30 * time.Second,
 			CheckRedirect: rejectInsecureRedirect,
 		},
@@ -171,6 +191,8 @@ func (c *Client) SetHTTPClient(hc *http.Client) {
 		// spécialisé (par exemple celui utilisé sur Android ou dans les tests).
 		copy.CheckRedirect = rejectInsecureRedirect
 		c.hc = &copy
+		// Le client fourni décide seul de ses délais, pour toutes les requêtes.
+		c.hcLent = nil
 	}
 }
 
@@ -202,7 +224,11 @@ func (c *Client) do(ctx context.Context, method string, u *url.URL, body []byte,
 		return nil, nil, err
 	}
 
-	resp, err := c.hc.Do(req)
+	hc := c.hc
+	if c.hcLent != nil && requeteLente(method) {
+		hc = c.hcLent
+	}
+	resp, err := hc.Do(req)
 	if err != nil {
 		// Le transport a échoué : la requête n'a jamais atteint le serveur.
 		// L'erreur porte ErrOffline pour que les couches hautes puissent

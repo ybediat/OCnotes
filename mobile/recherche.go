@@ -126,14 +126,27 @@ func (a *App) SearchJSON(query, dir string) (string, error) {
 	}
 
 	// Les plus pertinentes d'abord : la note qui contient le terme le plus
-	// souvent. À égalité, l'ordre des chemins, pour un affichage stable d'une
-	// frappe à l'autre. Avant, on gardait les 50 premières par ordre
-	// alphabétique, et la note cherchée pouvait manquer.
+	// souvent. À égalité, l'ordre alphabétique des chemins, pour un affichage
+	// stable d'une frappe à l'autre. Avant, on gardait les 50 premières par
+	// ordre alphabétique, et la note cherchée pouvait manquer.
+	//
+	// L'ordre alphabétique se fait sur le chemin replié (casse, accents,
+	// espaces insécables) : en octets bruts, « Zèbre » passait avant « abricot »
+	// et « Été » après « zoo ». Le chemin brut ne départage que deux chemins
+	// identiques une fois repliés.
+	plies := make(map[string]string, len(out.Results))
+	for _, r := range out.Results {
+		plies[r.Path] = search.Fold(r.Path)
+	}
 	sort.SliceStable(out.Results, func(i, j int) bool {
-		if out.Results[i].Count != out.Results[j].Count {
-			return out.Results[i].Count > out.Results[j].Count
+		a, b := out.Results[i], out.Results[j]
+		if a.Count != b.Count {
+			return a.Count > b.Count
 		}
-		return out.Results[i].Path < out.Results[j].Path
+		if plies[a.Path] != plies[b.Path] {
+			return plies[a.Path] < plies[b.Path]
+		}
+		return a.Path < b.Path
 	})
 	// Tronqué seulement s'il y avait vraiment plus : exactement 50 notes
 	// trouvées ne sont pas une liste coupée.

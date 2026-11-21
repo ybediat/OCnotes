@@ -129,4 +129,22 @@ class CaseACocherTest {
         assertNull(retrouverTache(avant, avant[0], listOf(NoteBlockDto(kind = BlockKind.TACHE, text = "pain", source = 2, checked = true))))
         assertNull(retrouverTache(avant, avant[0], emptyList()))
     }
+
+    // Une tâche identique insérée avant la touchée : le rang ne désigne plus
+    // sûrement la bonne, rien n'est rejoué.
+    @Test
+    fun toucherPerimeAvecUneTacheEnDoubleNeRejoueRien() {
+        // Deux « lait » ; on touche le second. Une troisième est insérée en
+        // tête : au même rang se trouve désormais le premier « lait ».
+        val avant = listOf(
+            NoteBlockDto(kind = BlockKind.TACHE, text = "lait", source = 2),
+            NoteBlockDto(kind = BlockKind.TACHE, text = "lait", source = 13),
+        )
+        val apres = listOf(
+            NoteBlockDto(kind = BlockKind.TACHE, text = "lait", source = 2),
+            NoteBlockDto(kind = BlockKind.TACHE, text = "lait", source = 13),
+            NoteBlockDto(kind = BlockKind.TACHE, text = "lait", source = 24),
+        )
+        assertNull(retrouverTache(avant, avant[1], apres))
+    }
 }

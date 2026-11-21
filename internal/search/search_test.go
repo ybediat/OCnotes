@@ -215,3 +215,40 @@ func TestFindIgnoreLesAdressesDeLiens(t *testing.T) {
 		t.Errorf("count = %d, attendu 1", n)
 	}
 }
+
+// L'italique simple disparaît de l'extrait, pas un astérisque de calcul ni le
+// tiret bas d'un nom de fichier.
+func TestFindExtraitSansItalique(t *testing.T) {
+	cas := []struct{ texte, requete, extrait string }{
+		{"le *garage* demain", "garage", "le garage demain"},
+		{"voir _la facture_ ici", "facture", "voir la facture ici"},
+		{"***très*** important facture", "facture", "très important facture"},
+		{"5 * 3 facture", "facture", "5 * 3 facture"},
+		{"facture dans nom_de_fichier.txt", "facture", "facture dans nom_de_fichier.txt"},
+	}
+	for _, c := range cas {
+		n, m := Find(c.texte, c.requete, 120)
+		if n != 1 || m.Excerpt != c.extrait || surligne(t, m) != c.requete {
+			t.Errorf("%q : n = %d, extrait %q, surligné %q", c.texte, n, m.Excerpt, surligne(t, m))
+		}
+	}
+}
+
+// Dans du code, « ](…) » s'affiche tel quel : un terme qui s'y trouve est
+// trouvé.
+func TestFindTrouveLesLiensEcritsDansDuCode(t *testing.T) {
+	cas := []string{
+		"```\n[a](facture.md)\n```",
+		"~~~\n[a](facture.md)\n~~~",
+		"écrire `[a](facture.md)` pour lier",
+	}
+	for _, texte := range cas {
+		if n, _ := Find(texte, "facture", 120); n != 1 {
+			t.Errorf("%q : count = %d, attendu 1", texte, n)
+		}
+	}
+	// Après la fermeture du bloc de code, les adresses sont de nouveau cachées.
+	if n, _ := Find("```\ncode\n```\n[a](facture.md)", "facture", 120); n != 0 {
+		t.Errorf("adresse après un bloc de code : count = %d, attendu 0", n)
+	}
+}

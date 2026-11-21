@@ -34,7 +34,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import eu.ocnotes.R
 import eu.ocnotes.appContainer
-import eu.ocnotes.data.AppMode
+import eu.ocnotes.sync.FiltreModeSynchro
 import eu.ocnotes.ui.common.ChargementPleinEcran
 import eu.ocnotes.ui.common.CrashReportGate
 import eu.ocnotes.ui.common.TiroirApplication
@@ -102,17 +102,12 @@ private fun OCnotesApp(
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(container, accountId) {
-        // Au lancement, le mode vaut UNSET tant que l'état n'est pas relu :
-        // cela veut dire « pas encore connu », pas « sans serveur ». Le prendre
-        // pour un arrêt annulait tous les travaux du profil — la passe de
-        // lancement à peine partie, celle qui suit une écriture, et le
-        // calendrier de la passe horaire. Seul un UNSET venu après un mode
-        // connu (une déconnexion) coupe la synchronisation.
-        var modeConnu = false
+        // Le mode UNSET du lancement n'est pas une déconnexion : voir
+        // FiltreModeSynchro.
+        val filtre = FiltreModeSynchro()
         container.repository.mode.collect { mode ->
-            if (mode == AppMode.UNSET && !modeConnu) return@collect
-            modeConnu = true
-            container.syncScheduler.setServerEnabled(mode == AppMode.SERVER)
+            val actif = filtre.serveurActif(mode) ?: return@collect
+            container.syncScheduler.setServerEnabled(actif)
         }
     }
 

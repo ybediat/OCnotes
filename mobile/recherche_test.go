@@ -286,3 +286,20 @@ func TestSearchJSONUneRecherchePlusRecenteAnnuleLaPrecedente(t *testing.T) {
 		t.Errorf("seconde : %+v", seconde)
 	}
 }
+
+// À nombre d'occurrences égal, l'ordre alphabétique ignore la casse et les
+// accents : « abricot », « Été », « Zèbre ».
+func TestSearchJSONTriNormalise(t *testing.T) {
+	app, _ := prepareLocal(t)
+	for _, nom := range []string{"Zèbre", "abricot", "Été"} {
+		creeNote(t, app, "", nom, "lorem")
+	}
+	res := cherche(t, app, "lorem", "")
+	var noms []string
+	for _, r := range res.Results {
+		noms = append(noms, r.Display)
+	}
+	if strings.Join(noms, ",") != "abricot,Été,Zèbre" {
+		t.Errorf("ordre = %v", noms)
+	}
+}
