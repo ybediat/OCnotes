@@ -634,4 +634,12 @@
     <string name="editeur_plan">Esquema</string>
     <string name="editeur_plan_titre">Esquema de la nota</string>
     <string name="editeur_plan_vide">Esta nota no tiene títulos</string>
+    <!-- Chantier 3 : rechercher dans la note ouverte. -->
+    <string name="recherche_action">Buscar</string>
+    <string name="recherche_invite">Buscar en la nota</string>
+    <string name="recherche_precedente">Coincidencia anterior</string>
+    <string name="recherche_suivante">Coincidencia siguiente</string>
+    <string name="recherche_fermer">Cerrar la búsqueda</string>
+    <string name="recherche_compteur_description">Coincidencia %1$d de %2$d</string>
+    <string name="recherche_aucune_occurrence">Ninguna coincidencia</string>
 </resources>

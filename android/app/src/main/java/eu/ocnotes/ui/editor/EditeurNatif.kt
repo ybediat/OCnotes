@@ -277,6 +277,121 @@ class SessionEditeurNatif {
         return true
     }
 
+    /**
+     * Le repère d'où part une recherche : le curseur s'il est à l'écran, sinon
+     * le début de la première ligne visible — comme pour le plan, on lit
+     * peut-être loin de l'endroit où l'on a tapé.
+     */
+    @MainThread
+    fun positionVisible(): Int? {
+        val vue = champ ?: return null
+        val curseur = vue.selectionStart.coerceIn(0, vue.length())
+        val mise = vue.layout ?: return curseur
+        val haut = vue.scrollY
+        val bas = haut + vue.etatDefilementNatif().hauteurVisible
+        val ligneCurseur = mise.getLineForOffset(curseur)
+        if (mise.getLineBottom(ligneCurseur) > haut && mise.getLineTop(ligneCurseur) < bas) return curseur
+        return mise.getLineStart(mise.getLineForVertical(haut))
+    }
+
+    /**
+     * Le `BackgroundColorSpan` unique de la recherche, sous Android 13 et
+     * avant (voir [montrerOccurrence]) ; `null` quand rien n'est marqué.
+     */
+    private var marqueRecherche: android.text.style.BackgroundColorSpan? = null
+
+    /**
+     * Met en évidence l'occurrence [plage] et l'amène à l'écran, sans toucher
+     * au texte, à la sélection ni au focus — celui-ci est dans le champ de
+     * recherche, clavier ouvert.
+     *
+     * Rien n'est fait si le champ a changé depuis la photo cherchée
+     * ([revisionAttendue]) : la plage ne désignerait plus l'occurrence.
+     *
+     * Une seule occurrence est marquée à la fois : `setSpan` est quadratique,
+     * et un span par occurrence de « e » referait la lenteur de la coloration
+     * sur la note entière (carnet : `ANDROID-COLORATION`).
+     *
+     * - Depuis Android 14, `setSearchResultHighlights` : prévu pour la
+     *   recherche, dessiné sans le focus et **sans span** — l'`Editable`
+     *   n'est pas touché du tout.
+     * - Avant, un seul span de fond, déplacé d'occurrence en occurrence. Un
+     *   span ne passe pas par le `TextWatcher` : ni révision, ni
+     *   enregistrement, ni pile d'annulation. Il est posé sous
+     *   `sansSuiviCurseur`, pour que ce changement de spans ne ramène pas le
+     *   curseur à l'écran.
+     *
+     * La sélection, elle, ne convient pas : `TextView` ne dessine le surlignage
+     * d'une sélection que si le champ a le focus.
+     *
+     * Le défilement est explicite, comme le saut du plan : la ligne de
+     * l'occurrence est posée au tiers de la hauteur visible quand elle n'est
+     * pas déjà entièrement à l'écran. La hauteur visible tient compte du
+     * clavier, qui rétrécit le champ (`imePadding`).
+     */
+    @MainThread
+    fun montrerOccurrence(
+        revisionAttendue: Long,
+        plage: IntRange,
+        couleur: Int,
+        couleurCourante: Int,
+    ): Boolean {
+        val vue = champ ?: return false
+        if (!revisionNativeToujoursCourante(revisionAttendue, revision)) return false
+        val debut = plage.first.coerceIn(0, vue.length())
+        val fin = (plage.last + 1).coerceIn(debut, vue.length())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            vue.searchResultHighlightColor = couleur
+            vue.focusedSearchResultHighlightColor = couleurCourante
+            vue.setSearchResultHighlights(debut, fin)
+            vue.focusedSearchResultIndex = 0
+        } else {
+            val marque = marqueRecherche ?: android.text.style.BackgroundColorSpan(couleurCourante)
+                .also { marqueRecherche = it }
+            val poser = {
+                vue.text.setSpan(marque, debut, fin, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            if (vue is ChampEditeur) vue.sansSuiviCurseur(poser) else poser()
+        }
+        val mise = vue.layout ?: return true
+        val ligne = mise.getLineForOffset(debut)
+        val haut = vue.scrollY
+        val hauteur = vue.etatDefilementNatif().hauteurVisible
+        val dessus = mise.getLineTop(ligne)
+        val dessous = mise.getLineBottom(mise.getLineForOffset(fin))
+        if (dessus < haut || dessous > haut + hauteur) {
+            val cible = dessus - hauteur / 3
+            vue.scrollTo(vue.scrollX, cible.coerceIn(0, vue.etatDefilementNatif().maximum))
+        }
+        return true
+    }
+
+    /** Retire la mise en évidence de la recherche, quelle que soit la voie qui l'a posée. */
+    @MainThread
+    fun effacerOccurrence() {
+        val vue = champ ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            vue.setSearchResultHighlights(*IntArray(0))
+        }
+        marqueRecherche?.let { marque ->
+            val retirer = { vue.text.removeSpan(marque) }
+            if (vue is ChampEditeur) vue.sansSuiviCurseur(retirer) else retirer()
+        }
+        marqueRecherche = null
+    }
+
+    /**
+     * À la fermeture de la recherche : le curseur va au début de la dernière
+     * occurrence visitée, que l'on voit déjà. Rien sur une révision périmée.
+     */
+    @MainThread
+    fun poserCurseur(revisionAttendue: Long, position: Int): Boolean {
+        val vue = champ ?: return false
+        if (!revisionNativeToujoursCourante(revisionAttendue, revision)) return false
+        vue.setSelection(position.coerceIn(0, vue.length()))
+        return true
+    }
+
     @MainThread
     internal fun attacher(vue: EditText, revisionInitiale: Long) {
         check(champ == null || champ === vue) {
