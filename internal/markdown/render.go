@@ -397,7 +397,7 @@ func (r *renderer) inline(n ast.Node, tpl Block) {
 	b := &inlineBuilder{}
 	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 		if img, ok := c.(*ast.Image); ok {
-			r.pushInline(b, tpl)
+			emis := r.pushInline(b, tpl)
 			b = &inlineBuilder{}
 			// La position d'un titre ou d'un paragraphe ne vaut que pour le
 			// premier morceau : ce qui suit l'image commence ailleurs, et on
@@ -407,7 +407,14 @@ func (r *renderer) inline(n ast.Node, tpl Block) {
 			// morceaux basculent ensemble. Sans cela, une tâche qui commence
 			// par une image (premier morceau vide, donc jamais émis) n'avait
 			// plus aucune case cliquable.
-			if tpl.Kind != KindTask {
+			//
+			// Un titre qui *commence* par une image (« ## ![logo](…) Titre »)
+			// n'a encore rien émis : son premier vrai morceau est celui qui
+			// suit, et la position du début du titre lui revient. Sans cela,
+			// ce titre disparaissait du plan en saisie, faute de position où
+			// sauter. La position désigne la ligne du titre, c'est tout ce
+			// qu'il faut au saut.
+			if tpl.Kind != KindTask && emis {
 				tpl.Source = nil
 			}
 			r.push(Block{Kind: KindImage, Text: altText(img, r.src), Depth: tpl.Depth, Quote: tpl.Quote})
@@ -418,14 +425,17 @@ func (r *renderer) inline(n ast.Node, tpl Block) {
 	r.pushInline(b, tpl)
 }
 
-func (r *renderer) pushInline(b *inlineBuilder, tpl Block) {
+// pushInline émet le morceau de texte accumulé, et dit s'il l'a fait : un
+// morceau vide (avant une image en tête de bloc) n'est pas émis.
+func (r *renderer) pushInline(b *inlineBuilder, tpl Block) bool {
 	texte := b.text.String()
 	if strings.TrimSpace(texte) == "" && len(b.spans) == 0 {
-		return
+		return false
 	}
 	tpl.Text = texte
 	tpl.Spans = b.spans
 	r.push(tpl)
+	return true
 }
 
 func (r *renderer) push(b Block) { r.out = append(r.out, protegerLaMiseEnPage(b)) }

@@ -235,7 +235,7 @@ private fun ContenuMarkdown(
                         }
                         Box(Modifier.onPlaced { reperes.elements[index] = it }) {
                             when (element) {
-                                is ElementApercu.Bloc -> Bloc(element.bloc, element.avantSuite, onBasculerTache)
+                                is ElementApercu.Bloc -> Bloc(element.bloc, element.avantSuite, onBasculerTache, element.suiteDeTache)
                                 is ElementApercu.Tableau -> Tableau(element.lignes)
                             }
                         }
@@ -641,7 +641,16 @@ private const val PAS_BARRE_DP = 13 // barre de 3 dp + 10 dp d'air
 /** Un élément de la liste visible, avec les tableaux reconstitués. */
 internal sealed interface ElementApercu {
     /** [avantSuite] : le bloc suivant le continue (voir `NoteBlockDto.cont`). */
-    data class Bloc(val bloc: NoteBlockDto, val avantSuite: Boolean = false) : ElementApercu
+    /**
+     * [suiteDeTache] : morceau d'une tâche coupée par une image, qui n'est pas
+     * le premier. Il porte la même case que le premier morceau (même position
+     * source) et ne la redessine pas : une tâche, une case.
+     */
+    data class Bloc(
+        val bloc: NoteBlockDto,
+        val avantSuite: Boolean = false,
+        val suiteDeTache: Boolean = false,
+    ) : ElementApercu
     data class Tableau(val lignes: List<NoteBlockDto>) : ElementApercu
 }
 
@@ -691,20 +700,37 @@ internal fun sansRetourFinal(bloc: NoteBlockDto): NoteBlockDto {
 }
 
 /**
- * Réunit uniquement les lignes consécutives d'un même tableau, et marque le
- * morceau que le suivant continue.
+ * Réunit uniquement les lignes consécutives d'un même tableau, marque le
+ * morceau que le suivant continue, et repère les morceaux d'une tâche coupée
+ * par une image qui suivent le premier (voir [ElementApercu.Bloc]).
  */
 internal fun grouperPourApercu(blocs: List<NoteBlockDto>): List<ElementApercu> {
     val elements = mutableListOf<ElementApercu>()
+    // Position de la case de la dernière tâche dessinée. Go donne la même
+    // position à tous les morceaux d'une tâche coupée par une image ; deux
+    // tâches distinctes n'en partagent jamais une.
+    var sourceTache: Int? = null
     var index = 0
     while (index < blocs.size) {
         val bloc = blocs[index]
         if (bloc.kind != BlockKind.LIGNE_TABLEAU) {
             val avantSuite = blocs.getOrNull(index + 1)?.cont == true
-            elements += ElementApercu.Bloc(if (avantSuite) sansRetourFinal(bloc) else bloc, avantSuite)
+            val suiteDeTache = bloc.kind == BlockKind.TACHE && bloc.source != null && bloc.source == sourceTache
+            if (bloc.kind == BlockKind.TACHE) {
+                sourceTache = bloc.source
+            } else if (bloc.kind != BlockKind.IMAGE) {
+                // Seule une image sépare les morceaux d'une même tâche.
+                sourceTache = null
+            }
+            elements += ElementApercu.Bloc(
+                if (avantSuite) sansRetourFinal(bloc) else bloc,
+                avantSuite,
+                suiteDeTache,
+            )
             index++
             continue
         }
+        sourceTache = null
 
         val lignes = mutableListOf<NoteBlockDto>()
         while (index < blocs.size && blocs[index].kind == BlockKind.LIGNE_TABLEAU) {
@@ -721,7 +747,12 @@ internal fun grouperPourApercu(blocs: List<NoteBlockDto>): List<ElementApercu> {
  * le contenu selon le `kind`.
  */
 @Composable
-private fun Bloc(bloc: NoteBlockDto, avantSuite: Boolean, onBasculerTache: ((NoteBlockDto) -> Unit)?) {
+private fun Bloc(
+    bloc: NoteBlockDto,
+    avantSuite: Boolean,
+    onBasculerTache: ((NoteBlockDto) -> Unit)?,
+    suiteDeTache: Boolean = false,
+) {
     val couleurBarre = MaterialTheme.colorScheme.outlineVariant
     Row(
         modifier = Modifier
@@ -750,7 +781,12 @@ private fun Bloc(bloc: NoteBlockDto, avantSuite: Boolean, onBasculerTache: ((Not
                 // marqueur ni la case.
                 BlockKind.PUCE -> Puce(bloc, marqueur = if (bloc.cont) "" else "•") // i18n-ok
                 BlockKind.NUMEROTE -> Puce(bloc, marqueur = if (bloc.cont) "" else "${bloc.number}.") // i18n-ok
-                BlockKind.TACHE -> Tache(bloc, if (bloc.cont) null else onBasculerTache, avecCase = !bloc.cont)
+                // Une suite (bloc découpé, ou tâche coupée par une image) n'a
+                // pas de case : elle est sur le premier morceau.
+                BlockKind.TACHE -> {
+                    val avecCase = !bloc.cont && !suiteDeTache
+                    Tache(bloc, if (avecCase) onBasculerTache else null, avecCase = avecCase)
+                }
                 BlockKind.CODE -> BlocDeCode(bloc, avantSuite)
                 BlockKind.TRAIT -> HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 BlockKind.IMAGE -> Image(bloc)

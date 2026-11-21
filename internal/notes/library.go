@@ -475,7 +475,21 @@ func Render(name string, content []byte) ([]markdown.Block, error) {
 	// dans le contenu reçu, celui que le champ de saisie a sous les yeux :
 	// mieux vaut les taire que faire écrire une case à côté de son crochet.
 	if text != string(content) {
+		// Seule exception : une BOM UTF-8 en tête et rien d'autre de changé.
+		// C'est le cas d'un texte collé depuis Windows dans le champ, qui
+		// garde ce caractère invisible (U+FEFF, une unité UTF-16) : les
+		// positions sont décalées d'exactement une unité, on les recale
+		// plutôt que de rendre muettes les cases et le plan de la note.
+		decalage, recalable := 0, false
+		if brut := string(content); strings.HasPrefix(brut, "\ufeff") && text == brut[len("\ufeff"):] {
+			decalage, recalable = 1, true
+		}
 		for i := range blocks {
+			if recalable && blocks[i].Source != nil {
+				p := *blocks[i].Source + decalage
+				blocks[i].Source = &p
+				continue
+			}
 			blocks[i].Source = nil
 		}
 	}

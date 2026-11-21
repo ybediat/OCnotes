@@ -710,6 +710,16 @@ class OCnotesRepository(
         return reponse
     }
 
+    /**
+     * Abandonne la recherche dans le texte en cours côté Go : elle revient
+     * annulée au lieu de finir de lire toutes les notes pour rien. Un simple
+     * compteur atomique, sans blocage : appelable depuis le thread principal.
+     * Rien à faire si l'application Go n'est pas encore ouverte.
+     */
+    fun cancelSearch() {
+        goApp?.cancelSearch()
+    }
+
     /** Longueur de requête à partir de laquelle [search] fouille le texte. */
     fun searchMinLength(): Int = Mobile.searchMinLength().toInt()
 

@@ -310,6 +310,7 @@ class BrowserViewModel(
                 val mode = ModeAffichage.depuis(valeur)
                 if (!premier && mode == _uiState.value.mode) return@collect
                 premier = false
+                arreterRechercheTexte()
                 _uiState.update { it.copy(mode = mode).sansRechercheNiSelection() }
                 recharger()
             }
@@ -346,6 +347,7 @@ class BrowserViewModel(
 
     fun ouvrir(entree: FolderEntryDto) {
         if (entree.isDir && !_uiState.value.enListePlate) {
+            arreterRechercheTexte()
             _uiState.update { it.copy(cheminCourant = entree.path).sansRechercheNiSelection() }
             recharger()
         } else {
@@ -356,6 +358,7 @@ class BrowserViewModel(
     fun remonter() {
         val etat = _uiState.value
         if (!etat.peutRemonter) return
+        arreterRechercheTexte()
         _uiState.update {
             it.copy(cheminCourant = etat.cheminCourant.substringBeforeLast('/', ""))
                 .sansRechercheNiSelection()
@@ -471,8 +474,27 @@ class BrowserViewModel(
     }
 
     fun effacerRecherche() {
-        rechercheTexteJob?.cancel()
+        arreterRechercheTexte()
         _uiState.update { it.sansRecherche() }
+    }
+
+    /**
+     * Arrête la recherche dans le texte en attente ou en cours : la coroutine,
+     * et la passe Go, qui sinon finissait de lire toutes les notes pour une
+     * réponse que plus personne n'attend.
+     */
+    private fun arreterRechercheTexte() {
+        val job = rechercheTexteJob ?: return
+        rechercheTexteJob = null
+        if (job.isActive) {
+            job.cancel()
+            repository.cancelSearch()
+        }
+    }
+
+    override fun onCleared() {
+        arreterRechercheTexte()
+        super.onCleared()
     }
 
     /**
@@ -509,7 +531,7 @@ class BrowserViewModel(
      * voit se chevaucher.
      */
     private fun lancerRechercheTexte(delai: Long, effacer: Boolean) {
-        rechercheTexteJob?.cancel()
+        arreterRechercheTexte()
         val etat = _uiState.value
         val requete = etat.recherche
         val utile = requete.trim().let { it.codePointCount(0, it.length) } >= longueurMinTexte

@@ -134,8 +134,8 @@ func TestFindCompteEtGardeLaPremiereLigne(t *testing.T) {
 	if n != 3 {
 		t.Errorf("count = %d, attendu 3", n)
 	}
-	// La ligne de la première occurrence, sans son retrait.
-	if m.Excerpt != "- second mot ici" || surligne(t, m) != "mot" {
+	// La ligne de la première occurrence, sans son retrait ni sa puce.
+	if m.Excerpt != "second mot ici" || surligne(t, m) != "mot" {
 		t.Errorf("extrait %q, surligné %q", m.Excerpt, surligne(t, m))
 	}
 }
@@ -172,5 +172,46 @@ func TestFindRequeteTropCourte(t *testing.T) {
 		if n, _ := Find("a é a é", q, 120); n != 0 {
 			t.Errorf("requête %q : count %d, attendu 0", q, n)
 		}
+	}
+}
+
+// L'extrait se lit comme la note rendue : ni marqueur de bloc, ni gras, ni
+// adresse de lien, et le terme reste bien surligné.
+func TestFindExtraitSansSyntaxeMarkdown(t *testing.T) {
+	cas := []struct{ texte, requete, extrait string }{
+		{"- [ ] appeler le **garage** demain", "garage", "appeler le garage demain"},
+		{"> ## Titre de la facture", "facture", "Titre de la facture"},
+		{"voir [la facture](https://exemple.fr/f.pdf) de mars", "facture", "voir la facture de mars"},
+		{"1. lire ~~ancien~~ `code` facture", "facture", "lire ancien code facture"},
+		{"un [lien](http://a) puis facture et [autre](http://b)", "facture", "un lien puis facture et autre"},
+	}
+	for _, c := range cas {
+		n, m := Find(c.texte, c.requete, 120)
+		if n != 1 || m.Excerpt != c.extrait || surligne(t, m) != c.requete {
+			t.Errorf("%q : n = %d, extrait %q, surligné %q", c.texte, n, m.Excerpt, surligne(t, m))
+		}
+	}
+}
+
+// Un terme qui n'apparaît que dans l'adresse d'un lien ne fait pas trouver la
+// note : il ne s'y voit pas.
+func TestFindIgnoreLesAdressesDeLiens(t *testing.T) {
+	cas := []string{
+		"voir [ici](https://facture.exemple.fr)",
+		"![photo](images/facture.png)",
+		"[f]: https://exemple.fr/facture",
+	}
+	for _, texte := range cas {
+		if n, _ := Find(texte, "facture", 120); n != 0 {
+			t.Errorf("%q : count = %d, attendu 0", texte, n)
+		}
+	}
+	// Le texte du lien, lui, compte ; l'adresse non.
+	if n, _ := Find("[facture](https://exemple.fr/facture)", "facture", 120); n != 1 {
+		t.Errorf("count = %d, attendu 1", n)
+	}
+	// Une parenthèse sans lien n'est pas une adresse.
+	if n, _ := Find("la facture (de mars)", "mars", 120); n != 1 {
+		t.Errorf("count = %d, attendu 1", n)
 	}
 }
