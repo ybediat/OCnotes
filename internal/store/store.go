@@ -197,6 +197,10 @@ type Store struct {
 	// réponse arrivée après une déconnexion ne réécrive le cache vidé.
 	gen   uint64
 	epoch uint64
+
+	// accesPersiste date la dernière écriture de l'index faite pour garder
+	// les dates d'accès (voir noterAccesSansChangement).
+	accesPersiste time.Time
 }
 
 // persisted est la forme sérialisée de l'état du cache.

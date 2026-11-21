@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf16"
+	"unicode/utf8"
 )
 
 // entreBornes extrait [debut, fin) d'un texte, en unités UTF-16 comme les spans.
@@ -158,5 +159,55 @@ func TestDecoupageLaissePetitsBlocs(t *testing.T) {
 	blocs := Render(src)
 	if len(blocs) != 1 || blocs[0].Cont {
 		t.Fatalf("un paragraphe de %d lignes ne doit pas être découpé : %d blocs", maxPlainLines, len(blocs))
+	}
+}
+
+// Un paragraphe d'une seule ligne immense (texte collé sans retour à la
+// ligne) est découpé lui aussi, sur des espaces, sans rien perdre.
+func TestDecoupageLigneImmense(t *testing.T) {
+	mots := make([]string, 3000)
+	for i := range mots {
+		mots[i] = fmt.Sprintf("mot%d-é😀", i)
+	}
+	ligne := strings.Join(mots, " ")
+	blocs := Render(ligne)
+	if len(blocs) < 3 {
+		t.Fatalf("une ligne de %d octets devrait donner plusieurs morceaux, reçu %d", len(ligne), len(blocs))
+	}
+	var tout strings.Builder
+	for i, b := range blocs {
+		if len(b.Text) > maxOctetsMorceau {
+			t.Errorf("morceau %d : %d octets, au-delà de %d", i, len(b.Text), maxOctetsMorceau)
+		}
+		if i < len(blocs)-1 && !strings.HasSuffix(b.Text, " ") {
+			t.Errorf("morceau %d coupé hors d'une espace : %q", i, b.Text[len(b.Text)-10:])
+		}
+		if b.Cont != (i > 0) {
+			t.Errorf("morceau %d : Cont=%v", i, b.Cont)
+		}
+		tout.WriteString(b.Text)
+	}
+	if tout.String() != ligne {
+		t.Fatal("la concaténation des morceaux ne rend pas la ligne")
+	}
+}
+
+// Une ligne de code très longue reste entière : la couper la montrerait sur
+// deux lignes.
+func TestDecoupageCodeLigneLongueIntacte(t *testing.T) {
+	code := strings.Repeat("x = 1; ", 1500)
+	blocs := Render("```\n" + code + "\n```\n")
+	if len(blocs) != 1 || blocs[0].Cont {
+		t.Fatalf("une seule ligne de code ne doit pas être découpée : %d blocs", len(blocs))
+	}
+}
+
+// Sans espace dans la fenêtre de coupe, la coupure tombe au début d'un
+// caractère, jamais au milieu.
+func TestCoupureSurEspaceRespecteLesCaracteres(t *testing.T) {
+	m := strings.Repeat("é", maxOctetsMorceau)
+	c := coupureSurEspace(m)
+	if c <= 0 || c > maxOctetsMorceau || !utf8.ValidString(m[:c]) {
+		t.Fatalf("coupure en %d invalide", c)
 	}
 }

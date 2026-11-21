@@ -42,7 +42,8 @@ internal fun tachesCliquables(blocs: List<NoteBlockDto>): List<NoteBlockDto> =
  * mauvaise case.
  *
  * Le même état est exigé : si la case a déjà l'état voulu dans le nouveau
- * rendu, rejouer le toucher la remettrait comme avant.
+ * rendu, rejouer le toucher la remettrait comme avant. La tâche doit aussi
+ * être la seule de son texte et de son état, dans les deux rendus.
  */
 internal fun retrouverTache(
     avant: List<NoteBlockDto>,
@@ -51,6 +52,13 @@ internal fun retrouverTache(
 ): NoteBlockDto? {
     val rang = tachesCliquables(avant).indexOfFirst { it.source == touchee.source }
     if (rang < 0) return null
+    // Une tâche en double (même texte, même état) dans l'un ou l'autre rendu
+    // rend le rang ambigu : une tâche identique insérée avant la touchée
+    // ferait cocher la mauvaise. Mieux vaut alors ne rien rejouer.
+    val pareilles = { blocs: List<NoteBlockDto> ->
+        tachesCliquables(blocs).count { it.text == touchee.text && it.checked == touchee.checked }
+    }
+    if (pareilles(avant) != 1 || pareilles(apres) != 1) return null
     return tachesCliquables(apres).getOrNull(rang)
         ?.takeIf { it.text == touchee.text && it.checked == touchee.checked }
 }

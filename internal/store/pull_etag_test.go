@@ -6,6 +6,7 @@ import (
 	"os"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/ybediat/OpenNote/internal/opencloud"
 )
@@ -163,5 +164,56 @@ func TestPullEtagBlobManquant(t *testing.T) {
 	}
 	if content, _, ok := s.Get("a.md"); !ok || string(content) != "contenu" {
 		t.Errorf("cache = %q, %v", content, ok)
+	}
+}
+
+// Une note trouvée à jour garde sa date d'accès sur le disque : sans cela,
+// une note lue souvent mais jamais modifiée était évincée la première après
+// un redémarrage.
+func TestPullEtagIdentiqueGardeLaDateDAcces(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote := newFakeRemote()
+	if err := s.Accept("a.md", []byte("contenu"), `"e1"`); err != nil {
+		t.Fatal(err)
+	}
+	// Date d'accès ancienne, écrite sur le disque.
+	s.mu.Lock()
+	s.entries["a.md"].LastAccess = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	if err := s.save(); err != nil {
+		s.mu.Unlock()
+		t.Fatal(err)
+	}
+	s.mu.Unlock()
+	remote.files["a.md"] = "contenu"
+	remote.etags["a.md"] = `"e1"`
+
+	avant := time.Now().UTC().Add(-time.Second)
+	if err := s.Pull(context.Background(), remote, "a.md"); err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+
+	relu, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acces := relu.entries["a.md"].LastAccess; acces.Before(avant) {
+		t.Errorf("date d'accès relue = %s, attendu une date récente", acces.Format("02/01/2006 15:04:05"))
+	}
+}
+
+// Des ETag vides, même entre guillemets ou en validation faible, ne désignent
+// aucune version : jamais « la même ».
+func TestMemeVersionRefuseLesETagVides(t *testing.T) {
+	for _, a := range []string{"", `""`, `W/""`, " "} {
+		if memeVersion(a, `""`) {
+			t.Errorf("memeVersion(%q, \"\\\"\\\"\") = true", a)
+		}
+	}
+	if !memeVersion(`W/"e1"`, `"e1"`) {
+		t.Error("W/\"e1\" et \"e1\" sont la même version")
 	}
 }

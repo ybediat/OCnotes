@@ -258,6 +258,9 @@ type plage struct{ debut, fin int }
 func adressesDeLiens(text string) []plage {
 	var out []plage
 	ligne := 0
+	// Dans un bloc de code clôturé, « ](…) » est du code, affiché tel quel :
+	// rien n'y est caché.
+	dansClotureCode := false
 	for ligne <= len(text) {
 		finLigne := strings.IndexByte(text[ligne:], '\n')
 		if finLigne < 0 {
@@ -266,6 +269,13 @@ func adressesDeLiens(text string) []plage {
 			finLigne += ligne
 		}
 		l := text[ligne:finLigne]
+		if estCloture(l) || dansClotureCode {
+			if estCloture(l) {
+				dansClotureCode = !dansClotureCode
+			}
+			ligne = finLigne + 1
+			continue
+		}
 		// La regex n'est essayée que sur une ligne qui commence par « [ » :
 		// les autres lignes n'en paient pas le prix.
 		if m := definitionPossible(l); m != nil {
@@ -281,7 +291,10 @@ func adressesDeLiens(text string) []plage {
 				if ferme < 0 {
 					break
 				}
-				out = append(out, plage{ligne + ouvre, ligne + ouvre + ferme})
+				// Un « ](…) » écrit dans du code en ligne reste visible.
+				if !dansCodeEnLigne(l, depuis+i) {
+					out = append(out, plage{ligne + ouvre, ligne + ouvre + ferme})
+				}
 				depuis = ouvre + ferme + 1
 			}
 		}
@@ -335,7 +348,7 @@ func nettoyerAvant(s string) string {
 		crochet := strings.IndexByte(s[m[0]:], '[')
 		s = s[:m[0]] + s[m[0]+crochet+1:]
 	}
-	return marqueursEnLigne.ReplaceAllString(s, "")
+	return retirerItalique(marqueursEnLigne.ReplaceAllString(s, ""), false, true)
 }
 
 // nettoyerApres retire la syntaxe Markdown de ce qui suit le terme.
@@ -347,5 +360,57 @@ func nettoyerApres(s string) string {
 		s = s[:crochet] + s[m[1]:]
 	}
 	s = lienComplet.ReplaceAllString(s, "$1")
-	return marqueursEnLigne.ReplaceAllString(s, "")
+	return retirerItalique(marqueursEnLigne.ReplaceAllString(s, ""), true, false)
+}
+
+// estCloture dit si une ligne ouvre ou ferme un bloc de code clôturé : trois
+// accents graves ou trois tildes, après au plus trois espaces.
+func estCloture(l string) bool {
+	t := strings.TrimLeft(l, " ")
+	if len(l)-len(t) > 3 {
+		return false
+	}
+	return strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~")
+}
+
+// dansCodeEnLigne dit si la position i d'une ligne tombe dans du code en
+// ligne : un nombre impair d'accents graves la précède. Approximation qui
+// suffit ici : un délimiteur de deux accents graves compte pour deux et s'annule.
+func dansCodeEnLigne(l string, i int) bool {
+	return strings.Count(l[:i], "`")%2 == 1
+}
+
+// retirerItalique enlève les « * » et « _ » qui marquent une emphase simple,
+// les doubles ayant déjà été retirés.
+//
+// Un délimiteur est retiré quand il touche un mot d'un seul côté : « *mot* »
+// devient « mot ». Entre deux espaces (« 5 * 3 ») ou au milieu d'un mot
+// (« nom_de_fichier »), il est gardé. collAvant et collApres disent si le
+// début ou la fin du texte touchent le terme trouvé, qui compte alors comme un
+// mot : dans « le *terme* », le texte avant le terme finit par « * ».
+func retirerItalique(s string, collAvant, collApres bool) string {
+	if !strings.ContainsAny(s, "*_") {
+		return s
+	}
+	r := []rune(s)
+	delimiteur := func(c rune) bool { return c == '*' || c == '_' }
+	// estMot regarde le premier caractère qui n'est pas un délimiteur, dans
+	// le sens pas : « *_mot_* » se juge sur « mot ».
+	estMot := func(i, pas int, bord bool) bool {
+		for i >= 0 && i < len(r) && delimiteur(r[i]) {
+			i += pas
+		}
+		if i < 0 || i >= len(r) {
+			return bord
+		}
+		return unicode.IsLetter(r[i]) || unicode.IsDigit(r[i])
+	}
+	var b strings.Builder
+	for i, c := range r {
+		if delimiteur(c) && estMot(i-1, -1, collAvant) != estMot(i+1, 1, collApres) {
+			continue
+		}
+		b.WriteRune(c)
+	}
+	return b.String()
 }

@@ -777,14 +777,22 @@ func (s *Store) Pull(ctx context.Context, remote Remote, notePath string) error 
 	entry, known := s.entries[notePath]
 	dirty := known && entry.Dirty
 	obs := s.observeLocked(notePath)
-	// Le blob peut manquer alors que l'index connaît la note (voir
-	// getObserved) : sans lui, il n'y a rien à garder, il faut télécharger.
-	enCache := known && entry.ETag != "" && s.blobPresentLocked(entry)
+	// Copies prises sous le verrou : l'entrée peut changer dès qu'il est
+	// relâché, pendant la requête au serveur.
+	etagCache, blob := "", ""
+	if known {
+		etagCache, blob = entry.ETag, s.blobPath(entry.Cache)
+	}
 	s.mu.Unlock()
 
 	if dirty {
 		return nil
 	}
+
+	// Le blob peut manquer alors que l'index connaît la note (voir
+	// getObserved) : sans lui, il n'y a rien à garder, il faut télécharger.
+	// Vérifié hors verrou : c'est un appel au disque.
+	enCache := etagCache != "" && fichierPresent(blob)
 
 	// Une note en cache, propre, dont on connaît la version : on demande
 	// d'abord son ETag seul. Un PROPFIND sans corps de note coûte une
@@ -800,7 +808,8 @@ func (s *Store) Pull(ctx context.Context, remote Remote, notePath string) error 
 	if enCache {
 		etag, err := remote.Stat(ctx, notePath)
 		switch {
-		case err == nil && memeVersion(etag, entry.ETag):
+		case err == nil && memeVersion(etag, etagCache):
+			s.noterAccesSansChangement(notePath)
 			return nil
 		case err != nil && !errors.Is(err, opencloud.ErrNotFound):
 			return err
@@ -946,12 +955,42 @@ func memeVersion(a, b string) bool {
 	nettoyer := func(e string) string {
 		return strings.Trim(strings.TrimPrefix(strings.TrimSpace(e), "W/"), `"`)
 	}
-	return a != "" && nettoyer(a) == nettoyer(b)
+	propre := nettoyer(a)
+	return propre != "" && propre == nettoyer(b)
 }
 
-// blobPresentLocked dit si le fichier du cache d'une entrée existe. À
-// appeler sous s.mu.
-func (s *Store) blobPresentLocked(entry *Entry) bool {
-	_, err := os.Stat(s.blobPath(entry.Cache))
+// fichierPresent dit si un fichier existe.
+func fichierPresent(chemin string) bool {
+	_, err := os.Stat(chemin)
 	return err == nil
+}
+
+// delaiPersistanceAcces espace les écritures de l'index faites pour garder les
+// dates d'accès des notes ouvertes sans changement.
+const delaiPersistanceAcces = 10 * time.Minute
+
+// noterAccesSansChangement date l'accès à une note que Pull a trouvée à jour.
+//
+// Avant la vérification par ETag, chaque ouverture repassait par Accept, qui
+// datait l'accès et écrivait l'index. Sans rien écrire, la date ne vivait
+// qu'en mémoire et se perdait à l'arrêt de l'application : une note lue
+// souvent mais jamais modifiée passait pour délaissée et était évincée la
+// première par le quota. L'index est donc écrit, mais au plus une fois par
+// delaiPersistanceAcces, pour ne pas réécrire tout l'index à chaque ouverture.
+func (s *Store) noterAccesSansChangement(notePath string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, ok := s.entries[notePath]
+	if !ok {
+		return
+	}
+	maintenant := time.Now().UTC()
+	entry.LastAccess = maintenant
+	if maintenant.Sub(s.accesPersiste) < delaiPersistanceAcces {
+		return
+	}
+	s.accesPersiste = maintenant
+	// Un échec d'écriture ne doit pas faire échouer l'ouverture : la date
+	// reste en mémoire et partira avec la prochaine écriture de l'index.
+	_ = s.save()
 }

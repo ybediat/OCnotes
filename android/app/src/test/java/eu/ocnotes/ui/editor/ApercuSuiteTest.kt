@@ -64,4 +64,20 @@ class ApercuSuiteTest {
         assertEquals(4, elements.size)
         assertEquals("Titre", (elements[indiceElement(blocs, 3)] as ElementApercu.Bloc).bloc.text)
     }
+
+    @Test
+    fun lesMorceauxDUnBlocDeCodePartagentLeurTete() {
+        // Les morceaux d'un même bloc de code désignent le même premier
+        // morceau : c'est la clé de leur défilement horizontal commun.
+        val code = { texte: String, suite: Boolean -> NoteBlockDto(kind = BlockKind.CODE, text = texte, cont = suite) }
+        val blocs = listOf(
+            morceau("intro", suite = false),
+            code("a\n", false),
+            code("b\n", true),
+            code("c", true),
+            code("autre", false),
+        )
+        val tetes = grouperPourApercu(blocs).map { (it as ElementApercu.Bloc).tete }
+        assertEquals(listOf(0, 1, 1, 1, 4), tetes)
+    }
 }
