@@ -1,6 +1,7 @@
 package mobile
 
 import (
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -10,7 +11,8 @@ import (
 )
 
 // maxResultatsRecherche borne la liste rendue : au-delà, l'utilisateur affine
-// sa requête plutôt que de faire défiler, et la passe s'arrête plus tôt.
+// sa requête plutôt que de faire défiler. Ce sont les plus pertinentes qui
+// sont gardées (voir SearchJSON), donc toute la portée est fouillée.
 const maxResultatsRecherche = 50
 
 // largeurExtrait borne l'extrait d'un résultat, en caractères : une ligne
@@ -95,10 +97,6 @@ func (a *App) SearchJSON(query, dir string) (string, error) {
 		if perimee() {
 			return annulee()
 		}
-		if len(out.Results) >= maxResultatsRecherche {
-			out.Truncated = true
-			break
-		}
 
 		count, m, lue := a.fouiller(k.Path, query)
 		if a.apresNoteFouillee != nil {
@@ -126,8 +124,31 @@ func (a *App) SearchJSON(query, dir string) (string, error) {
 	if perimee() {
 		return annulee()
 	}
+
+	// Les plus pertinentes d'abord : la note qui contient le terme le plus
+	// souvent. À égalité, l'ordre des chemins, pour un affichage stable d'une
+	// frappe à l'autre. Avant, on gardait les 50 premières par ordre
+	// alphabétique, et la note cherchée pouvait manquer.
+	sort.SliceStable(out.Results, func(i, j int) bool {
+		if out.Results[i].Count != out.Results[j].Count {
+			return out.Results[i].Count > out.Results[j].Count
+		}
+		return out.Results[i].Path < out.Results[j].Path
+	})
+	// Tronqué seulement s'il y avait vraiment plus : exactement 50 notes
+	// trouvées ne sont pas une liste coupée.
+	if len(out.Results) > maxResultatsRecherche {
+		out.Results = out.Results[:maxResultatsRecherche]
+		out.Truncated = true
+	}
 	return toJSON(out)
 }
+
+// CancelSearch abandonne la recherche dans le texte en cours, s'il y en a
+// une : elle revient vide avec `cancelled`. L'interface l'appelle quand le
+// champ est effacé, à chaque frappe, au changement de dossier et en quittant
+// l'écran : sans cela, la passe finissait de lire toutes les notes pour rien.
+func (a *App) CancelSearch() { a.rechercheGen.Add(1) }
 
 // fouiller cherche query dans une note du cache. lue est faux si la note n'a
 // pas pu être lue : absente du cache, ou encodage que ReadNote refuserait.

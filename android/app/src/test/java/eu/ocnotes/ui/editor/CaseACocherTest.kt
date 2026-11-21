@@ -89,4 +89,44 @@ class CaseACocherTest {
         assertEquals(listOf(true, false, true, false), apres.map { it.checked })
         assertEquals(blocs[3], apres[3])
     }
+
+    // Une tâche coupée par une image : le second morceau ne redessine pas la
+    // case, une tâche voisine en a bien une.
+    @Test
+    fun tacheCoupeeParUneImageNaQuUneCase() {
+        val blocs = listOf(
+            NoteBlockDto(kind = BlockKind.TACHE, text = "avant", source = 2),
+            NoteBlockDto(kind = BlockKind.IMAGE, text = "photo"),
+            NoteBlockDto(kind = BlockKind.TACHE, text = "après", source = 2),
+            NoteBlockDto(kind = BlockKind.TACHE, text = "voisine", source = 40),
+        )
+        val suites = grouperPourApercu(blocs).map { (it as ElementApercu.Bloc).suiteDeTache }
+        assertEquals(listOf(false, false, true, false), suites)
+    }
+
+    // Un toucher sur un aperçu périmé se rejoue sur la même tâche, retrouvée
+    // à son rang, même si sa position a bougé.
+    @Test
+    fun toucherPerimeRetrouveLaTache() {
+        val avant = listOf(
+            NoteBlockDto(kind = BlockKind.TACHE, text = "pain", source = 2),
+            NoteBlockDto(kind = BlockKind.TACHE, text = "lait", source = 13),
+        )
+        val apres = listOf(
+            NoteBlockDto(kind = BlockKind.PARAGRAPHE, text = "ajout", source = 0),
+            NoteBlockDto(kind = BlockKind.TACHE, text = "pain", source = 9),
+            NoteBlockDto(kind = BlockKind.TACHE, text = "lait", source = 20),
+        )
+        assertEquals(20, retrouverTache(avant, avant[1], apres)?.source)
+    }
+
+    // Texte changé ou état déjà voulu : on ne coche rien plutôt que la
+    // mauvaise case.
+    @Test
+    fun toucherPerimeSansCorrespondanceNeRejoueRien() {
+        val avant = listOf(NoteBlockDto(kind = BlockKind.TACHE, text = "pain", source = 2))
+        assertNull(retrouverTache(avant, avant[0], listOf(NoteBlockDto(kind = BlockKind.TACHE, text = "pain complet", source = 2))))
+        assertNull(retrouverTache(avant, avant[0], listOf(NoteBlockDto(kind = BlockKind.TACHE, text = "pain", source = 2, checked = true))))
+        assertNull(retrouverTache(avant, avant[0], emptyList()))
+    }
 }

@@ -422,8 +422,16 @@ fun EditorScreen(
                                     viewModel.caseBasculee(position, revision)
                                 } else {
                                     // Le rendu ne correspond plus au champ :
-                                    // rien n'est écrit, on le refait.
-                                    viewModel.rafraichirApercu(sessionNative.instantane())
+                                    // rien n'est écrit, on le refait, puis on
+                                    // rejoue le toucher sur la même tâche si
+                                    // on la retrouve sûrement — sinon il
+                                    // fallait toucher une seconde fois.
+                                    val avant = viewModel.uiState.value.blocs
+                                    viewModel.rafraichirApercu(sessionNative.instantane()) { apres, revisionRendu ->
+                                        val cible = retrouverTache(avant, bloc, apres)?.source
+                                        val nouvelle = cible?.let { sessionNative.cocherCase(revisionRendu, it) }
+                                        if (cible != null && nouvelle != null) viewModel.caseBasculee(cible, nouvelle)
+                                    }
                                 }
                             }
                         } else {

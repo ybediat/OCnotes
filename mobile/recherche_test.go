@@ -213,6 +213,55 @@ func TestSearchJSONTronqueA50(t *testing.T) {
 	}
 }
 
+// Exactement 50 notes trouvées : rien n'est coupé, la liste n'est pas
+// signalée tronquée.
+func TestSearchJSONCinquanteNeTronquePas(t *testing.T) {
+	app, _ := prepareLocal(t)
+	for i := 0; i < 50; i++ {
+		creeNote(t, app, "", fmt.Sprintf("N%02d", i), "lorem")
+	}
+	creeNote(t, app, "", "Autre", "rien à voir")
+	res := cherche(t, app, "lorem", "")
+	if len(res.Results) != 50 || res.Truncated {
+		t.Errorf("%d résultats, truncated = %v", len(res.Results), res.Truncated)
+	}
+}
+
+// Au-delà de 50, on garde les notes qui contiennent le plus le terme, même
+// si leur nom les rangerait en dernier.
+func TestSearchJSONGardeLesPlusPertinentes(t *testing.T) {
+	app, _ := prepareLocal(t)
+	for i := 0; i < 55; i++ {
+		creeNote(t, app, "", fmt.Sprintf("A%02d", i), "lorem")
+	}
+	creeNote(t, app, "", "Zz", "lorem lorem lorem")
+	res := cherche(t, app, "lorem", "")
+	if len(res.Results) != 50 || !res.Truncated {
+		t.Fatalf("%d résultats, truncated = %v", len(res.Results), res.Truncated)
+	}
+	if res.Results[0].Display != "Zz" || res.Results[0].Count != 3 {
+		t.Errorf("premier résultat : %+v", res.Results[0])
+	}
+}
+
+// CancelSearch rend périmée la passe en cours : elle revient annulée.
+func TestCancelSearchAnnuleLaPasseEnCours(t *testing.T) {
+	app, _ := prepareLocal(t)
+	for i := 0; i < 5; i++ {
+		creeNote(t, app, "", fmt.Sprintf("N%d", i), "lorem")
+	}
+	var fait atomic.Bool
+	app.apresNoteFouillee = func() {
+		if fait.CompareAndSwap(false, true) {
+			app.CancelSearch()
+		}
+	}
+	res := cherche(t, app, "lorem", "")
+	if !res.Cancelled || len(res.Results) != 0 {
+		t.Errorf("réponse : %+v", res)
+	}
+}
+
 // Une recherche lancée pendant une autre rend la première périmée : celle-ci
 // revient vide et annulée, la seconde complète.
 func TestSearchJSONUneRecherchePlusRecenteAnnuleLaPrecedente(t *testing.T) {

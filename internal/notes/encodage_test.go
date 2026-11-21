@@ -2,6 +2,7 @@ package notes
 
 import (
 	"testing"
+	"unicode/utf16"
 
 	"github.com/ybediat/OpenNote/internal/markdown"
 )
@@ -39,5 +40,48 @@ func TestUneBOMUTF8NeMasquePasLeTitre(t *testing.T) {
 	}
 	if len(blocs) == 0 || blocs[0].Kind != markdown.KindHeading {
 		t.Errorf("le titre n'est pas reconnu derrière la BOM : %+v", blocs)
+	}
+}
+
+// Un texte du champ qui commence par U+FEFF (collé depuis Windows) garde ses
+// positions, recalées d'une unité : cases et plan restent utilisables.
+func TestUneBOMEnTeteDuChampRecaleLesPositions(t *testing.T) {
+	champ := "\ufeff# Titre\n\n- [ ] tâche\n"
+	blocs, err := Render("note.md", []byte(champ))
+	if err != nil {
+		t.Fatal(err)
+	}
+	unites := utf16.Encode([]rune(champ))
+	vus := 0
+	for _, b := range blocs {
+		if b.Source == nil {
+			t.Errorf("bloc %s sans position", b.Kind)
+			continue
+		}
+		vus++
+		p := *b.Source
+		switch b.Kind {
+		case markdown.KindHeading:
+			if got := string(utf16.Decode(unites[p : p+5])); got != "Titre" {
+				t.Errorf("titre : position sur %q", got)
+			}
+		case markdown.KindTask:
+			if got := string(utf16.Decode(unites[p : p+3])); got != "[ ]" {
+				t.Errorf("tâche : position sur %q", got)
+			}
+		}
+	}
+	if vus != 2 {
+		t.Errorf("%d blocs positionnés, attendu 2", vus)
+	}
+}
+
+// Une fin de ligne « \r\n » change d'autres positions : là, on se tait.
+func TestDesFinsDeLigneWindowsTaisentLesPositions(t *testing.T) {
+	blocs, _ := Render("note.md", []byte("# Titre\r\n\r\n- [ ] tâche\r\n"))
+	for _, b := range blocs {
+		if b.Source != nil {
+			t.Errorf("bloc %s positionné malgré les \\r\\n", b.Kind)
+		}
 	}
 }

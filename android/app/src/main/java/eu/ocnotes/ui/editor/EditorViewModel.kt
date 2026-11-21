@@ -718,21 +718,34 @@ class EditorViewModel(
     /**
      * Refait le rendu de l'aperçu depuis le champ, quand une case touchée n'a
      * pas pu être écrite : le rendu affiché ne correspondait plus au texte.
+     *
+     * [apresRendu] reçoit les nouveaux blocs et leur révision, sur le thread
+     * principal, une fois l'aperçu publié : l'écran y rejoue le toucher sur
+     * la tâche retrouvée, pour qu'il ne soit pas perdu.
      */
-    fun rafraichirApercu(instantane: InstantaneEditeurNatif?) {
+    fun rafraichirApercu(
+        instantane: InstantaneEditeurNatif?,
+        apresRendu: ((List<NoteBlockDto>, Long) -> Unit)? = null,
+    ) {
         if (!_uiState.value.apercu || !_uiState.value.modifiable) return
         if (instantane == null || instantane.revision != _revisionNative.value) return
-        rendreApercu(instantane)
+        rendreApercu(instantane, apresRendu)
     }
 
-    private fun rendreApercu(instantane: InstantaneEditeurNatif) {
+    private fun rendreApercu(
+        instantane: InstantaneEditeurNatif,
+        apresRendu: ((List<NoteBlockDto>, Long) -> Unit)? = null,
+    ) {
         viewModelScope.launch {
             try {
                 val blocs = repository.renderNote(nom, instantane.texte)
+                var publie = false
                 _uiState.update { courant ->
                     if (!revisionNativeToujoursCourante(instantane.revision, _revisionNative.value)) {
+                        publie = false
                         courant
                     } else {
+                        publie = true
                         courant.copy(
                             document = instantane.texte,
                             apercu = true,
@@ -741,6 +754,8 @@ class EditorViewModel(
                         )
                     }
                 }
+                // Rien n'est rejoué sur un rendu écarté : il ne décrit plus le champ.
+                if (publie) apresRendu?.invoke(blocs, instantane.revision)
             } catch (e: OCnotesException) {
                 _uiState.update { it.copy(erreur = e.texte()) }
             }
