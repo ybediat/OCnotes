@@ -10,6 +10,7 @@ import eu.ocnotes.AppContainer
 import eu.ocnotes.R
 import eu.ocnotes.data.AppMode
 import eu.ocnotes.data.FolderEntryDto
+import eu.ocnotes.data.FolderListingDto
 import eu.ocnotes.data.FolderRefDto
 import eu.ocnotes.data.OCnotesException
 import eu.ocnotes.data.OCnotesRepository
@@ -88,6 +89,15 @@ data class BrowserUiState(
      * dans le composable, qui a le `Context`.
      */
     val seuilDepasse: Long? = null,
+    /** Chemins des notes épinglées du profil actif. */
+    val epingles: Set<String> = emptySet(),
+    /**
+     * Inventaire complet des notes, d'où la rubrique du tiroir tire le nom et
+     * la date des épinglées d'autres dossiers. En liste plate, c'est le
+     * listing lui-même ; en arborescence, il n'est chargé que s'il y a au
+     * moins une épingle. `null` tant qu'il n'est pas arrivé.
+     */
+    val inventaire: List<FolderEntryDto>? = null,
 ) {
     val enListePlate: Boolean get() = mode == ModeAffichage.LISTE
 
@@ -140,6 +150,28 @@ data class BrowserUiState(
      * octet pour octet, sans qu'il traverse la façade.
      */
     val peutPartagerSelection: Boolean get() = modeSelection && !selectionContientDossier
+
+    /**
+     * Le geste d'épinglage de la barre contextuelle : `null` s'il n'a pas
+     * lieu d'être (un dossier est coché, et seules les notes s'épinglent),
+     * vrai pour « Épingler », faux pour « Désépingler » quand toutes les
+     * notes cochées le sont déjà.
+     */
+    val epinglageSelection: Boolean?
+        get() = if (!modeSelection || selectionContientDossier) {
+            null
+        } else {
+            !epingles.containsAll(selection)
+        }
+
+    /**
+     * Rubrique « Épinglées » du tiroir, triée comme la liste. Vide tant que
+     * l'inventaire n'est pas là : elle se remplit à son arrivée, sans retarder
+     * l'affichage du dossier.
+     */
+    val epingleesTiroir: List<EpingleeTiroir> by lazy {
+        lignesTiroir(sectionEpinglees(epingles, inventaire.orEmpty(), tri), nomRacine)
+    }
 
     val peutSupprimerSelection: Boolean
         get() = modeSelection && entrees.filter { it.path in selection }.all { it.canDelete }
@@ -252,6 +284,8 @@ class BrowserViewModel(
     /** `cacheDir/partage/`, le seul dossier que le `FileProvider` expose. */
     private val dossierPartage: File,
     private val container: AppContainer,
+    /** Profil dont ce navigateur montre les notes : celui des épingles. */
+    private val idProfil: String,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BrowserUiState())
@@ -259,6 +293,19 @@ class BrowserViewModel(
 
     private val _evenements = MutableStateFlow<BrowserEvent?>(null)
     val evenements: StateFlow<BrowserEvent?> = _evenements.asStateFlow()
+
+    // Déclarés avant `init` : ses coroutines démarrent aussitôt et les lisent,
+    // et un initialiseur placé plus bas les remettrait à zéro après coup.
+    /**
+     * Vrai quand l'inventaire ne reflète plus la bibliothèque : une note a été
+     * renommée, déplacée, supprimée depuis cet écran, ou l'utilisateur a
+     * demandé un rafraîchissement. Le prochain [chargerInventaireSiBesoin] le
+     * relit.
+     */
+    private var inventairePerime = false
+
+    /** Chargement d'inventaire en cours : un seul à la fois. */
+    private var inventaireJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -316,6 +363,23 @@ class BrowserViewModel(
             }
         }
 
+        // Les épingles viennent d'un flux, comme le tri : une seule source,
+        // et l'écran se redessine dès qu'elles changent.
+        viewModelScope.launch {
+            preferences.epingles(idProfil).collect { epingles ->
+                _uiState.update { it.copy(epingles = epingles) }
+                // Une épingle d'une note absente de l'inventaire (créée depuis
+                // son chargement) demande de le relire pour l'afficher.
+                val inventaire = _uiState.value.inventaire
+                if (inventaire != null && epingles.any { chemin -> inventaire.none { it.path == chemin } }) {
+                    inventairePerime = true
+                }
+                // Pendant le premier chargement, c'est [recharger] qui s'en
+                // occupera, une fois le dossier affiché.
+                if (!_uiState.value.chargement) chargerInventaireSiBesoin()
+            }
+        }
+
         viewModelScope.launch {
             repository.pendingCount.collect { n -> _uiState.update { it.copy(enAttente = n) } }
         }
@@ -337,6 +401,7 @@ class BrowserViewModel(
                 if (premier) {
                     premier = false
                 } else if (valide) {
+                    inventairePerime = true
                     recharger()
                 }
             }
@@ -398,7 +463,13 @@ class BrowserViewModel(
                         // toute seule quand un lot a été traité, et évite qu'un
                         // rechargement de synchro garde des chemins fantômes.
                         selection = it.selection intersect cheminsPresents,
+                        // En liste plate, le listing est l'inventaire complet.
+                        inventaire = if (it.enListePlate) listing.entries else it.inventaire,
                     )
+                }
+                if (etat.enListePlate) {
+                    inventairePerime = false
+                    elaguerEpingles(listing)
                 }
                 repository.refreshPending()
                 rechargerDossiers()
@@ -407,11 +478,97 @@ class BrowserViewModel(
                 // recherche dans le texte se refait, sans effacer l'ancienne
                 // réponse, qui porte sur la même requête, d'ici là.
                 lancerRechercheTexte(delai = 0, effacer = false)
+                // Après le dossier, jamais avant : la rubrique du tiroir se
+                // remplit quand l'inventaire arrive, la liste n'attend pas.
+                chargerInventaireSiBesoin()
             } catch (e: OCnotesException) {
                 _uiState.update { it.copy(chargement = false, erreur = e.texte()) }
             }
         }
     }
+
+    // --- Épingles ----------------------------------------------------------
+
+    /**
+     * Charge l'inventaire en arborescence, s'il y a au moins une épingle à
+     * montrer et qu'il manque ou est périmé. En liste plate, [recharger] s'en
+     * charge déjà : le listing est l'inventaire.
+     *
+     * Une seule fois par écran sinon : `listAll` interroge tout le dossier de
+     * notes, et le refaire à chaque changement de dossier coûterait un aller
+     * et retour complet au serveur pour un tiroir fermé la plupart du temps.
+     */
+    private fun chargerInventaireSiBesoin() {
+        val etat = _uiState.value
+        if (etat.enListePlate || etat.epingles.isEmpty()) return
+        if (etat.inventaire != null && !inventairePerime) return
+        if (inventaireJob?.isActive == true) return
+        inventaireJob = viewModelScope.launch {
+            val listing = try {
+                repository.listAll()
+            } catch (_: OCnotesException) {
+                // Sans inventaire, la rubrique reste vide : le dossier affiché
+                // n'en souffre pas, et un message pour un tiroir fermé serait
+                // du bruit. Le prochain rechargement réessaiera.
+                return@launch
+            }
+            inventairePerime = false
+            // Passé en liste plate entre-temps : c'est [recharger] qui tient
+            // l'inventaire, ne pas l'écraser.
+            if (_uiState.value.enListePlate) return@launch
+            _uiState.update { it.copy(inventaire = listing.entries) }
+            elaguerEpingles(listing)
+        }
+    }
+
+    /**
+     * Retire les épingles dont la note n'existe plus — renommée ou supprimée
+     * depuis le web, par exemple.
+     *
+     * Seulement sur un inventaire complet : venu du serveur, ou du mode local
+     * (`fromCache` y est toujours faux, le cache étant la seule vérité). Un
+     * inventaire de repli, servi sans réseau, peut manquer des notes : il
+     * masque les orphelines sans rien effacer.
+     */
+    private fun elaguerEpingles(listing: FolderListingDto) {
+        if (listing.fromCache) return
+        val connues = listing.entries.mapTo(HashSet()) { it.path }
+        modifierEpingles { elaguer(it, connues) }
+    }
+
+    /**
+     * Applique une règle aux épingles du profil et l'enregistre. La règle part
+     * de la valeur **courante** du flux, pas de l'état d'écran, qui peut
+     * avoir une image de retard.
+     */
+    private fun modifierEpingles(regle: (Set<String>) -> Set<String>) {
+        val avant = preferences.epingles(idProfil).value
+        val apres = regle(avant)
+        if (apres != avant) preferences.definirEpingles(idProfil, apres)
+    }
+
+    /** Épingle ou désépingle une note depuis le menu « ⋮ » de sa ligne. */
+    fun basculerEpingle(entree: FolderEntryDto) {
+        if (entree.isDir) return
+        modifierEpingles { if (entree.path in it) it - entree.path else it + entree.path }
+    }
+
+    /**
+     * Épingle toutes les notes cochées, ou les désépingle toutes si elles
+     * l'étaient déjà — le libellé de la barre dit lequel des deux. La
+     * sélection se referme ensuite, comme après les autres gestes groupés.
+     */
+    fun basculerEpinglesSelection() {
+        val etat = _uiState.value
+        val epingler = etat.epinglageSelection ?: return
+        val notes = etat.selection
+        modifierEpingles { if (epingler) it + notes else it - notes }
+        viderSelection()
+    }
+
+    /** Vrai si le chemin désigne un dossier du listing affiché. */
+    private fun estDossier(chemin: String): Boolean =
+        _uiState.value.entrees.any { it.path == chemin && it.isDir }
 
     /**
      * Compare l'occupation au seuil d'alerte, en mode local seulement.
@@ -456,6 +613,7 @@ class BrowserViewModel(
 
     /** Geste de rafraîchissement explicite : on relit ET on pousse. */
     fun rafraichir() {
+        inventairePerime = true
         syncScheduler.syncNow()
         recharger()
     }
@@ -639,7 +797,11 @@ class BrowserViewModel(
     fun renommer(entree: FolderEntryDto, nouveauNom: String) {
         viewModelScope.launch {
             try {
-                repository.rename(entree.path, nouveauNom.trim())
+                val nouveau = repository.rename(entree.path, nouveauNom.trim())
+                // Après le succès seulement : un renommage refusé ne doit pas
+                // détacher l'épingle de sa note.
+                modifierEpingles { apresRenommage(it, entree.path, nouveau, entree.isDir) }
+                inventairePerime = true
                 recharger()
                 syncScheduler.syncAfterLocalChange()
             } catch (e: OCnotesException) {
@@ -659,7 +821,9 @@ class BrowserViewModel(
     fun deplacer(entree: FolderEntryDto, dossier: String) {
         viewModelScope.launch {
             try {
-                repository.move(entree.path, dossier)
+                val nouveau = repository.move(entree.path, dossier)
+                modifierEpingles { apresRenommage(it, entree.path, nouveau, entree.isDir) }
+                inventairePerime = true
                 recharger()
                 syncScheduler.syncAfterLocalChange()
                 _evenements.value = BrowserEvent.Message(Texte.de(R.string.browser_deplace, entree.display))
@@ -673,6 +837,8 @@ class BrowserViewModel(
         viewModelScope.launch {
             try {
                 repository.delete(entree.path)
+                modifierEpingles { apresSuppression(it, entree.path, entree.isDir) }
+                inventairePerime = true
                 recharger()
                 syncScheduler.syncAfterLocalChange()
                 _evenements.value = BrowserEvent.Message(Texte.de(R.string.browser_supprime, entree.display))
@@ -707,7 +873,13 @@ class BrowserViewModel(
 
     /** Déplace toutes les entrées sélectionnées vers un même dossier. */
     fun deplacerLot(dossier: String) =
-        executerLot(R.plurals.browser_lot_deplaces) { repository.move(it, dossier) }
+        executerLot(R.plurals.browser_lot_deplaces) { chemin ->
+            val dossierDeplace = estDossier(chemin)
+            val nouveau = repository.move(chemin, dossier)
+            // Chaque épingle suit sa note dès que son déplacement a réussi :
+            // un échec plus loin dans le lot ne la détache pas.
+            modifierEpingles { apresRenommage(it, chemin, nouveau, dossierDeplace) }
+        }
 
     /** Copie toutes les notes sélectionnées vers un même dossier. */
     private var copieVersCompteEnCours = false
@@ -791,7 +963,11 @@ class BrowserViewModel(
 
     /** Supprime toutes les entrées sélectionnées. */
     fun supprimerLot() =
-        executerLot(R.plurals.browser_lot_supprimes) { repository.delete(it) }
+        executerLot(R.plurals.browser_lot_supprimes) { chemin ->
+            val dossierSupprime = estDossier(chemin)
+            repository.delete(chemin)
+            modifierEpingles { apresSuppression(it, chemin, dossierSupprime) }
+        }
 
     /**
      * Recopie chaque fichier sélectionné et émet un [BrowserEvent.Partager].
@@ -865,6 +1041,7 @@ class BrowserViewModel(
                     echecs += e
                 }
             }
+            inventairePerime = true
             recharger()
             syncScheduler.syncAfterLocalChange()
             _evenements.value = BrowserEvent.Message(resumeLot(succes, reussis, echecs))
@@ -912,6 +1089,9 @@ class BrowserViewModel(
                     container.preferencesAffichage,
                     container.dossierPartage,
                     container,
+                    // La génération affichée est celle de ce profil : le
+                    // ViewModel est détruit avec elle quand on en change.
+                    container.activeSession.value.profile.id,
                 )
             }
         }

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -51,6 +52,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.ocnotes.R
@@ -59,6 +61,7 @@ import eu.ocnotes.data.AccountProfile
 import eu.ocnotes.data.MAX_NOM_LOCAL
 import eu.ocnotes.data.AuthMode
 import eu.ocnotes.data.EnjeuSuppression
+import eu.ocnotes.ui.browser.EpingleeTiroir
 import eu.ocnotes.ui.browser.ModeAffichage
 import eu.ocnotes.ui.theme.CouleurSignatureClaire
 import eu.ocnotes.ui.theme.CouleurSignatureSombre
@@ -103,6 +106,10 @@ fun TiroirApplication(
     onCompte: (String) -> Unit,
     onAjouterCompte: () -> Unit,
     onSupprimerCompte: (String) -> Unit,
+    // Rubrique « Épinglées », déjà calculée par le navigateur : le tiroir ne
+    // lit ni le disque ni l'inventaire lui-même. Vide, la rubrique disparaît.
+    epinglees: List<EpingleeTiroir> = emptyList(),
+    onOuvrirEpinglee: (String) -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val portee = rememberCoroutineScope()
@@ -119,134 +126,181 @@ fun TiroirApplication(
         gesturesEnabled = gestesActifs,
         drawerContent = {
             ModalDrawerSheet {
-                Text(
-                    text = stringResource(R.string.app_name),
-                    style = StyleTitrePrincipal,
-                    color = couleurTitre,
-                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 20.dp),
-                )
-                HorizontalDivider()
+                // Défilable : avec quelques épingles et plusieurs profils, le
+                // contenu dépasse la hauteur d'un petit écran.
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        text = stringResource(R.string.app_name),
+                        style = StyleTitrePrincipal,
+                        color = couleurTitre,
+                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 20.dp),
+                    )
+                    HorizontalDivider()
 
-                Text(
-                    text = stringResource(R.string.menu_comptes),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 12.dp),
-                )
+                    Text(
+                        text = stringResource(R.string.menu_comptes),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 12.dp),
+                    )
 
-                comptes.accounts.forEach { compte ->
-                    val nom = nomCompte(compte)
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Default.AccountCircle, contentDescription = null) },
-                        label = {
-                            Column {
-                                Text(nom)
-                                val adresse = adresseServeur(compte)
-                                if (adresse != null && adresse != nom) {
-                                    Text(
-                                        adresse,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        },
-                        selected = compte.id == comptes.active.id,
-                        badge = {
-                            Row {
-                                if (compte.kind == "local") {
-                                    IconButton(onClick = { compteARenommer = compte }) {
-                                        Icon(
-                                            Icons.Default.Edit,
-                                            contentDescription = stringResource(R.string.compte_renommer),
+                    comptes.accounts.forEach { compte ->
+                        val nom = nomCompte(compte)
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.AccountCircle, contentDescription = null) },
+                            label = {
+                                Column {
+                                    Text(nom)
+                                    val adresse = adresseServeur(compte)
+                                    if (adresse != null && adresse != nom) {
+                                        Text(
+                                            adresse,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
                                 }
-                                IconButton(onClick = { compteASupprimer = compte }) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = stringResource(R.string.compte_supprimer),
-                                    )
+                            },
+                            selected = compte.id == comptes.active.id,
+                            badge = {
+                                Row {
+                                    if (compte.kind == "local") {
+                                        IconButton(onClick = { compteARenommer = compte }) {
+                                            Icon(
+                                                Icons.Default.Edit,
+                                                contentDescription = stringResource(R.string.compte_renommer),
+                                            )
+                                        }
+                                    }
+                                    IconButton(onClick = { compteASupprimer = compte }) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = stringResource(R.string.compte_supprimer),
+                                        )
+                                    }
                                 }
-                            }
-                        },
+                            },
+                            onClick = {
+                                fermer()
+                                onCompte(compte.id)
+                            },
+                            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                        )
+                    }
+
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                        label = { Text(stringResource(R.string.compte_ajouter)) },
+                        selected = false,
                         onClick = {
                             fermer()
-                            onCompte(compte.id)
+                            onAjouterCompte()
+                        },
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                    )
+
+                    // Notes épinglées du profil actif, séparées des profils. Toucher
+                    // une ligne ferme le tiroir et ouvre la note, comme dans la liste.
+                    if (epinglees.isNotEmpty()) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                        Text(
+                            text = stringResource(R.string.menu_epinglees),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 12.dp),
+                        )
+
+                        epinglees.forEach { note ->
+                            NavigationDrawerItem(
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.Default.PushPin,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                },
+                                label = {
+                                    Column {
+                                        Text(note.titre, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(
+                                            note.dossier,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                },
+                                selected = false,
+                                onClick = {
+                                    fermer()
+                                    onOuvrirEpinglee(note.chemin)
+                                },
+                                modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    val preferences = container.preferencesAffichage
+                    val mode by preferences.mode.collectAsStateWithLifecycle()
+                    val modeCourant = ModeAffichage.depuis(mode)
+
+                    Text(
+                        text = stringResource(R.string.menu_affichage),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 12.dp),
+                    )
+
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Default.FolderOpen, contentDescription = null) },
+                        label = { Text(stringResource(R.string.menu_mode_arborescence)) },
+                        selected = modeCourant == ModeAffichage.ARBORESCENCE,
+                        onClick = {
+                            preferences.definirMode(ModeAffichage.ARBORESCENCE.name)
+                            fermer()
+                        },
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                    )
+
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+                        label = { Text(stringResource(R.string.menu_mode_liste)) },
+                        selected = modeCourant == ModeAffichage.LISTE,
+                        onClick = {
+                            preferences.definirMode(ModeAffichage.LISTE.name)
+                            fermer()
+                        },
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                    )
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                        label = { Text(stringResource(R.string.menu_reglages)) },
+                        selected = false,
+                        onClick = {
+                            fermer()
+                            onReglages()
+                        },
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                    )
+
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Default.Info, contentDescription = null) },
+                        label = { Text(stringResource(R.string.menu_a_propos)) },
+                        selected = false,
+                        onClick = {
+                            fermer()
+                            aProposOuvert = true
                         },
                         modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                     )
                 }
-
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    label = { Text(stringResource(R.string.compte_ajouter)) },
-                    selected = false,
-                    onClick = {
-                        fermer()
-                        onAjouterCompte()
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
-                )
-
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-                val preferences = container.preferencesAffichage
-                val mode by preferences.mode.collectAsStateWithLifecycle()
-                val modeCourant = ModeAffichage.depuis(mode)
-
-                Text(
-                    text = stringResource(R.string.menu_affichage),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 12.dp),
-                )
-
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.FolderOpen, contentDescription = null) },
-                    label = { Text(stringResource(R.string.menu_mode_arborescence)) },
-                    selected = modeCourant == ModeAffichage.ARBORESCENCE,
-                    onClick = {
-                        preferences.definirMode(ModeAffichage.ARBORESCENCE.name)
-                        fermer()
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
-                )
-
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
-                    label = { Text(stringResource(R.string.menu_mode_liste)) },
-                    selected = modeCourant == ModeAffichage.LISTE,
-                    onClick = {
-                        preferences.definirMode(ModeAffichage.LISTE.name)
-                        fermer()
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
-                )
-
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                    label = { Text(stringResource(R.string.menu_reglages)) },
-                    selected = false,
-                    onClick = {
-                        fermer()
-                        onReglages()
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
-                )
-
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.Info, contentDescription = null) },
-                    label = { Text(stringResource(R.string.menu_a_propos)) },
-                    selected = false,
-                    onClick = {
-                        fermer()
-                        aProposOuvert = true
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
-                )
             }
         },
     ) {

@@ -1,6 +1,7 @@
 package eu.ocnotes.data
 
 import android.content.Context
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -189,6 +190,51 @@ class PreferencesAffichage internal constructor(
         stockage.ecrireLong(CLE_TAILLE_LECTURE, palier.toLong())
     }
 
+    // --- Notes épinglées ----------------------------------------------------
+
+    /**
+     * Un flux par profil, créé à la première demande puis gardé : relire le
+     * disque à chaque recomposition est exactement ce qu'il faut éviter.
+     */
+    private val epinglesParProfil = ConcurrentHashMap<String, MutableStateFlow<Set<String>>>()
+
+    private fun fluxEpingles(idProfil: String): MutableStateFlow<Set<String>> =
+        epinglesParProfil.computeIfAbsent(idProfil) {
+            // Normalisé dès la lecture : un fichier abîmé ou écrit à la main ne
+            // fait jamais apparaître de chemin vide ni de doublon.
+            MutableStateFlow(normaliserEpingles(stockage.lireEnsemble(cleEpingles(idProfil)).orEmpty()))
+        }
+
+    /**
+     * Chemins des notes épinglées du profil [idProfil], relatifs à son dossier
+     * de notes.
+     *
+     * Par profil, parce qu'un chemin ne veut rien dire hors du sien : deux
+     * profils peuvent avoir chacun leur « Courses.md ». Ce fichier de
+     * préférences est commun à tous les profils, d'où l'identifiant dans la
+     * clé.
+     */
+    fun epingles(idProfil: String): StateFlow<Set<String>> = fluxEpingles(idProfil).asStateFlow()
+
+    /** Remplace les épingles du profil ; un ensemble vide efface la clé. */
+    fun definirEpingles(idProfil: String, chemins: Set<String>) {
+        val propres = normaliserEpingles(chemins)
+        val flux = fluxEpingles(idProfil)
+        if (flux.value == propres) return
+        flux.value = propres
+        if (propres.isEmpty()) {
+            stockage.effacer(cleEpingles(idProfil))
+        } else {
+            stockage.ecrireEnsemble(cleEpingles(idProfil), propres)
+        }
+    }
+
+    /** Oublie les épingles d'un profil supprimé : ses chemins ne désignent plus rien. */
+    fun effacerEpingles(idProfil: String) {
+        epinglesParProfil.remove(idProfil)?.value = emptySet()
+        stockage.effacer(cleEpingles(idProfil))
+    }
+
     /**
      * Le flux est mis à jour avant l'écriture disque, et `apply()` diffère
      * celle-ci : l'écran se redessine sans attendre le stockage, et un disque
@@ -211,6 +257,11 @@ class PreferencesAffichage internal constructor(
         const val CLE_POLICE_INTERFACE = "police_interface"
         const val CLE_TAILLE_LECTURE = "taille_texte_lecture"
         const val QUOTA_CACHE_DEFAUT = 250L * 1024 * 1024
+
+        /** Préfixe de la clé des épingles, suivi de l'identifiant du profil. */
+        const val PREFIXE_EPINGLES = "epingles_"
+
+        fun cleEpingles(idProfil: String): String = PREFIXE_EPINGLES + idProfil
     }
 }
 
@@ -221,6 +272,11 @@ internal interface StockagePreferencesAffichage {
     fun ecrireChaine(cle: String, valeur: String)
     fun ecrireLong(cle: String, valeur: Long)
     fun ecrireBooleen(cle: String, valeur: Boolean)
+
+    /** Ensemble de chaînes, ou `null` si la clé est absente. */
+    fun lireEnsemble(cle: String): Set<String>?
+    fun ecrireEnsemble(cle: String, valeur: Set<String>)
+    fun effacer(cle: String)
 }
 
 private class StockagePreferencesAndroid(
@@ -243,4 +299,34 @@ private class StockagePreferencesAndroid(
     override fun ecrireBooleen(cle: String, valeur: Boolean) {
         prefs.edit().putBoolean(cle, valeur).apply()
     }
+
+    // `getStringSet` rend l'ensemble interne des préférences, qu'il est
+    // interdit de modifier : on le recopie. À l'écriture, une copie aussi,
+    // pour que l'appelant ne puisse pas toucher après coup à ce qu'il a confié.
+    override fun lireEnsemble(cle: String): Set<String>? =
+        runCatching { prefs.getStringSet(cle, null)?.toSet() }.getOrNull()
+
+    override fun ecrireEnsemble(cle: String, valeur: Set<String>) {
+        prefs.edit().putStringSet(cle, HashSet(valeur)).apply()
+    }
+
+    override fun effacer(cle: String) {
+        prefs.edit().remove(cle).apply()
+    }
 }
+
+/**
+ * Remet en forme un ensemble lu sur le disque : chemins vides écartés, et
+ * barres obliques de tête ou de queue retirées — un chemin de la façade n'en
+ * porte jamais, et « /Courses.md » désignerait la même note que
+ * « Courses.md ». Les doublons qui en résultent disparaissent avec l'ensemble.
+ *
+ * La casse, les accents et les espaces internes ne sont **pas** touchés : le
+ * serveur distingue « Journal.md » de « journal.md », et une épingle doit
+ * désigner exactement la note qu'on a épinglée.
+ */
+fun normaliserEpingles(brut: Collection<String>): Set<String> =
+    brut.asSequence()
+        .map { it.trim('/') }
+        .filter { it.isNotBlank() }
+        .toSet()

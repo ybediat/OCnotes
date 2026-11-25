@@ -9,6 +9,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import eu.ocnotes.ui.browser.BrowserScreen
+import eu.ocnotes.ui.browser.EpingleeTiroir
 import eu.ocnotes.ui.common.Texte
 import eu.ocnotes.ui.editor.EditorScreen
 import eu.ocnotes.ui.login.LoginScreen
@@ -51,6 +52,7 @@ fun OCnotesNavHost(
     onOuvrirComptes: () -> Unit,
     onAjouterCompte: () -> Unit,
     modifier: Modifier = Modifier,
+    onEpinglees: (List<EpingleeTiroir>) -> Unit = {},
 ) {
     NavHost(
         navController = navController,
@@ -97,6 +99,7 @@ fun OCnotesNavHost(
             BrowserScreen(
                 onOuvrirNote = { chemin -> navController.navigate(Routes.editeur(chemin)) },
                 onOuvrirMenu = onOuvrirComptes,
+                onEpinglees = onEpinglees,
             )
         }
 

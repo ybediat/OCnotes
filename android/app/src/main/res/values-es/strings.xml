@@ -643,4 +643,9 @@
     <string name="recherche_compteur_description">Coincidencia %1$d de %2$d</string>
     <string name="recherche_compteur_description_plafond">Coincidencia %1$d de más de %2$d</string>
     <string name="recherche_aucune_occurrence">Ninguna coincidencia</string>
+    <!-- Chantier 7: notas fijadas. -->
+    <string name="action_epingler">Fijar</string>
+    <string name="action_desepingler">Dejar de fijar</string>
+    <string name="menu_epinglees">Fijadas</string>
+    <string name="browser_epinglee">Fijada</string>
 </resources>

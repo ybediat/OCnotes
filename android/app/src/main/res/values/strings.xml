@@ -670,4 +670,9 @@
     <string name="recherche_compteur_description">Occurrence %1$d sur %2$d</string>
     <string name="recherche_compteur_description_plafond">Occurrence %1$d sur plus de %2$d</string>
     <string name="recherche_aucune_occurrence">Aucune occurrence</string>
+    <!-- Chantier 7 : notes épinglées. Les deux libellés d’action (menu ⋮ d’une note et barre de sélection), la rubrique du tiroir, et la punaise d’une ligne lue par le lecteur d’écran. -->
+    <string name="action_epingler">Épingler</string>
+    <string name="action_desepingler">Désépingler</string>
+    <string name="menu_epinglees">Épinglées</string>
+    <string name="browser_epinglee">Épinglée</string>
 </resources>

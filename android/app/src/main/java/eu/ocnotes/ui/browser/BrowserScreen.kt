@@ -40,6 +40,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.PushPin as PushPinCreuse
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -67,6 +69,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -138,6 +141,9 @@ fun BrowserScreen(
     onOuvrirNote: (String) -> Unit,
     onOuvrirMenu: () -> Unit,
     modifier: Modifier = Modifier,
+    // Rubrique « Épinglées » calculée ici, remise au tiroir qui enveloppe la
+    // navigation et ne connaît pas ce ViewModel.
+    onEpinglees: (List<EpingleeTiroir>) -> Unit = {},
     viewModel: BrowserViewModel = viewModel(
         factory = BrowserViewModel.factory(LocalContext.current.appContainer),
     ),
@@ -152,6 +158,11 @@ fun BrowserScreen(
     // Revenir des réglages ne recharge pas la liste : c'est pourtant là que
     // le seuil d'alerte se relève, et le bandeau doit tomber aussitôt.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.verifierSeuil() }
+
+    // Comparée par valeur : l'effet ne repart que si la rubrique a changé.
+    // Le rappel est relu à chaque fois, sans relancer l'effet pour autant.
+    val remettreEpinglees by rememberUpdatedState(onEpinglees)
+    LaunchedEffect(etat.epingleesTiroir) { remettreEpinglees(etat.epingleesTiroir) }
 
     var dialogue by remember { mutableStateOf<Dialogue?>(null) }
 
@@ -215,12 +226,14 @@ fun BrowserScreen(
                     peutCopierCompte = etat.peutCopierVersCompteSelection && plusieursComptes,
                     peutPartager = etat.peutPartagerSelection,
                     peutSupprimer = etat.peutSupprimerSelection,
+                    epinglage = etat.epinglageSelection,
                     onQuitter = viewModel::viderSelection,
                     onDeplacer = { dialogue = Dialogue.DeplacerLot },
                     onCopier = { dialogue = Dialogue.CopierLot },
                     onCopierCompte = { dialogue = Dialogue.CopierVersCompte },
                     onPartager = viewModel::partagerLot,
                     onSupprimer = { dialogue = Dialogue.SupprimerLot },
+                    onEpingler = viewModel::basculerEpinglesSelection,
                 )
             } else {
                 TopAppBar(
@@ -417,6 +430,8 @@ fun BrowserScreen(
                     modeSelection = etat.modeSelection,
                     peutRecevoirNote = etat.peutRecevoirNote,
                     plusieursComptes = plusieursComptes,
+                    epingles = etat.epingles,
+                    onEpingler = viewModel::basculerEpingle,
                     onOuvrir = viewModel::ouvrir,
                     onBasculer = viewModel::basculerSelection,
                     onRenommer = { dialogue = Dialogue.Renommer(it) },
@@ -568,12 +583,16 @@ private fun BarreSelection(
     peutCopierCompte: Boolean,
     peutPartager: Boolean,
     peutSupprimer: Boolean,
+    // `null` : pas d'épinglage (un dossier est coché). Vrai : « Épingler ».
+    // Faux : « Désépingler », toutes les notes cochées l'étant déjà.
+    epinglage: Boolean?,
     onQuitter: () -> Unit,
     onDeplacer: () -> Unit,
     onCopier: () -> Unit,
     onCopierCompte: () -> Unit,
     onPartager: () -> Unit,
     onSupprimer: () -> Unit,
+    onEpingler: () -> Unit,
 ) {
     TopAppBar(
         title = {
@@ -588,6 +607,18 @@ private fun BarreSelection(
             }
         },
         actions = {
+            epinglage?.let { epingler ->
+                IconButton(onClick = onEpingler) {
+                    Icon(
+                        // Punaise pleine pour épingler, creuse pour retirer :
+                        // le libellé lu par TalkBack dit lequel des deux.
+                        imageVector = if (epingler) Icons.Default.PushPin else Icons.Outlined.PushPinCreuse,
+                        contentDescription = stringResource(
+                            if (epingler) R.string.action_epingler else R.string.action_desepingler,
+                        ),
+                    )
+                }
+            }
             if (peutDeplacer) {
                 IconButton(onClick = onDeplacer) {
                     Icon(
@@ -664,6 +695,8 @@ private fun ListeEntrees(
     modeSelection: Boolean,
     peutRecevoirNote: Boolean,
     plusieursComptes: Boolean,
+    epingles: Set<String>,
+    onEpingler: (FolderEntryDto) -> Unit,
     onOuvrir: (FolderEntryDto) -> Unit,
     onBasculer: (FolderEntryDto) -> Unit,
     onRenommer: (FolderEntryDto) -> Unit,
@@ -699,6 +732,9 @@ private fun ListeEntrees(
                     afficherDossier = afficherDossier,
                     selectionnee = entree.path in selection,
                     modeSelection = modeSelection,
+                    epinglee = !entree.isDir && entree.path in epingles,
+                    // Seules les notes s'épinglent, pas les dossiers.
+                    onEpingler = if (entree.isDir) null else ({ onEpingler(entree) }),
                     onClick = { onOuvrir(entree) },
                     onBasculer = { onBasculer(entree) },
                     onRenommer = if (entree.canRename) ({ onRenommer(entree) }) else null,
@@ -1082,6 +1118,10 @@ private fun LigneEntree(
     afficherDossier: Boolean,
     selectionnee: Boolean,
     modeSelection: Boolean,
+    // La note est épinglée : une punaise le signale, sans la déplacer.
+    epinglee: Boolean,
+    // `null` pour un dossier : seules les notes s'épinglent.
+    onEpingler: (() -> Unit)?,
     onClick: () -> Unit,
     onBasculer: () -> Unit,
     onRenommer: (() -> Unit)?,
@@ -1097,7 +1137,7 @@ private fun LigneEntree(
     onSupprimer: (() -> Unit)?,
 ) {
     var menuOuvert by remember { mutableStateOf(false) }
-    val aDesActions = onRenommer != null || onDeplacer != null || onCopier != null ||
+    val aDesActions = onEpingler != null || onRenommer != null || onDeplacer != null || onCopier != null ||
         onCopierCompte != null || onPartager != null || onSupprimer != null
 
     ListItem(
@@ -1173,6 +1213,17 @@ private fun LigneEntree(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                // Punaise : la note figure dans la rubrique « Épinglées » du
+                // tiroir. Elle reste à sa place dans la liste.
+                if (epinglee) {
+                    Icon(
+                        imageVector = Icons.Default.PushPin,
+                        contentDescription = stringResource(R.string.browser_epinglee),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+
                 // Pastille : modification locale pas encore poussée.
                 if (entree.pending) PastilleEnAttente()
 
@@ -1190,6 +1241,21 @@ private fun LigneEntree(
                     }
 
                     DropdownMenu(expanded = menuOuvert, onDismissRequest = { menuOuvert = false }) {
+                        onEpingler?.let { epingler ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        stringResource(
+                                            if (epinglee) R.string.action_desepingler else R.string.action_epingler,
+                                        ),
+                                    )
+                                },
+                                onClick = {
+                                    menuOuvert = false
+                                    epingler()
+                                },
+                            )
+                        }
                         onRenommer?.let { renommer ->
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.action_renommer)) },
