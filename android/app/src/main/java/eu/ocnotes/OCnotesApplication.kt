@@ -351,7 +351,8 @@ class AppContainer(
             val suivant = accountRegistry.remove(id)
             runtimes.remove(id)
             // Les épingles du profil désignent des chemins qui n'existent plus
-            // nulle part : leur clé partirait sinon dans la sauvegarde Android.
+            // nulle part. Leur fichier part avec le dossier du profil ; ceci
+            // vide aussi le flux qu'un écran observerait encore.
             preferencesAffichage.effacerEpingles(id)
             if (id == activeId) afficher(suivant)
 

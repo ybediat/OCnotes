@@ -3,6 +3,7 @@ package eu.ocnotes.ui.browser
 import eu.ocnotes.data.FolderEntryDto
 import eu.ocnotes.data.normaliserEpingles
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Test
 
@@ -118,7 +119,7 @@ class EpinglesTest {
     fun `aucune epingle reste aucune epingle`() {
         assertEquals(emptySet<String>(), apresRenommage(emptySet(), "a.md", "b.md", estDossier = false))
         assertEquals(emptySet<String>(), apresSuppression(emptySet(), "a.md", estDossier = false))
-        assertEquals(emptySet<String>(), elaguer(emptySet(), setOf("a.md")))
+        assertEquals(emptySet<String>(), ElagageEpingles().appliquer(emptySet(), setOf("a.md"), JetonInventaire(0, 0)))
         assertEquals(emptyList<FolderEntryDto>(), sectionEpinglees(emptySet(), listOf(note("a.md")), Tri.NOM))
     }
 
@@ -162,10 +163,78 @@ class EpinglesTest {
     // --- Élagage ---------------------------------------------------------------
 
     @Test
-    fun `l'elagage ne garde que les notes connues`() {
-        val apres = elaguer(setOf("Courses.md", "Renommée sur le web.md"), setOf("Courses.md", "Autre.md"))
+    fun `une absence unique ne fait que rendre l'epingle suspecte`() {
+        val elagage = ElagageEpingles(delaiMs = 10_000)
+        val epingles = setOf("Courses.md", "Renommée sur le web.md")
+
+        val apres = elagage.appliquer(epingles, setOf("Courses.md"), elagage.jeton(maintenant = 0))
+
+        assertEquals(epingles, apres)
+    }
+
+    @Test
+    fun `deux absences espacees du delai retirent l'epingle`() {
+        val elagage = ElagageEpingles(delaiMs = 10_000)
+        val epingles = setOf("Courses.md", "Renommée sur le web.md")
+        val connues = setOf("Courses.md", "Autre.md")
+
+        elagage.appliquer(epingles, connues, elagage.jeton(maintenant = 0))
+        val apres = elagage.appliquer(epingles, connues, elagage.jeton(maintenant = 10_000))
 
         assertEquals(setOf("Courses.md"), apres)
+    }
+
+    @Test
+    fun `deux absences trop rapprochees ne retirent rien`() {
+        // Le service de recherche retarde d'environ 1,3 s : deux lectures
+        // dans ce laps peuvent manquer la même note bien vivante.
+        val elagage = ElagageEpingles(delaiMs = 10_000)
+        val epingles = setOf("Notes/b.md")
+
+        elagage.appliquer(epingles, emptySet(), elagage.jeton(maintenant = 0))
+        val apres = elagage.appliquer(epingles, emptySet(), elagage.jeton(maintenant = 1_500))
+
+        assertEquals(epingles, apres)
+    }
+
+    @Test
+    fun `une note revue entre deux absences repart de zero`() {
+        // Un sous-dossier qui n'a pas répondu une fois, puis qui répond.
+        val elagage = ElagageEpingles(delaiMs = 10_000)
+        val epingles = setOf("Journal/Mai.md")
+
+        elagage.appliquer(epingles, emptySet(), elagage.jeton(maintenant = 0))
+        elagage.appliquer(epingles, setOf("Journal/Mai.md"), elagage.jeton(maintenant = 5_000))
+        val apres = elagage.appliquer(epingles, emptySet(), elagage.jeton(maintenant = 12_000))
+
+        assertEquals(epingles, apres)
+    }
+
+    @Test
+    fun `un inventaire lance avant un renommage n'elague rien`() {
+        val elagage = ElagageEpingles(delaiMs = 10_000)
+        elagage.appliquer(setOf("Notes/b.md"), emptySet(), elagage.jeton(maintenant = 0))
+        // Lecture partie avant le renommage, arrivée après : elle ne connaît
+        // que l'ancien nom.
+        val jetonAncien = elagage.jeton(maintenant = 20_000)
+        elagage.gesteLocal()
+
+        val apres = elagage.appliquer(setOf("Notes/b.md"), setOf("Notes/a.md"), jetonAncien)
+
+        assertEquals(setOf("Notes/b.md"), apres)
+        assertFalse(elagage.estAJour(jetonAncien))
+    }
+
+    @Test
+    fun `apres un renommage la nouvelle epingle doit manquer deux fois`() {
+        val elagage = ElagageEpingles(delaiMs = 10_000)
+        elagage.gesteLocal()
+        // L'index de recherche n'a pas encore vu le nouveau nom.
+        val epingles = apresRenommage(setOf("Notes/a.md"), "Notes/a.md", "Notes/b.md", estDossier = false)
+
+        val apres = elagage.appliquer(epingles, setOf("Notes/a.md"), elagage.jeton(maintenant = 500))
+
+        assertEquals(setOf("Notes/b.md"), apres)
     }
 
     // --- Rubrique du tiroir ------------------------------------------------------

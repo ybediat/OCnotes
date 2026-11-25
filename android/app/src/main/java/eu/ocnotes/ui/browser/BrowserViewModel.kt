@@ -1,5 +1,6 @@
 package eu.ocnotes.ui.browser
 
+import android.os.SystemClock
 import androidx.annotation.PluralsRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -307,6 +308,12 @@ class BrowserViewModel(
     /** Chargement d'inventaire en cours : un seul à la fois. */
     private var inventaireJob: Job? = null
 
+    /**
+     * Décide quelles épingles absentes retirer : jamais sur un inventaire
+     * lancé avant un renommage, et seulement après deux absences espacées.
+     */
+    private val elagage = ElagageEpingles()
+
     init {
         viewModelScope.launch {
             val etat = repository.state()
@@ -437,6 +444,9 @@ class BrowserViewModel(
         viewModelScope.launch {
             try {
                 val etat = _uiState.value
+                // Pris avant la requête : un renommage fait pendant qu'elle
+                // tourne rend sa réponse impropre à l'élagage.
+                val jeton = elagage.jeton(SystemClock.elapsedRealtime())
                 // Deux sources, un seul état : la liste plate est un listing
                 // comme un autre, simplement sans dossier et sans chemin.
                 val listing = if (etat.enListePlate) {
@@ -468,8 +478,7 @@ class BrowserViewModel(
                     )
                 }
                 if (etat.enListePlate) {
-                    inventairePerime = false
-                    elaguerEpingles(listing)
+                    elaguerEpingles(listing, jeton)
                 }
                 repository.refreshPending()
                 rechargerDossiers()
@@ -504,20 +513,30 @@ class BrowserViewModel(
         if (etat.inventaire != null && !inventairePerime) return
         if (inventaireJob?.isActive == true) return
         inventaireJob = viewModelScope.launch {
-            val listing = try {
-                repository.listAll()
-            } catch (_: OCnotesException) {
-                // Sans inventaire, la rubrique reste vide : le dossier affiché
-                // n'en souffre pas, et un message pour un tiroir fermé serait
-                // du bruit. Le prochain rechargement réessaiera.
-                return@launch
+            // Une lecture qui a croisé un renommage ou un rafraîchissement est
+            // refaite aussitôt, au plus trois fois de suite : sans cela, le
+            // signal « périmé » posé pendant la lecture serait perdu, et la
+            // rubrique resterait sur l'état d'avant le geste.
+            repeat(3) {
+                inventairePerime = false
+                val jeton = elagage.jeton(SystemClock.elapsedRealtime())
+                val listing = try {
+                    repository.listAll()
+                } catch (_: OCnotesException) {
+                    // Sans inventaire, la rubrique reste vide : le dossier
+                    // affiché n'en souffre pas, et un message pour un tiroir
+                    // fermé serait du bruit. Le prochain rechargement
+                    // réessaiera.
+                    inventairePerime = true
+                    return@launch
+                }
+                // Passé en liste plate entre-temps : c'est [recharger] qui
+                // tient l'inventaire, ne pas l'écraser.
+                if (_uiState.value.enListePlate) return@launch
+                _uiState.update { it.copy(inventaire = listing.entries) }
+                elaguerEpingles(listing, jeton)
+                if (!inventairePerime && elagage.estAJour(jeton)) return@launch
             }
-            inventairePerime = false
-            // Passé en liste plate entre-temps : c'est [recharger] qui tient
-            // l'inventaire, ne pas l'écraser.
-            if (_uiState.value.enListePlate) return@launch
-            _uiState.update { it.copy(inventaire = listing.entries) }
-            elaguerEpingles(listing)
         }
     }
 
@@ -525,15 +544,16 @@ class BrowserViewModel(
      * Retire les épingles dont la note n'existe plus — renommée ou supprimée
      * depuis le web, par exemple.
      *
-     * Seulement sur un inventaire complet : venu du serveur, ou du mode local
-     * (`fromCache` y est toujours faux, le cache étant la seule vérité). Un
-     * inventaire de repli, servi sans réseau, peut manquer des notes : il
-     * masque les orphelines sans rien effacer.
+     * Jamais sur un inventaire de repli, servi sans réseau, qui peut manquer
+     * des notes : il masque les orphelines sans rien effacer. Sur un
+     * inventaire venu du serveur ou du mode local (`fromCache` y est toujours
+     * faux), [ElagageEpingles] n'efface qu'une épingle absente deux fois, et
+     * jamais sur une lecture lancée avant un renommage.
      */
-    private fun elaguerEpingles(listing: FolderListingDto) {
+    private fun elaguerEpingles(listing: FolderListingDto, jeton: JetonInventaire) {
         if (listing.fromCache) return
         val connues = listing.entries.mapTo(HashSet()) { it.path }
-        modifierEpingles { elaguer(it, connues) }
+        modifierEpingles { elagage.appliquer(it, connues, jeton) }
     }
 
     /**
@@ -555,15 +575,18 @@ class BrowserViewModel(
 
     /**
      * Épingle toutes les notes cochées, ou les désépingle toutes si elles
-     * l'étaient déjà — le libellé de la barre dit lequel des deux. La
-     * sélection se referme ensuite, comme après les autres gestes groupés.
+     * l'étaient déjà — le libellé de la barre dit lequel des deux.
+     *
+     * La sélection reste ouverte, contrairement aux autres gestes groupés :
+     * le bouton devient alors « Désépingler », et un second appui défait le
+     * premier. C'est aussi le moyen de tout désépingler d'une sélection
+     * mélangée — épingler tout, puis désépingler tout.
      */
     fun basculerEpinglesSelection() {
         val etat = _uiState.value
         val epingler = etat.epinglageSelection ?: return
         val notes = etat.selection
         modifierEpingles { if (epingler) it + notes else it - notes }
-        viderSelection()
     }
 
     /** Vrai si le chemin désigne un dossier du listing affiché. */
@@ -798,6 +821,7 @@ class BrowserViewModel(
         viewModelScope.launch {
             try {
                 val nouveau = repository.rename(entree.path, nouveauNom.trim())
+                elagage.gesteLocal()
                 // Après le succès seulement : un renommage refusé ne doit pas
                 // détacher l'épingle de sa note.
                 modifierEpingles { apresRenommage(it, entree.path, nouveau, entree.isDir) }
@@ -822,6 +846,7 @@ class BrowserViewModel(
         viewModelScope.launch {
             try {
                 val nouveau = repository.move(entree.path, dossier)
+                elagage.gesteLocal()
                 modifierEpingles { apresRenommage(it, entree.path, nouveau, entree.isDir) }
                 inventairePerime = true
                 recharger()
@@ -837,6 +862,7 @@ class BrowserViewModel(
         viewModelScope.launch {
             try {
                 repository.delete(entree.path)
+                elagage.gesteLocal()
                 modifierEpingles { apresSuppression(it, entree.path, entree.isDir) }
                 inventairePerime = true
                 recharger()
@@ -876,6 +902,7 @@ class BrowserViewModel(
         executerLot(R.plurals.browser_lot_deplaces) { chemin ->
             val dossierDeplace = estDossier(chemin)
             val nouveau = repository.move(chemin, dossier)
+            elagage.gesteLocal()
             // Chaque épingle suit sa note dès que son déplacement a réussi :
             // un échec plus loin dans le lot ne la détache pas.
             modifierEpingles { apresRenommage(it, chemin, nouveau, dossierDeplace) }
@@ -966,6 +993,7 @@ class BrowserViewModel(
         executerLot(R.plurals.browser_lot_supprimes) { chemin ->
             val dossierSupprime = estDossier(chemin)
             repository.delete(chemin)
+            elagage.gesteLocal()
             modifierEpingles { apresSuppression(it, chemin, dossierSupprime) }
         }
 

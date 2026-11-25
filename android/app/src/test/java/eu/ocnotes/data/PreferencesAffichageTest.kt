@@ -2,6 +2,7 @@ package eu.ocnotes.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PreferencesAffichageTest {
@@ -80,43 +81,53 @@ class PreferencesAffichageTest {
 
     @Test
     fun `les epingles sont publiees et persistent par profil`() {
-        val stockage = StockageMemoire()
-        val preferences = PreferencesAffichage(stockage)
+        val epingles = StockageEpinglesMemoire()
+        val preferences = PreferencesAffichage(StockageMemoire(), epingles)
 
         preferences.definirEpingles("p1", setOf("Courses.md"))
         preferences.definirEpingles("p2", setOf("Journal/Mai.md"))
 
         assertEquals(setOf("Courses.md"), preferences.epingles("p1").value)
-        // Une autre instance relit le disque : chaque profil retrouve les siennes.
-        val relues = PreferencesAffichage(stockage)
+        // Une autre instance relit le stockage : chaque profil retrouve les siennes.
+        val relues = PreferencesAffichage(StockageMemoire(), epingles)
         assertEquals(setOf("Courses.md"), relues.epingles("p1").value)
         assertEquals(setOf("Journal/Mai.md"), relues.epingles("p2").value)
-        assertEquals(setOf("Courses.md"), stockage.ensembles["epingles_p1"])
+    }
+
+    @Test
+    fun `les epingles ne vont pas dans le fichier de preferences`() {
+        val stockage = StockageMemoire()
+        val preferences = PreferencesAffichage(stockage, StockageEpinglesMemoire())
+
+        preferences.definirEpingles("p1", setOf("Courses.md"))
+
+        // Ce fichier part entier dans la sauvegarde, profils serveur compris.
+        assertTrue(stockage.estVide())
     }
 
     @Test
     fun `une valeur abimee est normalisee a la lecture`() {
-        val stockage = StockageMemoire()
-        stockage.ensembles["epingles_p1"] = setOf("", " ", "/Courses.md", "Courses.md")
+        val epingles = StockageEpinglesMemoire()
+        epingles.contenu["p1"] = setOf("", " ", "/Courses.md", "Courses.md")
 
-        assertEquals(setOf("Courses.md"), PreferencesAffichage(stockage).epingles("p1").value)
+        assertEquals(setOf("Courses.md"), PreferencesAffichage(StockageMemoire(), epingles).epingles("p1").value)
     }
 
     @Test
-    fun `retirer la derniere epingle efface la cle`() {
-        val stockage = StockageMemoire()
-        val preferences = PreferencesAffichage(stockage)
+    fun `retirer la derniere epingle efface le fichier`() {
+        val epingles = StockageEpinglesMemoire()
+        val preferences = PreferencesAffichage(StockageMemoire(), epingles)
         preferences.definirEpingles("p1", setOf("Courses.md"))
 
         preferences.definirEpingles("p1", emptySet())
 
-        assertFalse("epingles_p1" in stockage.ensembles)
+        assertFalse("p1" in epingles.contenu)
     }
 
     @Test
     fun `supprimer un profil efface ses epingles et seulement les siennes`() {
-        val stockage = StockageMemoire()
-        val preferences = PreferencesAffichage(stockage)
+        val epingles = StockageEpinglesMemoire()
+        val preferences = PreferencesAffichage(StockageMemoire(), epingles)
         preferences.definirEpingles("p1", setOf("Courses.md"))
         preferences.definirEpingles("p2", setOf("Courses.md"))
         val flux = preferences.epingles("p1")
@@ -125,9 +136,9 @@ class PreferencesAffichageTest {
 
         // L'écran qui observait encore le flux voit la rubrique se vider.
         assertEquals(emptySet<String>(), flux.value)
-        assertFalse("epingles_p1" in stockage.ensembles)
-        assertEquals(emptySet<String>(), PreferencesAffichage(stockage).epingles("p1").value)
-        assertEquals(setOf("Courses.md"), PreferencesAffichage(stockage).epingles("p2").value)
+        assertFalse("p1" in epingles.contenu)
+        assertEquals(emptySet<String>(), PreferencesAffichage(StockageMemoire(), epingles).epingles("p1").value)
+        assertEquals(setOf("Courses.md"), PreferencesAffichage(StockageMemoire(), epingles).epingles("p2").value)
     }
 }
 
@@ -136,7 +147,6 @@ private class StockageMemoire(
 ) : StockagePreferencesAffichage {
     private val longs = mutableMapOf<String, Long>()
     private val booleens = mutableMapOf<String, Boolean>()
-    val ensembles = mutableMapOf<String, Set<String>>()
 
     override fun lireChaine(cle: String): String? = chaines[cle]
 
@@ -156,16 +166,5 @@ private class StockageMemoire(
         booleens[cle] = valeur
     }
 
-    override fun lireEnsemble(cle: String): Set<String>? = ensembles[cle]
-
-    override fun ecrireEnsemble(cle: String, valeur: Set<String>) {
-        ensembles[cle] = valeur.toSet()
-    }
-
-    override fun effacer(cle: String) {
-        chaines.remove(cle)
-        longs.remove(cle)
-        booleens.remove(cle)
-        ensembles.remove(cle)
-    }
+    fun estVide(): Boolean = chaines.isEmpty() && longs.isEmpty() && booleens.isEmpty()
 }

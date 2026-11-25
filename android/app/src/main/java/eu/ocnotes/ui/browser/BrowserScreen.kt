@@ -610,9 +610,11 @@ private fun BarreSelection(
             epinglage?.let { epingler ->
                 IconButton(onClick = onEpingler) {
                     Icon(
-                        // Punaise pleine pour épingler, creuse pour retirer :
-                        // le libellé lu par TalkBack dit lequel des deux.
-                        imageVector = if (epingler) Icons.Default.PushPin else Icons.Outlined.PushPinCreuse,
+                        // Comme ailleurs sur Android : punaise creuse tant que
+                        // les notes ne sont pas épinglées, pleine quand elles
+                        // le sont (l'appui les désépingle). Le libellé lu par
+                        // TalkBack dit lequel des deux.
+                        imageVector = if (epingler) Icons.Outlined.PushPinCreuse else Icons.Default.PushPin,
                         contentDescription = stringResource(
                             if (epingler) R.string.action_epingler else R.string.action_desepingler,
                         ),
