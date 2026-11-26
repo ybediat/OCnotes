@@ -1,6 +1,8 @@
 package eu.ocnotes.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PreferencesAffichageTest {
@@ -69,6 +71,75 @@ class PreferencesAffichageTest {
         assertEquals(200, PaliersLecture.suivant(200))
         assertEquals(85, PaliersLecture.precedent(85))
     }
+
+    // --- Notes épinglées ----------------------------------------------------
+
+    @Test
+    fun `aucune epingle par defaut`() {
+        assertEquals(emptySet<String>(), PreferencesAffichage(StockageMemoire()).epingles("p1").value)
+    }
+
+    @Test
+    fun `les epingles sont publiees et persistent par profil`() {
+        val epingles = StockageEpinglesMemoire()
+        val preferences = PreferencesAffichage(StockageMemoire(), epingles)
+
+        preferences.definirEpingles("p1", setOf("Courses.md"))
+        preferences.definirEpingles("p2", setOf("Journal/Mai.md"))
+
+        assertEquals(setOf("Courses.md"), preferences.epingles("p1").value)
+        // Une autre instance relit le stockage : chaque profil retrouve les siennes.
+        val relues = PreferencesAffichage(StockageMemoire(), epingles)
+        assertEquals(setOf("Courses.md"), relues.epingles("p1").value)
+        assertEquals(setOf("Journal/Mai.md"), relues.epingles("p2").value)
+    }
+
+    @Test
+    fun `les epingles ne vont pas dans le fichier de preferences`() {
+        val stockage = StockageMemoire()
+        val preferences = PreferencesAffichage(stockage, StockageEpinglesMemoire())
+
+        preferences.definirEpingles("p1", setOf("Courses.md"))
+
+        // Ce fichier part entier dans la sauvegarde, profils serveur compris.
+        assertTrue(stockage.estVide())
+    }
+
+    @Test
+    fun `une valeur abimee est normalisee a la lecture`() {
+        val epingles = StockageEpinglesMemoire()
+        epingles.contenu["p1"] = setOf("", " ", "/Courses.md", "Courses.md")
+
+        assertEquals(setOf("Courses.md"), PreferencesAffichage(StockageMemoire(), epingles).epingles("p1").value)
+    }
+
+    @Test
+    fun `retirer la derniere epingle efface le fichier`() {
+        val epingles = StockageEpinglesMemoire()
+        val preferences = PreferencesAffichage(StockageMemoire(), epingles)
+        preferences.definirEpingles("p1", setOf("Courses.md"))
+
+        preferences.definirEpingles("p1", emptySet())
+
+        assertFalse("p1" in epingles.contenu)
+    }
+
+    @Test
+    fun `supprimer un profil efface ses epingles et seulement les siennes`() {
+        val epingles = StockageEpinglesMemoire()
+        val preferences = PreferencesAffichage(StockageMemoire(), epingles)
+        preferences.definirEpingles("p1", setOf("Courses.md"))
+        preferences.definirEpingles("p2", setOf("Courses.md"))
+        val flux = preferences.epingles("p1")
+
+        preferences.effacerEpingles("p1")
+
+        // L'écran qui observait encore le flux voit la rubrique se vider.
+        assertEquals(emptySet<String>(), flux.value)
+        assertFalse("p1" in epingles.contenu)
+        assertEquals(emptySet<String>(), PreferencesAffichage(StockageMemoire(), epingles).epingles("p1").value)
+        assertEquals(setOf("Courses.md"), PreferencesAffichage(StockageMemoire(), epingles).epingles("p2").value)
+    }
 }
 
 private class StockageMemoire(
@@ -94,4 +165,6 @@ private class StockageMemoire(
     override fun ecrireBooleen(cle: String, valeur: Boolean) {
         booleens[cle] = valeur
     }
+
+    fun estVide(): Boolean = chaines.isEmpty() && longs.isEmpty() && booleens.isEmpty()
 }

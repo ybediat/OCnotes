@@ -652,4 +652,9 @@
     <string name="recherche_compteur_description">Match %1$d of %2$d</string>
     <string name="recherche_compteur_description_plafond">Match %1$d of more than %2$d</string>
     <string name="recherche_aucune_occurrence">No matches</string>
+    <!-- Chantier 7: pinned notes. -->
+    <string name="action_epingler">Pin</string>
+    <string name="action_desepingler">Unpin</string>
+    <string name="menu_epinglees">Pinned</string>
+    <string name="browser_epinglee">Pinned</string>
 </resources>

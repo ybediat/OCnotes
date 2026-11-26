@@ -633,4 +633,9 @@
     <string name="recherche_compteur_description">Treffer %1$d von %2$d</string>
     <string name="recherche_compteur_description_plafond">Treffer %1$d von mehr als %2$d</string>
     <string name="recherche_aucune_occurrence">Keine Treffer</string>
+    <!-- Chantier 7: angeheftete Notizen. -->
+    <string name="action_epingler">Anheften</string>
+    <string name="action_desepingler">Loslösen</string>
+    <string name="menu_epinglees">Angeheftet</string>
+    <string name="browser_epinglee">Angeheftet</string>
 </resources>

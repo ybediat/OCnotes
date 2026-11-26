@@ -19,8 +19,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -35,6 +37,7 @@ import androidx.navigation.compose.rememberNavController
 import eu.ocnotes.R
 import eu.ocnotes.appContainer
 import eu.ocnotes.sync.FiltreModeSynchro
+import eu.ocnotes.ui.browser.EpingleeTiroir
 import eu.ocnotes.ui.common.ChargementPleinEcran
 import eu.ocnotes.ui.common.CrashReportGate
 import eu.ocnotes.ui.common.TiroirApplication
@@ -118,6 +121,11 @@ private fun OCnotesApp(
     val route = destination?.destination?.route
     val gestesActifs = gestesTiroirActifs(route)
 
+    // Rubrique « Épinglées » du tiroir, telle que le navigateur l'a calculée.
+    // Gardée ici, au niveau du profil : ce composable est recréé à chaque
+    // changement de profil, la rubrique repart donc vide avec lui.
+    var epinglees by remember { mutableStateOf(emptyList<EpingleeTiroir>()) }
+
     // Fil d'Ariane du diagnostic. Une route porte ses arguments — `editeur/{
     // chemin}` — dont aucun n'a à traverser : seul le segment de tête part.
     // L'éditeur affine ensuite avec les mesures du document.
@@ -148,6 +156,10 @@ private fun OCnotesApp(
             onCompte = { id -> container.lancerGesteCompte { activateAccount(id) } },
             onAjouterCompte = { container.lancerGesteCompte { createAccount() } },
             onSupprimerCompte = { id -> container.lancerGesteCompte { deleteAccount(id) } },
+            // Seulement au-dessus du navigateur : ailleurs (connexion après une
+            // session expirée, par exemple) la liste pourrait être périmée.
+            epinglees = if (route == Routes.NAVIGATEUR) epinglees else emptyList(),
+            onOuvrirEpinglee = { chemin -> navController.navigate(Routes.editeur(chemin)) },
         ) {
             OCnotesNavHost(
                 navController = navController,
@@ -155,6 +167,7 @@ private fun OCnotesApp(
                 messageDemarrage = etat.message,
                 onOuvrirComptes = { scope.launch { etatTiroir.open() } },
                 onAjouterCompte = { container.lancerGesteCompte { createAccount() } },
+                onEpinglees = { epinglees = it },
             )
         }
     }
